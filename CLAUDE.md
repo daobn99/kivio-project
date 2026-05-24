@@ -23,28 +23,45 @@ docker compose up        # PostgreSQL + backend + frontend
 docker compose up -d db  # DB only
 ```
 
-## Architecture: Modular Monolith
+## Architecture: Modular Monolith + DDD
+
+設計方針: モジュラーモノリスに DDD（Strategic + Tactical）を採用。
+詳細: `docs/architecture/OVERVIEW.md`、`docs/architecture/DOMAIN_MODEL.md`
 
 Package root: `com.kivio`
 
 ```
 com.kivio/
-├── common/         # PageResponse<T>, exceptions, base entities
-├── config/         # Spring config (Security, WebSocket, OpenAPI)
+├── common/         # PageResponse<T>, exceptions, base entities, SoftDeletableEntity
+├── config/         # Spring config (Security, WebSocket, OpenAPI, CorrelationIdFilter)
 ├── domain/
-│   ├── identity/   # User, Auth, SellerApplication
+│   ├── identity/   # User, RefreshToken, SellerApplication
 │   ├── catalog/    # Shop, Product, Category
-│   ├── order/      # Cart, Order, Payment
+│   ├── order/      # Cart, Order, Payment, Address
 │   ├── messaging/  # ChatRoom, ChatMessage
-│   ├── notification/
-│   ├── review/
+│   ├── notification/ # Notification
+│   ├── review/     # Review, Wishlist
 │   ├── platform/   # PlatformConfig
-│   └── audit/      # AuditLog, @Auditable AOP
-└── infra/          # external: Stripe, Cloudinary, Resend
+│   └── audit/      # AuditLog, @Auditable, AuditLogAspect
+└── infra/          # external: Stripe, Cloudinary, Resend, Google OAuth
 ```
 
-**制約:** `domain` パッケージ間の直接 import 禁止。
-クロスドメイン呼び出しは Application Service または Spring Events 経由。
+各ドメインパッケージ内部構成（統一）:
+
+```
+domain/{context}/
+├── controller/   # @RestController
+├── service/      # @Service + @Transactional（Application Service）
+├── domain/       # 集約ルート・Entity・Value Object・Domain Event
+├── repository/   # @Repository インターフェース
+└── dto/          # Request/Response DTO, Mapper
+```
+
+**制約:**
+- `domain` パッケージ間の直接 import 禁止
+- クロスドメイン呼び出しは Application Service（同期）または Spring Events（非同期・副作用）経由
+- 集約内のエンティティは集約ルート経由でのみ変更する
+- Repository は集約ルートごとに 1 つ
 
 ## Conventions
 
@@ -58,6 +75,10 @@ com.kivio/
 - 部分更新は常に `PATCH` — `PUT` は使わない
 - エラーコード: `UPPER_SNAKE_CASE`（例: `PRODUCT_OUT_OF_STOCK`）
 
+### Implementation Tools
+- ボイラープレート: Lombok（`@RequiredArgsConstructor`, `@Builder`, `@Getter`, `@Slf4j`）
+- 設定値: `application.yml`（cron 式・JWT 有効期限・Rate Limit 値等は外部化）
+
 ### Soft Delete
 - `users` / `shops` / `categories`: `deleted_at` タイムスタンプ（物理削除禁止）
 - `products`: `status = 'DELETED'`（`deleted_at` カラムなし）
@@ -69,15 +90,28 @@ com.kivio/
 - `@Auditable` AOP でサービス層に横断実装。ビジネスロジックに監査コードを混在させない
 - アクション名: `{ENTITY}_{VERB}` `UPPER_SNAKE_CASE`（例: `ORDER_CANCELLED`）
 - `correlation_id` は MDC 経由でリクエスト開始時に生成・伝搬
+- 詳細: `docs/architecture/AUDIT.md`
 
 ### Security
 - パスワード: BCrypt cost factor 12
-- JWT: RS256 または HS256、Access Token 15分 / Refresh Token 7日
+- JWT: HS256（Phase 2）/ RS256（Phase 5+）、Access Token 15分 / Refresh Token 7日
+- Refresh Token: SHA-256 ハッシュを DB 保存・ログアウト時に削除・リフレッシュごとにローテーション
 - レート制限: 認証系 10 req/min/IP、API全般 100 req/min/user
+- 詳細: `docs/architecture/SECURITY.md`
 
 ## Current Phase
 
 **Phase 1**（要件定義・ドキュメント・devcontainer）— 完了  
 **Phase 2** 次: Auth / User / SellerApplication / Shop / Product CRUD / Audit 基盤
 
-参照: `docs/requirements/REQUIREMENTS.md`（全要件）、`adr/`（設計判断）
+## References
+
+| ドキュメント | 内容 |
+|---|---|
+| `docs/requirements/REQUIREMENTS.md` | 全要件・機能仕様 |
+| `docs/architecture/OVERVIEW.md` | システム構成・レイヤー・ドメイン間通信 |
+| `docs/architecture/DOMAIN_MODEL.md` | DDD 集約・Value Object・Domain Events |
+| `docs/architecture/SECURITY.md` | JWT 認証・Security Filter Chain |
+| `docs/architecture/AUDIT.md` | `@Auditable` AOP・監査ログ設計 |
+| `docs/design/` | API・DB・シーケンス・メール・エラーコード設計書 |
+| `adr/` | 設計判断の記録（ADR-001〜004） |
