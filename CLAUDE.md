@@ -80,4 +80,4 @@ com.kivio/
 **Phase 1**（要件定義・ドキュメント・devcontainer）— 完了  
 **Phase 2** 次: Auth / User / SellerApplication / Shop / Product CRUD / Audit 基盤
 
-参照: `docs/REQUIREMENTS.md`（全要件）、`adr/`（設計判断）
+参照: `docs/requirements/REQUIREMENTS.md`（全要件）、`adr/`（設計判断）
