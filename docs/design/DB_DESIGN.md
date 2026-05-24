@@ -30,6 +30,14 @@
 - `audit_logs` のみ **BIGINT + シーケンス**（高頻度追記のためインデックスサイズ最小化）
 - 外部キーから参照されるIDはすべて `UUID`
 
+**採用理由（要約）:**
+1. **セキュリティ** — 連番IDによる総件数推測・ID総当たり攻撃を防ぐ
+2. **DDD との親和性** — DB insert 前に Java 側で ID を確定でき、ドメインイベントに ID を含めて発行できる
+3. **サービス分割時の衝突回避** — 各ドメインが独立して ID を生成しても衝突しない（ADR-001 参照）
+4. **`audit_logs.related_entity_id` の型統一** — 任意エンティティの ID を単一の UUID カラムで保持できる
+
+`audit_logs` が BIGINT である理由・トレードオフ・将来の UUID v7 移行候補については `adr/ADR-005-uuid-primary-key.md` を参照。
+
 ### 1.2 タイムスタンプ
 
 - 日時カラムはすべて **`TIMESTAMPTZ`（タイムゾーン付き）** を使用する
@@ -930,6 +938,8 @@ docker compose down -v && docker compose up -d db
 
 ## 8. ER図
 
+### 8.1 簡略版ER図
+
 ```
 [users] 1────────────────1 [carts] 1──* [cart_items] *──1 [products]
   │ 1                                                           │ 1
@@ -961,6 +971,10 @@ docker compose down -v && docker compose up -d db
                                                                │
 [platform_configs]（KVS形式、管理者のみ更新）                   │
 ```
+
+### 8.2 ER図詳細
+
+ブラウザで[dbdiagram.io](https://dbdiagram.io) を開き、er_diagram.dbmlの内容を貼り付けて参照する。
 
 ---
 

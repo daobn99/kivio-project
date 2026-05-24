@@ -1,0 +1,355 @@
+// Kivio ER Diagram — DBML source
+// ============================================================
+// 【更新手順】
+//   1. このファイルを編集する
+//   2. https://dbdiagram.io でインポートし図を確認する
+//   3. Chrome の「印刷 → PDF に保存」または Export PNG でエクスポート
+//   4. docs/design/images/er_diagram.png に上書き保存する
+//   5. DB_DESIGN.md の SQL 定義も同時に更新する
+// ============================================================
+
+Project Kivio {
+  database_type: 'PostgreSQL'
+  Note: 'マルチベンダー型マーケットプレイス Kivio の物理ER図'
+}
+
+// ─────────────────────────────────────────────
+// identity domain
+// ─────────────────────────────────────────────
+
+Table users {
+  id               uuid         [pk]
+  email            varchar(255) [unique, not null]
+  password_hash    varchar(255) [note: 'BCrypt cost 12。Google OAuthユーザーはNULL']
+  google_id        varchar(255) [unique, note: 'NULLはメール登録ユーザー']
+  display_name     varchar(100) [not null]
+  avatar_url       text
+  role             varchar(20)  [not null, default: 'ROLE_BUYER', note: 'ROLE_BUYER | ROLE_SELLER | ROLE_ADMIN']
+  status           varchar(20)  [not null, default: 'ACTIVE',    note: 'ACTIVE | INACTIVE']
+  email_verified   boolean      [not null, default: false]
+  created_at       timestamptz  [not null]
+  updated_at       timestamptz  [not null]
+  deleted_at       timestamptz  [note: 'Soft delete。NULL=有効。90日後に匿名化バッチ']
+}
+
+Table refresh_tokens {
+  id           uuid         [pk]
+  user_id      uuid         [not null, ref: > users.id]
+  token_hash   varchar(255) [unique, not null, note: 'SHA-256ハッシュ。平文は保持しない']
+  expires_at   timestamptz  [not null]
+  revoked      boolean      [not null, default: false]
+  created_at   timestamptz  [not null]
+}
+
+Table seller_applications {
+  id             uuid        [pk]
+  applicant_id   uuid        [not null, ref: > users.id]
+  reason         text        [not null]
+  status         varchar(20) [not null, default: 'PENDING', note: 'PENDING | APPROVED | REJECTED']
+  reviewer_id    uuid        [ref: > users.id, note: 'NULL=未審査。審査した管理者']
+  review_comment text
+  reviewed_at    timestamptz
+  created_at     timestamptz [not null]
+  updated_at     timestamptz [not null]
+}
+
+// ─────────────────────────────────────────────
+// catalog domain
+// ─────────────────────────────────────────────
+
+Table shops {
+  id          uuid         [pk]
+  owner_id    uuid         [unique, not null, ref: > users.id]
+  name        varchar(100) [not null, note: '有効レコード間でUNIQUE（部分インデックス）']
+  description text
+  logo_url    text
+  status      varchar(20)  [not null, default: 'ACTIVE', note: 'ACTIVE | INACTIVE']
+  created_at  timestamptz  [not null]
+  updated_at  timestamptz  [not null]
+  deleted_at  timestamptz  [note: 'users.deleted_at設定時に連動']
+}
+
+Table shop_shipping_policies {
+  id              uuid        [pk]
+  shop_id         uuid        [unique, not null, ref: - shops.id]
+  shipping_type   varchar(30) [not null, note: 'FREE | FIXED | CONDITIONAL_FREE']
+  fixed_fee       integer     [note: 'FIXED型のみ使用（円）']
+  free_threshold  integer     [note: 'CONDITIONAL_FREE型のみ使用（円）']
+  created_at      timestamptz [not null]
+  updated_at      timestamptz [not null]
+}
+
+Table categories {
+  id             uuid         [pk]
+  name           varchar(100) [not null]
+  slug           varchar(100) [not null, note: '有効レコード間でUNIQUE（部分インデックス）']
+  display_order  integer      [not null, default: 0]
+  parent_id      uuid         [ref: > categories.id, note: 'NULL=ルートカテゴリー。最大2階層']
+  created_at     timestamptz  [not null]
+  updated_at     timestamptz  [not null]
+  deleted_at     timestamptz
+}
+
+Table products {
+  id              uuid         [pk]
+  shop_id         uuid         [not null, ref: > shops.id]
+  category_id     uuid         [ref: > categories.id, note: 'NULL許容（カテゴリー削除後）']
+  name            varchar(200) [not null]
+  description     text
+  price           integer      [not null, note: '円単位、正の整数']
+  stock_quantity  integer      [not null, default: 0]
+  status          varchar(20)  [not null, default: 'DRAFT', note: 'DRAFT | ACTIVE | INACTIVE | DELETED']
+  created_at      timestamptz  [not null]
+  updated_at      timestamptz  [not null]
+}
+
+Table product_images {
+  id             uuid         [pk]
+  product_id     uuid         [not null, ref: > products.id]
+  cloudinary_id  varchar(255) [not null, note: 'Cloudinaryのpublic_id']
+  image_url      text         [not null]
+  display_order  integer      [not null, default: 0, note: '0=サムネイル']
+  created_at     timestamptz  [not null]
+}
+
+// ─────────────────────────────────────────────
+// order domain
+// ─────────────────────────────────────────────
+
+Table addresses {
+  id              uuid         [pk]
+  user_id         uuid         [not null, ref: > users.id]
+  recipient_name  varchar(100) [not null]
+  postal_code     varchar(10)  [not null]
+  prefecture      varchar(20)  [not null]
+  city            varchar(100) [not null]
+  address_line    varchar(255) [not null]
+  phone_number    varchar(20)  [not null]
+  is_default      boolean      [not null, default: false]
+  created_at      timestamptz  [not null]
+  updated_at      timestamptz  [not null]
+}
+
+Table carts {
+  id          uuid        [pk]
+  user_id     uuid        [unique, not null, ref: - users.id]
+  created_at  timestamptz [not null]
+  updated_at  timestamptz [not null]
+}
+
+Table cart_items {
+  id          uuid        [pk]
+  cart_id     uuid        [not null, ref: > carts.id]
+  product_id  uuid        [not null, ref: > products.id]
+  quantity    integer     [not null, default: 1]
+  created_at  timestamptz [not null]
+  updated_at  timestamptz [not null]
+
+  indexes {
+    (cart_id, product_id) [unique]
+  }
+}
+
+Table orders {
+  id                       uuid          [pk]
+  buyer_id                 uuid          [not null, ref: > users.id]
+  shop_id                  uuid          [not null, ref: > shops.id]
+  address_id               uuid          [ref: > addresses.id, note: '削除後はNULL。スナップショットは維持']
+  delivery_recipient_name  varchar(100)  [not null]
+  delivery_postal_code     varchar(10)   [not null]
+  delivery_prefecture      varchar(20)   [not null]
+  delivery_city            varchar(100)  [not null]
+  delivery_address_line    varchar(255)  [not null]
+  delivery_phone_number    varchar(20)   [not null]
+  status                   varchar(30)   [not null, default: 'PENDING_PAYMENT', note: 'PENDING_PAYMENT | PAYMENT_CONFIRMED | PROCESSING | SHIPPED | DELIVERED | COMPLETED | CANCELLED']
+  subtotal                 integer       [not null]
+  shipping_fee             integer       [not null]
+  total_amount             integer       [not null]
+  commission_rate          decimal(5,4)  [not null, note: '注文確定時スナップショット']
+  commission_amount        integer       [not null]
+  seller_amount            integer       [not null]
+  stripe_payment_intent_id varchar(255)
+  cancelled_at             timestamptz
+  cancel_reason            text
+  created_at               timestamptz   [not null]
+  updated_at               timestamptz   [not null]
+}
+
+Table order_items {
+  id                 uuid         [pk]
+  order_id           uuid         [not null, ref: > orders.id]
+  product_id         uuid         [ref: > products.id, note: '商品物理削除後はNULL']
+  product_name       varchar(200) [not null]
+  product_image_url  text
+  unit_price         integer      [not null]
+  quantity           integer      [not null]
+  subtotal           integer      [not null, note: 'unit_price × quantity']
+  is_reviewed        boolean      [not null, default: false]
+  created_at         timestamptz  [not null]
+}
+
+Table payments {
+  id                uuid         [pk]
+  order_id          uuid         [unique, not null, ref: - orders.id]
+  stripe_payment_id varchar(255) [unique, not null]
+  amount            integer      [not null]
+  currency          varchar(3)   [not null, default: 'JPY']
+  status            varchar(30)  [not null, note: 'PENDING | SUCCEEDED | FAILED | REFUNDED']
+  stripe_refund_id  varchar(255)
+  created_at        timestamptz  [not null]
+  updated_at        timestamptz  [not null]
+}
+
+// ─────────────────────────────────────────────
+// review domain
+// ─────────────────────────────────────────────
+
+Table reviews {
+  id             uuid        [pk]
+  order_item_id  uuid        [unique, not null, ref: - order_items.id]
+  product_id     uuid        [ref: > products.id, note: '商品削除後はNULL']
+  reviewer_id    uuid        [ref: > users.id,    note: '匿名化後はNULL']
+  rating         smallint    [not null, note: '1〜5']
+  comment        text
+  created_at     timestamptz [not null]
+  updated_at     timestamptz [not null]
+}
+
+Table wishlists {
+  id          uuid        [pk]
+  user_id     uuid        [not null, ref: > users.id]
+  product_id  uuid        [not null, ref: > products.id]
+  created_at  timestamptz [not null]
+
+  indexes {
+    (user_id, product_id) [unique]
+  }
+}
+
+// ─────────────────────────────────────────────
+// messaging domain
+// ─────────────────────────────────────────────
+
+Table chat_rooms {
+  id          uuid        [pk]
+  buyer_id    uuid        [not null, ref: > users.id]
+  shop_id     uuid        [not null, ref: > shops.id]
+  created_at  timestamptz [not null]
+  updated_at  timestamptz [not null]
+
+  indexes {
+    (buyer_id, shop_id) [unique]
+  }
+}
+
+Table chat_messages {
+  id            uuid        [pk]
+  chat_room_id  uuid        [not null, ref: > chat_rooms.id]
+  sender_id     uuid        [ref: > users.id, note: '退会・匿名化後はNULL']
+  body          text        [not null]
+  read_at       timestamptz [note: 'NULL=未読']
+  created_at    timestamptz [not null]
+}
+
+// ─────────────────────────────────────────────
+// notification domain
+// ─────────────────────────────────────────────
+
+Table notifications {
+  id                   uuid         [pk]
+  user_id              uuid         [not null, ref: > users.id]
+  type                 varchar(50)  [not null, note: 'ORDER_CONFIRMED | ORDER_STATUS_CHANGED | ORDER_CANCELLED | NEW_MESSAGE | SELLER_APPLICATION_APPROVED | SELLER_APPLICATION_REJECTED']
+  title                varchar(200) [not null]
+  body                 text         [not null]
+  is_read              boolean      [not null, default: false]
+  read_at              timestamptz
+  related_entity_type  varchar(50)  [note: 'ORDER | PRODUCT | SELLER_APPLICATION | CHAT_ROOM']
+  related_entity_id    uuid
+  expires_at           timestamptz  [not null, note: 'created_at + 90日']
+  created_at           timestamptz  [not null]
+  updated_at           timestamptz  [not null]
+}
+
+// ─────────────────────────────────────────────
+// platform domain
+// ─────────────────────────────────────────────
+
+Table platform_configs {
+  id            uuid         [pk]
+  config_key    varchar(100) [unique, not null, note: 'UPPER_SNAKE_CASE。例: COMMISSION_RATE']
+  config_value  text         [not null]
+  description   text
+  updated_by    uuid         [ref: > users.id, note: '最終更新管理者']
+  created_at    timestamptz  [not null]
+  updated_at    timestamptz  [not null]
+}
+
+// ─────────────────────────────────────────────
+// audit domain
+// ─────────────────────────────────────────────
+
+Table audit_logs {
+  id              bigint       [pk, note: 'シーケンス採番。created_atと複合PK（パーティション要件）']
+  correlation_id  uuid         [not null, note: 'MDC経由リクエストID。同一リクエスト内ログを紐づけ']
+  actor_id        uuid         [ref: > users.id, note: 'NULL=バッチ・システム自動処理']
+  actor_role      varchar(20)  [note: '操作時点のロールスナップショット']
+  actor_email     varchar(255) [note: '操作時点のメールスナップショット']
+  action          varchar(100) [not null, note: 'UPPER_SNAKE_CASE。例: ORDER_CANCELLED']
+  entity_type     varchar(50)  [note: 'USER | ORDER | PRODUCT 等']
+  entity_id       uuid
+  outcome         varchar(10)  [not null, default: 'SUCCESS', note: 'SUCCESS | FAILURE']
+  ip_address      varchar(45)
+  old_value       jsonb        [note: '変更前の値（管理者操作・ステータス変更時）']
+  new_value       jsonb        [note: '変更後の値']
+  error_message   text         [note: 'outcome=FAILURE 時のエラー詳細']
+  created_at      timestamptz  [not null]
+}
+
+// ─────────────────────────────────────────────
+// TableGroups (ドメイン境界)
+// ─────────────────────────────────────────────
+
+TableGroup identity {
+  users
+  refresh_tokens
+  seller_applications
+}
+
+TableGroup catalog {
+  shops
+  shop_shipping_policies
+  categories
+  products
+  product_images
+}
+
+TableGroup order {
+  addresses
+  carts
+  cart_items
+  orders
+  order_items
+  payments
+}
+
+TableGroup review {
+  reviews
+  wishlists
+}
+
+TableGroup messaging {
+  chat_rooms
+  chat_messages
+}
+
+TableGroup notification {
+  notifications
+}
+
+TableGroup platform {
+  platform_configs
+}
+
+TableGroup audit {
+  audit_logs
+}
