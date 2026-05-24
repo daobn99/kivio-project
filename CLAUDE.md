@@ -1,65 +1,83 @@
-# CLAUDE.md
+# Kivio — CLAUDE.md
 
-Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
+## Commands
 
-**Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
-
-## 1. Think Before Coding
-
-**Don't assume. Don't hide confusion. Surface tradeoffs.**
-
-Before implementing:
-- State your assumptions explicitly. If uncertain, ask.
-- If multiple interpretations exist, present them - don't pick silently.
-- If a simpler approach exists, say so. Push back when warranted.
-- If something is unclear, stop. Name what's confusing. Ask.
-
-## 2. Simplicity First
-
-**Minimum code that solves the problem. Nothing speculative.**
-
-- No features beyond what was asked.
-- No abstractions for single-use code.
-- No "flexibility" or "configurability" that wasn't requested.
-- No error handling for impossible scenarios.
-- If you write 200 lines and it could be 50, rewrite it.
-
-Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
-
-## 3. Surgical Changes
-
-**Touch only what you must. Clean up only your own mess.**
-
-When editing existing code:
-- Don't "improve" adjacent code, comments, or formatting.
-- Don't refactor things that aren't broken.
-- Match existing style, even if you'd do it differently.
-- If you notice unrelated dead code, mention it - don't delete it.
-
-When your changes create orphans:
-- Remove imports/variables/functions that YOUR changes made unused.
-- Don't remove pre-existing dead code unless asked.
-
-The test: Every changed line should trace directly to the user's request.
-
-## 4. Goal-Driven Execution
-
-**Define success criteria. Loop until verified.**
-
-Transform tasks into verifiable goals:
-- "Add validation" → "Write tests for invalid inputs, then make them pass"
-- "Fix the bug" → "Write a test that reproduces it, then make it pass"
-- "Refactor X" → "Ensure tests pass before and after"
-
-For multi-step tasks, state a brief plan:
-```
-1. [Step] → verify: [check]
-2. [Step] → verify: [check]
-3. [Step] → verify: [check]
+### Backend (kivio-backend/)
+```bash
+./gradlew build          # compile + test
+./gradlew test           # unit + integration tests
+./gradlew bootRun        # dev server → localhost:8080
+./gradlew clean build    # clean build
 ```
 
-Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
+### Frontend (kivio-frontend/) — 未作成
+```bash
+pnpm dev                 # dev server → localhost:3000
+pnpm build
+pnpm lint
+```
 
----
+### Docker (project root)
+```bash
+docker compose up        # PostgreSQL + backend + frontend
+docker compose up -d db  # DB only
+```
 
-**These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
+## Architecture: Modular Monolith
+
+Package root: `com.kivio`
+
+```
+com.kivio/
+├── common/         # PageResponse<T>, exceptions, base entities
+├── config/         # Spring config (Security, WebSocket, OpenAPI)
+├── domain/
+│   ├── identity/   # User, Auth, SellerApplication
+│   ├── catalog/    # Shop, Product, Category
+│   ├── order/      # Cart, Order, Payment
+│   ├── messaging/  # ChatRoom, ChatMessage
+│   ├── notification/
+│   ├── review/
+│   ├── platform/   # PlatformConfig
+│   └── audit/      # AuditLog, @Auditable AOP
+└── infra/          # external: Stripe, Cloudinary, Resend
+```
+
+**制約:** `domain` パッケージ間の直接 import 禁止。
+クロスドメイン呼び出しは Application Service または Spring Events 経由。
+
+## Conventions
+
+### API
+- ベースパス: `/api/v1`
+- エラー: RFC 9457 `ProblemDetail`（`Content-Type: application/problem+json`）
+- ページネーション: `PageResponse<T>` でラップ — Spring の `Page<T>` を直接返さない
+- JSON フィールド: `camelCase`
+- 日時: ISO 8601 UTC（例: `2026-05-24T10:00:00Z`）
+- 金額: 整数・円単位（¥1,500 → `1500`）
+- 部分更新は常に `PATCH` — `PUT` は使わない
+- エラーコード: `UPPER_SNAKE_CASE`（例: `PRODUCT_OUT_OF_STOCK`）
+
+### Soft Delete
+- `users` / `shops` / `categories`: `deleted_at` タイムスタンプ（物理削除禁止）
+- `products`: `status = 'DELETED'`（`deleted_at` カラムなし）
+- `orders` / `payments`: 削除操作を提供しない（会計記録）
+- 実装: `SoftDeletableEntity`（`@MappedSuperclass`）+ `@SQLRestriction("deleted_at IS NULL")`
+
+### Audit Log
+- `audit_logs` は追記専用 — `UPDATE` / `DELETE` 禁止
+- `@Auditable` AOP でサービス層に横断実装。ビジネスロジックに監査コードを混在させない
+- アクション名: `{ENTITY}_{VERB}` `UPPER_SNAKE_CASE`（例: `ORDER_CANCELLED`）
+- `correlation_id` は MDC 経由でリクエスト開始時に生成・伝搬
+
+### Security
+- パスワード: BCrypt cost factor 12
+- JWT: RS256 または HS256、Access Token 15分 / Refresh Token 7日
+- レート制限: 認証系 10 req/min/IP、API全般 100 req/min/user
+
+## Current Phase
+
+**Phase 1**（要件定義・ドキュメント・devcontainer）— 完了  
+**Phase 2** 次: Auth / User / SellerApplication / Shop / Product CRUD / Audit 基盤
+
+参照: `docs/REQUIREMENTS.md`（全要件）、`adr/`（設計判断）
