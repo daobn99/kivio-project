@@ -1,0 +1,26 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Secrets (never commit real credentials)
+.env
+.env.local
+.env.*.local
+!.devcontainer/.env
+
+# Frontend
+kivio-frontend/node_modules/
+kivio-frontend/.next/
+kivio-frontend/dist/
+kivio-frontend/.pnpm-store/
+
+# Backend (handled in kivio-backend/.gitignore)
+kivio-backend/build/
+kivio-backend/.gradle/
+
+settings.local.json

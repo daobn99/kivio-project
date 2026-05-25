@@ -1,0 +1,60 @@
+{
+  "name": "Kivio Dev",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "app",
+  "workspaceFolder": "/workspace",
+  "remoteUser": "vscode",
+  "shutdownAction": "stopCompose",
+
+  "postCreateCommand": "bash /workspace/.devcontainer/scripts/post-create.sh",
+
+  "forwardPorts": [8080, 3000, 5432, 6379, 8025],
+  "portsAttributes": {
+    "8080": { "label": "Spring Boot API", "onAutoForward": "notify" },
+    "3000": { "label": "Frontend Dev Server", "onAutoForward": "notify" },
+    "5432": { "label": "PostgreSQL", "onAutoForward": "silent" },
+    "6379": { "label": "Redis", "onAutoForward": "silent" },
+    "8025": { "label": "Mailpit", "onAutoForward": "notify" }
+  },
+
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "java.jdt.ls.java.home": "/opt/java/openjdk",
+        "spring-boot.ls.java.home": "/opt/java/openjdk",
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "[java]": {
+          "editor.defaultFormatter": "redhat.java"
+        },
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "files.watcherExclude": {
+          "**/build/**": true,
+          "**/.gradle/**": true,
+          "**/node_modules/**": true
+        },
+        "files.exclude": {
+          "**/build": true,
+          "**/.gradle": true
+        }
+      },
+      "extensions": [
+        // Java & Spring Boot
+        "vscjava.vscode-java-pack",
+        "vmware.vscode-spring-boot",
+        "vscjava.vscode-gradle",
+        "vscjava.vscode-lombok",
+        // Frontend (ready for kivio-frontend)
+        "esbenp.prettier-vscode",
+        "dbaeumer.vscode-eslint",
+        "bradlc.vscode-tailwindcss",
+        // Database
+        "ms-ossdata.vscode-pgsql",
+        // General dev tools
+        "mhutchie.git-graph",
+        "redhat.vscode-xml",
+        "EditorConfig.EditorConfig"
+      ]
+    }
+  }
+}
