@@ -113,5 +113,6 @@ domain/{context}/
 | `docs/architecture/DOMAIN_MODEL.md` | DDD 集約・Value Object・Domain Events |
 | `docs/architecture/SECURITY.md` | JWT 認証・Security Filter Chain |
 | `docs/architecture/AUDIT.md` | `@Auditable` AOP・監査ログ設計 |
+| `docs/development/BACKEND_CODING_STANDARDS.md` | バックエンドコーディング規約（Lombok・レイヤー・例外・テスト等）|
 | `docs/design/` | API・DB・シーケンス・メール・エラーコード設計書 |
 | `adr/` | 設計判断の記録（ADR-001〜004） |
