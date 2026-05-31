@@ -10,7 +10,7 @@
 ./gradlew clean build    # clean build
 ```
 
-### Frontend (kivio-frontend/) — 未作成
+### Frontend (kivio-frontend/) — ディレクトリ初期化済み・実装未着手
 ```bash
 pnpm dev                 # dev server → localhost:3000
 pnpm build
@@ -28,10 +28,10 @@ docker compose up -d db  # DB only
 設計方針: モジュラーモノリスに DDD（Strategic + Tactical）を採用。
 詳細: `docs/architecture/OVERVIEW.md`、`docs/architecture/DOMAIN_MODEL.md`
 
-Package root: `com.kivio`
+Package root: `io.kivio`
 
 ```
-com.kivio/
+io.kivio/
 ├── common/         # PageResponse<T>, exceptions, base entities, SoftDeletableEntity
 ├── config/         # Spring config (Security, WebSocket, OpenAPI, CorrelationIdFilter)
 ├── domain/
@@ -102,7 +102,7 @@ domain/{context}/
 ## Current Phase
 
 **Phase 1**（要件定義・ドキュメント・devcontainer）— 完了  
-**Phase 2** 次: Auth / User / SellerApplication / Shop / Product CRUD / Audit 基盤
+**Phase 2** 進行中: Auth / User / SellerApplication / Shop / Product CRUD / Audit 基盤
 
 ## References
 
@@ -116,5 +116,15 @@ domain/{context}/
 | `docs/development/BACKEND_CODING_STANDARDS.md` | バックエンドコーディング規約（Lombok・レイヤー・例外・テスト等）|
 | `docs/development/FRONTEND_DESIGN_PROCESS.md` | フロントエンド設計手順書（User Flow〜API Contract・各ステップの成果物）|
 | `docs/development/FRONTEND_CODING_STANDARDS.md` | フロントエンドコーディング規約（App Router・SC/CC境界・Zustand・TanStack Query・フォーム・型定義等）|
-| `docs/design/` | API・DB・シーケンス・メール・エラーコード設計書 |
-| `adr/` | 設計判断の記録（ADR-001〜004） |
+| `docs/development/FRONTEND_TEST_STRATEGY.md` | フロントエンドテスト戦略（Vitest・RTL・Playwright・MSW・TanStack Query テスト方針）|
+| `docs/design/frontend/FRONTEND_IA.md` | 画面URL一覧・ナビゲーション構造・レイアウト設計・デザイン方針 |
+| `docs/design/frontend/USER_FLOW.md` | ユーザーフロー図（Mermaid）全フェーズ分 |
+| `docs/design/frontend/FRONTEND_API_CONTRACT.md` | フロントエンド視点のAPIコントラクト（画面×API対応表・並列フェッチ・エラーUI・WebSocket） |
+| `docs/design/API_DESIGN.md` | エンドポイント一覧・レスポンス形式 |
+| `docs/design/DB_DESIGN.md` | テーブル定義・インデックス設計 |
+| `docs/design/DATA_DICTIONARY.md` | データ定義書（各テーブルのカラム意味・制約・用語統一） |
+| `docs/design/SEQUENCE_FLOW.md` | シーケンス図（認証・注文・決済フロー） |
+| `docs/design/EMAIL_DESIGN.md` | メールテンプレート設計 |
+| `docs/design/ERROR_CODES.md` | エラーコード一覧（UPPER_SNAKE_CASE） |
+| `design-system/MASTER.md` | フロントエンドデザインシステム（カラー・タイポグラフィ・コンポーネント仕様） |
+| `adr/` | 設計判断の記録（ADR-001〜005） |

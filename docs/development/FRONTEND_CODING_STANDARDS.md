@@ -834,6 +834,7 @@ src/types/
 │   └── common.ts     # PageResponse<T>, ProblemDetail, ApiErrorCode
 ├── domain/           # フロントエンドのドメインモデル（API 型を加工したもの）
 │   └── cart.ts
+├── enums.ts          # バックエンド Enum と対応する const + type 定義
 └── index.ts          # re-export
 ```
 
@@ -892,6 +893,49 @@ function isApiError(error: unknown): error is ApiError {
 // ✅ as const でリテラル型を固定
 const USER_ROLES = ['BUYER', 'SELLER', 'ADMIN'] as const
 type UserRole = typeof USER_ROLES[number]
+```
+
+### 9.6 Enum / Union Type
+
+バックエンドの Enum 値と対応させる。**`const` + `type` パターン**を使い、ランタイムでも参照できるようにする。  
+`src/types/enums.ts` にすべての Enum 定義を集約する。
+
+```ts
+// src/types/enums.ts — const でランタイム値、type で型アノテーション
+
+export const OrderStatus = {
+  PENDING: 'PENDING',
+  PAID: 'PAID',
+  SHIPPED: 'SHIPPED',
+  DELIVERED: 'DELIVERED',
+  CANCELLED: 'CANCELLED',
+} as const
+export type OrderStatus = (typeof OrderStatus)[keyof typeof OrderStatus]
+
+```
+
+```ts
+// 利用例
+// ランタイム: UserRole.BUYER → 'BUYER'
+// 型注釈:    role: UserRole
+// イテレーション: Object.values(UserRole)
+// 判定:      if (role === UserRole.ADMIN) { ... }
+```
+
+**ルール:**
+- バックエンドの Enum 名・値と**完全一致**させる（大文字・スネークケースをそのまま使う）
+- `enum` キーワードは使わない（TypeScript の `enum` はツリーシェイキングに不利なため）
+- UI 表示用のラベルマップは別途 `constants.ts` に定義し、`enums.ts` に混在させない
+
+```ts
+// src/lib/constants.ts — 表示ラベルは定数として分離
+export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
+  [OrderStatus.PENDING]: '注文確認中',
+  [OrderStatus.PAID]: '支払済',
+  [OrderStatus.SHIPPED]: '発送済',
+  [OrderStatus.DELIVERED]: '配達完了',
+  [OrderStatus.CANCELLED]: 'キャンセル',
+}
 ```
 
 ### 9.5 `any` / `unknown` 使用禁止
@@ -1237,6 +1281,9 @@ theme: {
 - [ ] API レスポンス型は `src/types/api/` に定義している
 - [ ] Union 型のエラーコードは `docs/design/ERROR_CODES.md` と一致している
 - [ ] フォームの値型は `z.infer<typeof schema>` から生成している
+- [ ] バックエンドの Enum に対応する値は `const + type` パターンで `src/types/enums.ts` に定義している
+- [ ] TypeScript の `enum` キーワードを使っていない（`const + type` パターンに統一）
+- [ ] UI 表示用ラベルは `enums.ts` ではなく `lib/constants.ts` に分離している
 
 ### 12.6 品質確認（各画面完成時）
 

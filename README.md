@@ -23,11 +23,11 @@
 | リアルタイム | Spring WebSocket / STOMP |
 | ビルド | Gradle (Kotlin DSL) |
 
-**フロントエンド** *(実装予定)*
+**フロントエンド** *(実装未着手)*
 
 | カテゴリ | 技術 |
 |---|---|
-| フレームワーク | Next.js (App Router) + TypeScript 5 |
+| フレームワーク | Next.js 16 (App Router) + TypeScript 5 |
 | UI | shadcn/ui + Tailwind CSS 4 |
 | 認証 | NextAuth.js (Auth.js v5) |
 | 状態管理 / データフェッチ | Zustand + TanStack Query 5 |
@@ -74,12 +74,14 @@ kivio/
 │       ├── config/       # Security, WebSocket, OpenAPI, CorrelationIdFilter
 │       ├── domain/       # ドメインパッケージ（上記8ドメイン）
 │       └── infra/        # Stripe / Cloudinary / Resend / Google 統合
-├── kivio-frontend/       # Next.js アプリ（未作成）
+├── kivio-frontend/       # Next.js アプリ（ディレクトリ初期化済み・実装未着手）
+├── design-system/        # フロントエンドデザインシステム（MASTER.md）
 ├── .devcontainer/        # Dev Container 設定
-├── adr/                  # Architecture Decision Records
+├── adr/                  # Architecture Decision Records (ADR-001〜005)
 ├── docs/
 │   ├── architecture/     # OVERVIEW, DOMAIN_MODEL, SECURITY, AUDIT
-│   ├── design/           # API, DB, シーケンス, メール, エラーコード設計書
+│   ├── design/           # API, DB, データ定義, シーケンス, メール, エラーコード, フロントエンド設計
+│   ├── development/      # セットアップ, テスト戦略, コーディング規約（BE/FE）, FE設計プロセス
 │   └── requirements/     # RFP, ヒアリング, 要件定義書
 └── infra/                # IaC（将来）
 ```
@@ -129,6 +131,7 @@ pnpm dev                   # → localhost:3000
 | [ADR-002](adr/ADR-002-ddd-adoption.md) | DDD 採用 |
 | [ADR-003](adr/ADR-003-soft-delete-strategy.md) | Soft Delete 戦略 |
 | [ADR-004](adr/ADR-004-jwt-strategy.md) | JWT 戦略（HS256 → RS256） |
+| [ADR-005](adr/ADR-005-uuid-primary-key.md) | 主キーに UUID 採用（`audit_logs` のみ BIGINT 例外） |
 
 ## フェーズ別スコープ
 
@@ -142,14 +145,42 @@ pnpm dev                   # → localhost:3000
 
 ## ドキュメント
 
+**アーキテクチャ・設計**
+
 | ドキュメント | 内容 |
 |---|---|
-| [セットアップガイド](docs/development/SETUP.md) | 環境変数・Flyway 規則・トラブルシュート |
-| [テスト戦略](docs/development/TEST_STRATEGY.md) | テストピラミッド・Testcontainers・モック方針 |
-| [要件定義書](docs/requirements/REQUIREMENTS.md) | 機能・非機能要件 |
 | [アーキテクチャ概要](docs/architecture/OVERVIEW.md) | レイヤー構成・ドメイン間通信 |
 | [ドメインモデル](docs/architecture/DOMAIN_MODEL.md) | 集約・Value Object・Domain Events |
 | [セキュリティ設計](docs/architecture/SECURITY.md) | JWT 認証・Security Filter Chain |
 | [監査ログ設計](docs/architecture/AUDIT.md) | @Auditable AOP |
+
+**API・DB・インフラ設計**
+
+| ドキュメント | 内容 |
+|---|---|
 | [API 設計](docs/design/API_DESIGN.md) | エンドポイント一覧・レスポンス形式 |
 | [DB 設計](docs/design/DB_DESIGN.md) | テーブル定義・インデックス設計 |
+| [データ定義書](docs/design/DATA_DICTIONARY.md) | 各テーブルのカラム意味・制約・用語統一 |
+| [シーケンスフロー](docs/design/SEQUENCE_FLOW.md) | 認証・注文・決済のシーケンス図 |
+| [メール設計](docs/design/EMAIL_DESIGN.md) | メールテンプレート・送信トリガー |
+| [エラーコード](docs/design/ERROR_CODES.md) | エラーコード一覧（UPPER_SNAKE_CASE） |
+
+**フロントエンド設計**
+
+| ドキュメント | 内容 |
+|---|---|
+| [フロントエンド IA](docs/design/frontend/FRONTEND_IA.md) | 画面 URL 一覧・ナビゲーション構造・レイアウト設計 |
+| [ユーザーフロー](docs/design/frontend/USER_FLOW.md) | ユーザーフロー図（Mermaid）全フェーズ分 |
+| [API コントラクト](docs/design/frontend/FRONTEND_API_CONTRACT.md) | 画面×API 対応表・並列フェッチ・エラー UI・WebSocket |
+| [デザインシステム](design-system/MASTER.md) | カラー・タイポグラフィ・コンポーネント仕様（shadcn/ui） |
+
+**開発規約・運用**
+
+| ドキュメント | 内容 |
+|---|---|
+| [セットアップガイド](docs/development/SETUP.md) | 環境変数・Flyway 規則・トラブルシュート |
+| [テスト戦略](docs/development/TEST_STRATEGY.md) | テストピラミッド・Testcontainers・モック方針 |
+| [バックエンドコーディング規約](docs/development/BACKEND_CODING_STANDARDS.md) | Lombok・レイヤー・例外・テスト等 |
+| [フロントエンド設計プロセス](docs/development/FRONTEND_DESIGN_PROCESS.md) | User Flow〜API Contract・各ステップの成果物 |
+| [フロントエンドコーディング規約](docs/development/FRONTEND_CODING_STANDARDS.md) | App Router・SC/CC 境界・Zustand・TanStack Query |
+| [要件定義書](docs/requirements/REQUIREMENTS.md) | 機能・非機能要件 |
