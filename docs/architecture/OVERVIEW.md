@@ -12,6 +12,7 @@
 4. [ドメイン間通信](#4-ドメイン間通信)
 5. [外部サービス統合](#5-外部サービス統合)
 6. [技術スタック](#6-技術スタック)
+7. [WebSocket / STOMP アーキテクチャ](#7-websocket--stomp-アーキテクチャ)
 
 ---
 
@@ -241,6 +242,117 @@ public void onSellerApproved(SellerApprovedEvent event) {
 | API ドキュメント | springdoc-openapi（OpenAPI 3.0 / Swagger UI） |
 | テスト | JUnit 5, Mockito, Testcontainers |
 | ビルド | Gradle (Kotlin DSL) |
+
+---
+
+## 7. WebSocket / STOMP アーキテクチャ
+
+### 7.1 全体構成
+
+```
+クライアント (Next.js)
+    │
+    │  wss://{host}/ws  （STOMP over WebSocket）
+    │
+Spring Boot
+    │
+    ├── JwtHandshakeInterceptor  ← 接続URLの ?token= で JWT 検証
+    ├── WebSocketMessageBrokerConfigurer
+    │       ├── /app      → @MessageMapping（アプリ処理）
+    │       └── /topic    → SimpleBroker（クライアントへの配信）
+    └── SimpMessagingTemplate   ← サービス層からブロードキャスト
+```
+
+**スケーリング方針:** MVP は In-Memory SimpleBroker。将来（Phase 5+）は `StompBrokerRelayMessageHandler` を使いExternal Broker（RabbitMQ / Redis Pub/Sub）に差し替え可能な設計とする。
+
+---
+
+### 7.2 WebSocketConfig（主要設定）
+
+```java
+@Configuration
+@EnableWebSocketMessageBroker
+public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
+
+    @Override
+    public void configureMessageBroker(MessageBrokerRegistry config) {
+        // クライアントが購読するトピックプレフィックス
+        config.enableSimpleBroker("/topic");
+        // クライアントからのメッセージ送信プレフィックス（@MessageMapping へルーティング）
+        config.setApplicationDestinationPrefixes("/app");
+    }
+
+    @Override
+    public void registerStompEndpoints(StompEndpointRegistry registry) {
+        registry.addEndpoint("/ws")
+            .setAllowedOriginPatterns("${allowed.origins}")
+            .withSockJS();   // SockJS フォールバック
+    }
+}
+```
+
+---
+
+### 7.3 トピック命名規則
+
+| トピック | 用途 | 購読権限 |
+|---|---|---|
+| `/topic/notifications/{userId}` | アプリ内通知（注文確定・申請結果・新着チャット） | 本人のみ |
+| `/topic/chat/{roomId}` | チャットメッセージリアルタイム配信 | ルーム参加者（buyer / seller）のみ |
+| `/topic/orders/{orderId}` | 注文ステータス変更リアルタイム通知 | 注文バイヤーとショップオーナーのみ |
+
+> **NOTE:** トピックの所有者チェックは `ChannelInterceptor`（§ 7.5 参照）で実施する。Spring の SimpleBroker はデフォルトで全購読を許可するため、アプリ側で明示的に制御する必要がある。
+
+---
+
+### 7.4 サービス層からの配信
+
+```java
+@Service
+@RequiredArgsConstructor
+public class NotificationService {
+
+    private final SimpMessagingTemplate messagingTemplate;
+
+    public void sendNotification(UUID userId, NotificationPayload payload) {
+        messagingTemplate.convertAndSend(
+            "/topic/notifications/" + userId,
+            payload
+        );
+    }
+}
+```
+
+---
+
+### 7.5 WebSocket 認証・認可
+
+**JWT 配信方法:** SockJS はブラウザから WebSocket ハンドシェイク時にカスタムヘッダーを付与できないため、JWT は接続 URL のクエリパラメータで送信する。`HandshakeInterceptor` がリクエスト到達時にパラメータから JWT を取り出して検証する。
+
+```
+wss://{host}/ws?token=eyJhbGciOiJIUzI1NiIs...
+```
+
+購読先トピックの所有者チェック（他ユーザーのトピックへの不正購読防止）は `ChannelInterceptor` の `SUBSCRIBE` フレームで行う。詳細は [SECURITY.md § 8](./SECURITY.md) を参照。
+
+```java
+@Component
+public class WebSocketAuthChannelInterceptor implements ChannelInterceptor {
+
+    @Override
+    public Message<?> preSend(Message<?> message, MessageChannel channel) {
+        StompHeaderAccessor accessor = StompHeaderAccessor.wrap(message);
+
+        if (StompCommand.SUBSCRIBE.equals(accessor.getCommand())) {
+            // 購読先トピックの所有者チェック
+            String destination = accessor.getDestination();
+            validateSubscription(accessor.getUser(), destination);
+        }
+
+        return message;
+    }
+}
+```
 
 ---
 

@@ -13,7 +13,8 @@
 5. [認可設計](#5-認可設計)
 6. [パスワード設計](#6-パスワード設計)
 7. [CORS 設計](#7-cors-設計)
-8. [セキュリティ要件まとめ](#8-セキュリティ要件まとめ)
+8. [WebSocket セキュリティ](#8-websocket-セキュリティ)
+9. [セキュリティ要件まとめ](#9-セキュリティ要件まとめ)
 
 ---
 
@@ -311,7 +312,121 @@ public CorsConfigurationSource corsConfigurationSource() {
 
 ---
 
-## 8. セキュリティ要件まとめ
+## 8. WebSocket セキュリティ
+
+### 8.1 WebSocket 接続時の JWT 認証
+
+SockJS はブラウザから WebSocket ハンドシェイク時にカスタム HTTP ヘッダーを付与できない制約があるため、JWT は接続 URL の **クエリパラメータ** で送信する。
+
+```
+wss://{host}/ws?token=eyJhbGciOiJIUzI1NiIs...
+```
+
+バックエンドは `HandshakeInterceptor` でリクエスト到達時にクエリパラメータから JWT を取り出し、HTTP リクエストと同じ `JwtAuthenticator` で検証する。検証成功後、`Principal` を WebSocket セッションに設定する。
+
+```java
+@Component
+public class JwtHandshakeInterceptor implements HandshakeInterceptor {
+
+    @Override
+    public boolean beforeHandshake(ServerHttpRequest request,
+                                   ServerHttpResponse response,
+                                   WebSocketHandler wsHandler,
+                                   Map<String, Object> attributes) {
+        String query = request.getURI().getQuery();  // "token=eyJ..."
+        String token = extractToken(query);
+        if (token == null) {
+            response.setStatusCode(HttpStatus.UNAUTHORIZED);
+            return false;
+        }
+        Authentication auth = jwtAuthenticator.authenticate(token);
+        attributes.put("authentication", auth);
+        return true;
+    }
+}
+```
+
+> **セキュリティ上の注意:** クエリパラメータは Web サーバーのアクセスログに記録される可能性がある。Access Token の短命設計（15 分）でリスクを最小化する。本番環境ではロードバランサー／リバースプロキシのアクセスログにトークンが残らないよう設定を確認すること。
+
+---
+
+### 8.2 トピック購読の認可
+
+SimpleBroker はデフォルトで全クライアントが任意のトピックを購読できる。これを防ぐため `SUBSCRIBE` フレームでトピックと認証ユーザーの紐づきを検証する。
+
+| トピックパターン | 許可条件 |
+|---|---|
+| `/topic/notifications/{userId}` | `userId == currentUser.id` |
+| `/topic/chat/{roomId}` | `chat_rooms` テーブルで `buyer_id` または `shop.seller_id` が `currentUser.id` に一致 |
+| `/topic/orders/{orderId}` | `orders` テーブルで `user_id`（buyer）または `shop.seller_id` が `currentUser.id` に一致 |
+
+```java
+if (StompCommand.SUBSCRIBE.equals(accessor.getCommand())) {
+    String destination = accessor.getDestination();
+    UUID currentUserId = ((KivioUserDetails) accessor.getUser().getPrincipal()).getId();
+
+    if (destination.startsWith("/topic/notifications/")) {
+        UUID targetUserId = extractUserId(destination);
+        if (!targetUserId.equals(currentUserId)) {
+            throw new AccessDeniedException("他ユーザーの通知トピックは購読できません");
+        }
+    } else if (destination.startsWith("/topic/chat/")) {
+        UUID roomId = extractRoomId(destination);
+        if (!chatAuthorizationService.isMember(roomId, currentUserId)) {
+            throw new AccessDeniedException("このチャットルームへのアクセス権がありません");
+        }
+    } else if (destination.startsWith("/topic/orders/")) {
+        UUID orderId = extractOrderId(destination);
+        if (!orderAuthorizationService.isParticipant(orderId, currentUserId)) {
+            throw new AccessDeniedException("この注文へのアクセス権がありません");
+        }
+    }
+}
+```
+
+---
+
+### 8.3 WebSocket 接続のセキュリティ設定
+
+`HandshakeInterceptor` で認証した `Principal` は STOMP セッション全体に伝搬するため、`@MessageMapping` ハンドラーでは通常の `Principal` 引数から認証済みユーザーを取得できる。
+
+```java
+@Configuration
+public class WebSocketSecurityConfig extends AbstractSecurityWebSocketMessageBrokerConfigurer {
+
+    @Override
+    protected void configureInbound(MessageSecurityMetadataSourceRegistry messages) {
+        messages
+            .simpSubscribeDestMatchers("/topic/notifications/**").authenticated()
+            .simpSubscribeDestMatchers("/topic/chat/**").authenticated()
+            .simpSubscribeDestMatchers("/topic/orders/**").authenticated()
+            .anyMessage().authenticated();
+    }
+
+    @Override
+    protected boolean sameOriginDisabled() {
+        return true; // CORS は HTTP レイヤーの CorsFilter で管理するため無効化
+    }
+}
+```
+
+---
+
+### 8.4 その他の WebSocket セキュリティ考慮事項
+
+| 脅威 | 対策 |
+|---|---|
+| JWT 未提供 / 無効での接続 | `HandshakeInterceptor` で検証し、無効なら HTTP 401 を返して接続を拒否 |
+| 他ユーザーのトピック購読 | `SUBSCRIBE` フレームで所有者チェック（§ 8.2） |
+| STOMP メッセージインジェクション | `@MessageMapping` 引数は Bean Validation で検証 |
+| WebSocket ハイジャック | SockJS エンドポイントに CORS 制限（`setAllowedOriginPatterns`） |
+| クエリパラメータのトークン露出 | アクセスログへの記録リスクあり（SockJS の制約）。Access Token の短命設計（15分）で影響を最小化（§ 8.1 参照） |
+| 大量接続（DoS） | Rate Limiting は HTTP レイヤーで実施。WebSocket 接続数はホスティング側（Render / Railway）のリソース制限で管理 |
+| Access Token 期限切れ中の接続継続 | WebSocket 接続はステートフル。接続確立時に JWT を検証するが、接続中の失効検出は行わない（MVP 許容）。Access Token 15 分の短命設計で影響を最小化 |
+
+---
+
+## 9. セキュリティ要件まとめ
 
 | 要件 | 実装方法 |
 |---|---|

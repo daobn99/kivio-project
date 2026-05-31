@@ -114,5 +114,7 @@ domain/{context}/
 | `docs/architecture/SECURITY.md` | JWT 認証・Security Filter Chain |
 | `docs/architecture/AUDIT.md` | `@Auditable` AOP・監査ログ設計 |
 | `docs/development/BACKEND_CODING_STANDARDS.md` | バックエンドコーディング規約（Lombok・レイヤー・例外・テスト等）|
+| `docs/development/FRONTEND_DESIGN_PROCESS.md` | フロントエンド設計手順書（User Flow〜API Contract・各ステップの成果物）|
+| `docs/development/FRONTEND_CODING_STANDARDS.md` | フロントエンドコーディング規約（App Router・SC/CC境界・Zustand・TanStack Query・フォーム・型定義等）|
 | `docs/design/` | API・DB・シーケンス・メール・エラーコード設計書 |
 | `adr/` | 設計判断の記録（ADR-001〜004） |
