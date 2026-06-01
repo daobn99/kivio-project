@@ -5,7 +5,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpStatusCode;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
@@ -43,7 +43,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ProblemDetail handleValidation(MethodArgumentNotValidException ex, HttpServletRequest request) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(
-                HttpStatusCode.valueOf(422), "リクエストの入力値に不正があります");
+                HttpStatus.UNPROCESSABLE_CONTENT, "リクエストの入力値に不正があります");
         problem.setType(URI.create(problemBaseUrl + "/problems/validation-failed"));
         problem.setTitle("Validation Failed");
         problem.setInstance(URI.create(request.getRequestURI()));
@@ -54,7 +54,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(AuthenticationException.class)
     public ProblemDetail handleAuthentication(AuthenticationException ex, HttpServletRequest request) {
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatusCode.valueOf(401), "認証が必要です");
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, "認証が必要です");
         problem.setType(URI.create(problemBaseUrl + "/problems/unauthorized"));
         problem.setTitle("Unauthorized");
         problem.setInstance(URI.create(request.getRequestURI()));
@@ -64,7 +64,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(AccessDeniedException.class)
     public ProblemDetail handleAccessDenied(AccessDeniedException ex, HttpServletRequest request) {
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatusCode.valueOf(403), "このリソースへのアクセス権がありません");
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, "このリソースへのアクセス権がありません");
         problem.setType(URI.create(problemBaseUrl + "/problems/access-denied"));
         problem.setTitle("Access Denied");
         problem.setInstance(URI.create(request.getRequestURI()));
@@ -76,7 +76,7 @@ public class GlobalExceptionHandler {
     public ProblemDetail handleGeneral(Exception ex, HttpServletRequest request) {
         log.error("unexpected_error path={} correlationId={}", request.getRequestURI(), MDC.get("correlationId"), ex);
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(
-                HttpStatusCode.valueOf(500), "サーバー内部エラーが発生しました");
+                HttpStatus.INTERNAL_SERVER_ERROR, "サーバー内部エラーが発生しました");
         problem.setType(URI.create(problemBaseUrl + "/problems/internal-server-error"));
         problem.setTitle("Internal Server Error");
         problem.setInstance(URI.create(request.getRequestURI()));

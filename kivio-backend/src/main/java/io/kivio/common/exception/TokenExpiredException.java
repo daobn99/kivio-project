@@ -1,10 +1,10 @@
 package io.kivio.common.exception;
 
-import org.springframework.http.HttpStatusCode;
+import org.springframework.http.HttpStatus;
 
 public class TokenExpiredException extends KivioException {
 
     public TokenExpiredException() {
-        super("TOKEN_EXPIRED", "アクセストークンの有効期限が切れています", HttpStatusCode.valueOf(401));
+        super("TOKEN_EXPIRED", "アクセストークンの有効期限が切れています", HttpStatus.UNAUTHORIZED);
     }
 }

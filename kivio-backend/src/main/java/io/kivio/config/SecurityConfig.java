@@ -9,7 +9,7 @@ import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
-import org.springframework.http.HttpStatusCode;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ProblemDetail;
 import org.springframework.security.config.Customizer;
@@ -55,8 +55,7 @@ public class SecurityConfig {
         http
                 .csrf(AbstractHttpConfigurer::disable)
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-                .sessionManagement(session ->
-                        session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .headers(headers -> headers
                         .contentSecurityPolicy(csp -> csp.policyDirectives("default-src 'self'"))
                         .frameOptions(HeadersConfigurer.FrameOptionsConfig::sameOrigin)
@@ -69,17 +68,16 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/google").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/refresh").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/webhooks/stripe").permitAll()
-                        .requestMatchers(HttpMethod.GET,  "/api/v1/products/**").permitAll()
-                        .requestMatchers(HttpMethod.GET,  "/api/v1/shops/**").permitAll()
-                        .requestMatchers(HttpMethod.GET,  "/api/v1/categories").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/products/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/shops/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/categories").permitAll()
                         .requestMatchers("/api/v1/health").permitAll()
                         .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
                         .requestMatchers("/actuator/health").permitAll()
                         .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/v1/seller-applications").hasRole("BUYER")
                         .requestMatchers(HttpMethod.POST, "/api/v1/products").hasRole("SELLER")
-                        .anyRequest().authenticated()
-                )
+                        .anyRequest().authenticated())
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint(problemDetailAuthEntryPoint())
                         .accessDeniedHandler(problemDetailAccessDeniedHandler()))
@@ -115,16 +113,15 @@ public class SecurityConfig {
     // これらは Spring Security チェーン内でのみ動作させる（二重実行防止）
     @Bean
     public FilterRegistrationBean<JwtAuthenticationFilter> jwtFilterRegistration() {
-        FilterRegistrationBean<JwtAuthenticationFilter> registration =
-                new FilterRegistrationBean<>(jwtAuthenticationFilter);
+        FilterRegistrationBean<JwtAuthenticationFilter> registration = new FilterRegistrationBean<>(
+                jwtAuthenticationFilter);
         registration.setEnabled(false);
         return registration;
     }
 
     @Bean
     public FilterRegistrationBean<RateLimitingFilter> rateLimitFilterRegistration() {
-        FilterRegistrationBean<RateLimitingFilter> registration =
-                new FilterRegistrationBean<>(rateLimitingFilter);
+        FilterRegistrationBean<RateLimitingFilter> registration = new FilterRegistrationBean<>(rateLimitingFilter);
         registration.setEnabled(false);
         return registration;
     }
@@ -132,7 +129,7 @@ public class SecurityConfig {
     private AuthenticationEntryPoint problemDetailAuthEntryPoint() {
         return (request, response, ex) -> {
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(
-                    HttpStatusCode.valueOf(401), "認証が必要です");
+                    HttpStatus.UNAUTHORIZED, "認証が必要です");
             problem.setType(URI.create(problemBaseUrl + "/problems/unauthorized"));
             problem.setTitle("Unauthorized");
             problem.setInstance(URI.create(request.getRequestURI()));
@@ -146,7 +143,7 @@ public class SecurityConfig {
     private AccessDeniedHandler problemDetailAccessDeniedHandler() {
         return (request, response, ex) -> {
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(
-                    HttpStatusCode.valueOf(403), "このリソースへのアクセス権がありません");
+                    HttpStatus.FORBIDDEN, "このリソースへのアクセス権がありません");
             problem.setType(URI.create(problemBaseUrl + "/problems/access-denied"));
             problem.setTitle("Access Denied");
             problem.setInstance(URI.create(request.getRequestURI()));
