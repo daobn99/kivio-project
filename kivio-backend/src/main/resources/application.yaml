@@ -31,13 +31,14 @@ spring:
       client:
         registration:
           google:
+            # dummy は未設定でも起動できるようにするための placeholder. Google OAuth を使う場合は .env に GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET を設定する
             client-id: ${GOOGLE_CLIENT_ID:dummy}
             client-secret: ${GOOGLE_CLIENT_SECRET:dummy}
             scope: openid,email,profile
 
 app:
   jwt:
-    secret: ${JWT_SECRET:3d8f9a2b1c7e4f6a0d5b8e3c2f1a9d7b6c4e8f2a1b5d9c3e7f0a4b8d2c6e1f}
+    secret: ${JWT_SECRET}
     access-token-expiration: ${JWT_ACCESS_TOKEN_EXPIRATION:900}
     refresh-token-expiration: ${JWT_REFRESH_TOKEN_EXPIRATION:604800}
   cors:
@@ -61,6 +62,7 @@ springdoc:
     path: /swagger-ui.html
     operations-sorter: alpha
     tags-sorter: alpha
+    disable-swagger-default-url: true
 
 management:
   endpoints:
@@ -109,6 +111,10 @@ spring:
     clean-disabled: false
     locations: classpath:db/migration
 
+app:
+  jwt:
+    secret: test-only-secret-not-for-production-use-padding-padding-pad
+
 ---
 spring:
   config:
@@ -116,3 +122,9 @@ spring:
       on-profile: prod
   flyway:
     clean-disabled: true
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false

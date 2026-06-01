@@ -57,7 +57,14 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .headers(headers -> headers
-                        .contentSecurityPolicy(csp -> csp.policyDirectives("default-src 'self'"))
+                        // 'unsafe-inline' は Swagger UI のインライン初期化スクリプトに必要
+                        // prod では springdoc.swagger-ui.enabled=false で Swagger 自体を無効化する
+                        .contentSecurityPolicy(csp -> csp.policyDirectives(
+                                "default-src 'self'; " +
+                                "script-src 'self' 'unsafe-inline'; " +
+                                "style-src 'self' 'unsafe-inline'; " +
+                                "img-src 'self' data: https:; " +
+                                "font-src 'self' data:"))
                         .frameOptions(HeadersConfigurer.FrameOptionsConfig::sameOrigin)
                         .xssProtection(Customizer.withDefaults())
                         .referrerPolicy(rp -> rp.policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.NO_REFERRER)))
