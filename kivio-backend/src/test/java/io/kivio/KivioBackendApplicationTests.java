@@ -1,13 +1,11 @@
 package io.kivio;
 
+import io.kivio.support.IntegrationTestBase;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
 
-@SpringBootTest
-class KivioBackendApplicationTests {
+class KivioBackendApplicationTests extends IntegrationTestBase {
 
-	@Test
-	void contextLoads() {
-	}
-
+    @Test
+    void contextLoads() {
+    }
 }
