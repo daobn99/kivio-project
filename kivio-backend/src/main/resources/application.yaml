@@ -1,6 +1,9 @@
 spring:
   application:
     name: kivio-backend
+  mvc:
+    problemdetails:
+      enabled: true
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/kivio}
     username: ${DB_USERNAME:kivio}
