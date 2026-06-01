@@ -102,6 +102,10 @@ tasks.jacocoTestCoverageVerification {
 	}
 }
 
+tasks.named<org.springframework.boot.gradle.tasks.run.BootRun>("bootRun") {
+	jvmArgs("-Duser.timezone=Asia/Tokyo")
+}
+
 tasks.withType<JavaCompile> {
 	options.compilerArgs.add("-Xlint:deprecation")
 }
