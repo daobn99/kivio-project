@@ -1,0 +1,31 @@
+# =============================================================================
+# Profile: test — Testcontainers / CI 向け設定
+# =============================================================================
+
+spring:
+  jpa:
+    show-sql: false
+  flyway:
+    clean-disabled: false
+    locations: classpath:db/migration
+  # Google OAuth2 の OIDC バリデーションが起動時に失敗するのを防ぐ（Spring Boot 4.x クラス名）
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.security.oauth2.client.autoconfigure.OAuth2ClientAutoConfiguration
+      - org.springframework.boot.security.oauth2.client.autoconfigure.servlet.OAuth2ClientWebSecurityAutoConfiguration
+      - org.springframework.boot.security.oauth2.server.resource.autoconfigure.servlet.OAuth2ResourceServerAutoConfiguration
+
+app:
+  jwt:
+    secret: dGVzdC1vbmx5LXNlY3JldC1yZXBsYWNlLWluLXByb2QtIQ==
+  # テスト中のレート制限を緩和してテストの安定性を確保
+  rate-limit:
+    auth:
+      capacity: 10000
+      refill-duration-seconds: 60
+    api:
+      capacity: 10000
+      refill-duration-seconds: 60
+    public:
+      capacity: 10000
+      refill-duration-seconds: 60

@@ -1,42 +1,86 @@
+# =============================================================================
+# Profile: default — 全環境共通のベース設定
+# =============================================================================
+
 spring:
   application:
     name: kivio-backend
+
+  # Java 21+ 仮想スレッドで I/O バウンドスレッドのスループットを向上させる
+  threads:
+    virtual:
+      enabled: true
+
+  # Jackson: null フィールド除外・未知プロパティ無視
+  # Jackson 3.x では WRITE_DATES_AS_TIMESTAMPS が廃止されデフォルトで ISO 8601 出力になる
+  jackson:
+    default-property-inclusion: non_null
+    deserialization:
+      fail-on-unknown-properties: false
+    time-zone: UTC
+
   mvc:
     problemdetails:
       enabled: true
+
   datasource:
     url: ${DB_URL:jdbc:postgresql://db:5432/kivio}
     username: ${DB_USERNAME:kivio}
     password: ${DB_PASSWORD:password}
     driver-class-name: org.postgresql.Driver
     hikari:
-      maximum-pool-size: 10
+      # プール枯渇防止: CPU コア数の 2〜4 倍が目安
+      maximum-pool-size: ${DB_POOL_SIZE:10}
       minimum-idle: 2
       connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      # 長時間アイドル接続の切断を防ぐ keepalive
+      keepalive-time: 60000
+      pool-name: KivioHikariPool
+
   jpa:
     hibernate:
+      # スキーマ管理は Flyway に任せる。起動時に DDL は変更しない
       ddl-auto: validate
     properties:
       hibernate:
         format_sql: false
+        jdbc:
+          time_zone: UTC
     show-sql: false
+    # OSIV はパフォーマンス問題の温床。STATELESS API では不要
     open-in-view: false
+
   flyway:
     enabled: true
+    # 本番データ消失防止: prod プロファイルで明示的に true を設定
     clean-disabled: true
     locations: classpath:db/migration
+
   security:
     oauth2:
       client:
         registration:
           google:
-            # dummy は未設定でも起動できるようにするための placeholder. Google OAuth を使う場合は .env に GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET を設定する
+            # GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET を .env で設定すること
+            # 未設定時は dummy で起動を許可（OAuth2 ログイン機能は無効になる）
             client-id: ${GOOGLE_CLIENT_ID:dummy}
             client-secret: ${GOOGLE_CLIENT_SECRET:dummy}
             scope: openid,email,profile
 
+server:
+  # リバースプロキシ配下でのクライアント IP 正確取得（RateLimitingFilter §5.5）
+  forward-headers-strategy: native
+  compression:
+    enabled: true
+    mime-types: application/json,application/problem+json
+    min-response-size: 2048
+
 app:
   jwt:
+    # SECURITY: 本番では JWT_SECRET 環境変数に 256bit 以上の Base64 エンコード済み秘密鍵を設定すること
+    # デフォルト値はローカル開発専用。本番・ステージング環境での使用は厳禁
     secret: ${JWT_SECRET}
     access-token-expiration: ${JWT_ACCESS_TOKEN_EXPIRATION:900}
     refresh-token-expiration: ${JWT_REFRESH_TOKEN_EXPIRATION:604800}
@@ -66,11 +110,18 @@ springdoc:
 management:
   endpoints:
     web:
+      base-path: /actuator
       exposure:
         include: health,info
   endpoint:
     health:
       show-details: when-authorized
+      # Kubernetes liveness/readiness probe サポート
+      probes:
+        enabled: true
+  info:
+    env:
+      enabled: false
 
 logging:
   pattern:
@@ -78,47 +129,3 @@ logging:
   level:
     root: INFO
     "[io.kivio]": INFO
-
----
-spring:
-  config:
-    activate:
-      on-profile: dev
-  jpa:
-    show-sql: true
-  flyway:
-    clean-disabled: false
-    locations: classpath:db/migration,classpath:db/migration/dev
-
-logging:
-  level:
-    "[io.kivio]": DEBUG
-
----
-spring:
-  config:
-    activate:
-      on-profile: test
-  datasource:
-    url: jdbc:tc:postgresql:17://localhost/kivio_test?TC_REUSABLE=true
-    username: test
-    password: test
-    driver-class-name: org.testcontainers.jdbc.ContainerDatabaseDriver
-  jpa:
-    show-sql: false
-  flyway:
-    clean-disabled: false
-    locations: classpath:db/migration
----
-spring:
-  config:
-    activate:
-      on-profile: prod
-  flyway:
-    clean-disabled: true
-
-springdoc:
-  api-docs:
-    enabled: false
-  swagger-ui:
-    enabled: false

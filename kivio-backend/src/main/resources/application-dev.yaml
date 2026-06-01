@@ -1,0 +1,18 @@
+# =============================================================================
+# Profile: dev — ローカル開発追加設定
+# =============================================================================
+
+spring:
+  jpa:
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+  flyway:
+    clean-disabled: false
+    locations: classpath:db/migration,classpath:db/migration/dev
+
+logging:
+  level:
+    "[io.kivio]": DEBUG
+    "[org.hibernate.SQL]": DEBUG
