@@ -20,6 +20,13 @@ import java.io.IOException;
 import java.time.Duration;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * レート制限フィルターを表現します。
+ *
+ * <p>
+ * 認証系エンドポイントは 10 req/min/IP、認証済みユーザーは 100 req/min/user、
+ * 未認証の公開エンドポイントは 30 req/min/IP のバケットで制御します。
+ */
 @Slf4j
 @Component
 public class RateLimitingFilter extends OncePerRequestFilter {

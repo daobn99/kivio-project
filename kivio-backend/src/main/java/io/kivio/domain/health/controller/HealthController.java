@@ -10,6 +10,9 @@ import org.springframework.web.bind.annotation.RestController;
 import java.time.Instant;
 import java.util.Map;
 
+/**
+ * ヘルスチェック API を表現します。
+ */
 @Tag(name = "Health", description = "ヘルスチェック")
 @RestController
 @RequestMapping("/api/v1/health")

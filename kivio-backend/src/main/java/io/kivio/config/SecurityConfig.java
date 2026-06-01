@@ -34,6 +34,9 @@ import java.net.URI;
 import java.util.Arrays;
 import java.util.List;
 
+/**
+ * アプリケーションのセキュリティ定義を表現します。
+ */
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity

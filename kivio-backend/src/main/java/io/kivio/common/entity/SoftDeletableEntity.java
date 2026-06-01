@@ -7,6 +7,9 @@ import org.hibernate.annotations.SQLRestriction;
 
 import java.time.Instant;
 
+/**
+ * ソフトデリート対応エンティティの基底クラスを表現します。
+ */
 @MappedSuperclass
 @Getter
 @SQLRestriction("deleted_at IS NULL")

@@ -15,8 +15,13 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
-// Spring Security FilterChainProxy (order -100) より先にリクエストを処理し、
-// セキュリティエラーレスポンス（401/403）にも X-Correlation-Id ヘッダーを付与するため最高優先度で登録する
+/**
+ * 相関 ID フィルターを表現します。
+ *
+ * <p>
+ * Spring Security FilterChainProxy (order -100) より先にリクエストを処理し、
+ * セキュリティエラーレスポンス（401/403）にも X-Correlation-Id ヘッダーを付与するため最高優先度で登録する。
+ */
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public class CorrelationIdFilter extends OncePerRequestFilter {

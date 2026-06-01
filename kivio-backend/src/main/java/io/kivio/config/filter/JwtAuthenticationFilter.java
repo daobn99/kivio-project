@@ -14,6 +14,13 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 import java.util.Optional;
 
+/**
+ * JWT 認証フィルターを表現します。
+ *
+ * <p>
+ * リクエストごとに1度だけ実行され、Authorization ヘッダーから Bearer トークンを
+ * 抽出して SecurityContext に認証情報をセットします。
+ */
 @Component
 @RequiredArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {

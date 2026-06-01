@@ -19,6 +19,9 @@ import java.io.Serializable;
 import java.time.Instant;
 import java.util.UUID;
 
+/**
+ * 監査ログを表現します。
+ */
 @Entity
 @Table(name = "audit_logs")
 @IdClass(AuditLog.AuditLogId.class)
@@ -93,6 +96,7 @@ public class AuditLog {
     @Column(name = "error_message", updatable = false)
     private String errorMessage;
 
+    /** 監査ログの複合主キーを表現します。 */
     public record AuditLogId(Long id, Instant createdAt) implements Serializable {
     }
 }

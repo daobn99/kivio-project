@@ -2,6 +2,9 @@ package io.kivio.common.exception;
 
 import org.springframework.http.HttpStatus;
 
+/**
+ * リソース未発見例外（404）を表現します。
+ */
 public class ResourceNotFoundException extends KivioException {
 
     public ResourceNotFoundException(String detail) {

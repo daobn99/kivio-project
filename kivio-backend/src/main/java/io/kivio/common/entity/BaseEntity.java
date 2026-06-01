@@ -10,6 +10,9 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.Instant;
 
+/**
+ * 全エンティティ共通の監査フィールドを表現します。
+ */
 @MappedSuperclass
 @EntityListeners(AuditingEntityListener.class)
 @Getter

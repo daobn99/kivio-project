@@ -4,6 +4,9 @@ import org.springframework.data.domain.Page;
 
 import java.util.List;
 
+/**
+ * ページネーションレスポンスを表現します。
+ */
 public record PageResponse<T>(
         /** コンテンツ一覧 */
         List<T> content,

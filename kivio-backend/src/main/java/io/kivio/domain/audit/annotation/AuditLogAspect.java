@@ -19,6 +19,9 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 import java.util.Optional;
 import java.util.UUID;
 
+/**
+ * @Auditable アノテーションに基づく監査ログ記録 AOP を表現します。
+ */
 @Slf4j
 @Aspect
 @Component

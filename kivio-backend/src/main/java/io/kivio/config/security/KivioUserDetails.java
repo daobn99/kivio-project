@@ -9,6 +9,9 @@ import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
+/**
+ * 認証済みユーザー情報を表現します。
+ */
 @Getter
 public class KivioUserDetails implements UserDetails {
 

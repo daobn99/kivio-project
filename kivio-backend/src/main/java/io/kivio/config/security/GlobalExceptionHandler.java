@@ -21,6 +21,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+/**
+ * グローバル例外ハンドラーを表現します。
+ */
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {

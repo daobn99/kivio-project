@@ -5,6 +5,9 @@ import jakarta.validation.constraints.Positive;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
 
+/**
+ * JWT 設定値を表現します。
+ */
 @Validated
 @ConfigurationProperties(prefix = "app.jwt")
 public record JwtProperties(

@@ -7,20 +7,34 @@ import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
 
+/**
+ * 監査ログリポジトリを表現します。
+ *
+ * <p>
+ * audit_logs は追記専用です。DELETE / UPDATE 操作は禁止されています（AUDIT.md §3.1）。
+ */
 @Repository
 public interface AuditLogRepository extends JpaRepository<AuditLog, AuditLog.AuditLogId> {
 
-    // audit_logs は追記専用 — DELETE / UPDATE 禁止（AUDIT.md §3.1）
+    /**
+     * @throws UnsupportedOperationException audit_logs の削除は禁止されているため常にスロー
+     */
     @Override
     default void deleteById(AuditLog.AuditLogId id) {
         throw new UnsupportedOperationException("audit_logs の削除は禁止されています");
     }
 
+    /**
+     * @throws UnsupportedOperationException audit_logs の削除は禁止されているため常にスロー
+     */
     @Override
     default void delete(AuditLog entity) {
         throw new UnsupportedOperationException("audit_logs の削除は禁止されています");
     }
 
+    /**
+     * @throws UnsupportedOperationException audit_logs の削除は禁止されているため常にスロー
+     */
     @Override
     default void deleteAll() {
         throw new UnsupportedOperationException("audit_logs の削除は禁止されています");

@@ -20,6 +20,9 @@ import java.util.Date;
 import java.util.Optional;
 import java.util.UUID;
 
+/**
+ * JWT の生成・検証を表現します。
+ */
 @Slf4j
 @Component
 public class JwtProvider {

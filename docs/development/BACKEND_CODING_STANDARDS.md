@@ -1661,6 +1661,69 @@ private static final long EXPIRY = 15 * 60 * 1000;    // NG
 
 **原則:** 自明な処理にコメントを書かない。コードが「何をするか」は命名で伝え、コメントは「なぜその実装にしたか」を伝えるためにのみ使う。
 
+#### クラスの Javadoc
+
+すべてのクラス・インターフェース・抽象クラスの宣言直前に `/** */` で日本語のコメントを付ける。
+
+**基本形:** `〜を表現します。` の形式で1行に収める。ドメイン概念を表すクラスは概念名、設定・ユーティリティ・フィルターはそのクラスの役割をそのまま書いてよい。
+
+```java
+/**
+ * 商品を表現します。
+ */
+@Entity
+@Table(name = "products")
+public class Product extends BaseEntity { ... }
+
+/**
+ * 商品管理 API を表現します。
+ */
+@RestController
+@RequestMapping("/api/v1/products")
+public class ProductController { ... }
+
+/**
+ * アプリケーションのセキュリティ定義を表現します。
+ */
+@Configuration
+@EnableWebSecurity
+public class SecurityConfig { ... }
+
+/**
+ * 注文ステータスを表現します。
+ */
+public enum OrderStatus { ... }
+
+/**
+ * 商品作成リクエストを表現します。
+ */
+@Getter
+@Builder
+public class CreateProductRequest { ... }
+```
+
+**補足が必要な場合:** 利用方法・制約・責務が名前だけでは伝わらない場合は `<p>` タグで補足する。箇条書きが必要なら `<ul>` を使う。
+
+```java
+/**
+ * 正規表現定数を表現します。
+ *
+ * <p>
+ * {@link Checker#match} と組み合わせて利用してください。
+ */
+public interface Regex { ... }
+
+/**
+ * JWT 認証フィルターを表現します。
+ *
+ * <p>
+ * リクエストごとに1度だけ実行され、Authorization ヘッダーから Bearer トークンを
+ * 抽出して SecurityContext に認証情報をセットします。
+ */
+@Component
+public class JwtAuthenticationFilter extends OncePerRequestFilter { ... }
+```
+
 #### ENUM・Domain・DTO のプロパティ
 
 ENUM 値・エンティティフィールド・DTO フィールド（Request / Response 両方）にはすべて `/** */` で **DATA_DICTIONARY の論理名**を付ける。説明文や制約条件は書かない。ENUM 値は DATA_DICTIONARY の「概要/備考」欄に記載されている論理名を使う。
@@ -1835,6 +1898,15 @@ public Optional<Product> findById(UUID id) { ... }
 - [ ] 429 レスポンスに `Retry-After: 60` ヘッダーが付いている
 - [ ] IP 特定が `request.getRemoteAddr()` を使っている（`X-Forwarded-For` を直接読んでいない）
 - [ ] `./gradlew test` でセキュリティ関連テストがすべて通ることを確認した
+
+### コメント規約の確認
+
+- [ ] 新規に追加したすべてのクラス・インターフェース・抽象クラスに `/** */` 日本語 Javadoc が付いている
+- [ ] ENUM 値・エンティティフィールド・DTO フィールドに `/** */` で DATA_DICTIONARY の論理名が付いている
+- [ ] 公開メソッドのうち、戻り値・例外が非自明なものに `@param` / `@return` / `@throws` タグ付き Javadoc が付いている
+- [ ] インラインコメントが「なぜ」を説明している（「何をするか」のコメントを書いていない）
+- [ ] コメントアウトしたコードが残っていない
+- [ ] 変更履歴コメント（`// 2026-xx-xx 修正: ...` 等）が含まれていない
 
 ### PR レビュー前の確認
 
