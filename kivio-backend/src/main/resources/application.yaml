@@ -1,3 +1,115 @@
 spring:
   application:
     name: kivio-backend
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/kivio}
+    username: ${DB_USERNAME:kivio}
+    password: ${DB_PASSWORD:kivio}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 30000
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: false
+    show-sql: false
+    open-in-view: false
+  flyway:
+    enabled: true
+    clean-disabled: true
+    locations: classpath:db/migration
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: ${GOOGLE_CLIENT_ID:dummy}
+            client-secret: ${GOOGLE_CLIENT_SECRET:dummy}
+            scope: openid,email,profile
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:3d8f9a2b1c7e4f6a0d5b8e3c2f1a9d7b6c4e8f2a1b5d9c3e7f0a4b8d2c6e1f}
+    access-token-expiration: ${JWT_ACCESS_TOKEN_EXPIRATION:900}
+    refresh-token-expiration: ${JWT_REFRESH_TOKEN_EXPIRATION:604800}
+  cors:
+    allowed-origins: ${ALLOWED_ORIGINS:http://localhost:3000}
+  rate-limit:
+    auth:
+      capacity: ${RATE_LIMIT_AUTH_CAPACITY:10}
+      refill-duration-seconds: ${RATE_LIMIT_AUTH_DURATION:60}
+    api:
+      capacity: ${RATE_LIMIT_API_CAPACITY:100}
+      refill-duration-seconds: ${RATE_LIMIT_API_DURATION:60}
+    public:
+      capacity: ${RATE_LIMIT_PUBLIC_CAPACITY:30}
+      refill-duration-seconds: ${RATE_LIMIT_PUBLIC_DURATION:60}
+  problem-base-url: ${PROBLEM_BASE_URL:https://kivio.example.com}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: alpha
+    tags-sorter: alpha
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: when-authorized
+
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] [%X{correlationId}] %-5level %logger{36} - %msg%n"
+  level:
+    root: INFO
+    "[io.kivio]": INFO
+
+---
+spring:
+  config:
+    activate:
+      on-profile: dev
+  jpa:
+    show-sql: true
+  flyway:
+    clean-disabled: false
+    locations: classpath:db/migration,classpath:db/migration/dev
+
+logging:
+  level:
+    "[io.kivio]": DEBUG
+
+---
+spring:
+  config:
+    activate:
+      on-profile: test
+  datasource:
+    url: jdbc:tc:postgresql:17://localhost/kivio_test?TC_REUSABLE=true
+    username: test
+    password: test
+    driver-class-name: org.testcontainers.jdbc.ContainerDatabaseDriver
+  jpa:
+    show-sql: false
+  flyway:
+    clean-disabled: false
+    locations: classpath:db/migration
+
+---
+spring:
+  config:
+    activate:
+      on-profile: prod
+  flyway:
+    clean-disabled: true

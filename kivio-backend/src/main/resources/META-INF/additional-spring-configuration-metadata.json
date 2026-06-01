@@ -1,0 +1,62 @@
+{
+  "properties": [
+    {
+      "name": "app.jwt.secret",
+      "type": "java.lang.String",
+      "description": "JWT 署名キー（HS256）。本番では環境変数 JWT_SECRET で上書きすること。",
+      "sourceType": "io.kivio.config.jwt.JwtProperties"
+    },
+    {
+      "name": "app.jwt.access-token-expiration",
+      "type": "java.lang.Long",
+      "description": "アクセストークン有効期限（秒）。デフォルト 900 秒（15分）。",
+      "sourceType": "io.kivio.config.jwt.JwtProperties"
+    },
+    {
+      "name": "app.jwt.refresh-token-expiration",
+      "type": "java.lang.Long",
+      "description": "リフレッシュトークン有効期限（秒）。デフォルト 604800 秒（7日）。",
+      "sourceType": "io.kivio.config.jwt.JwtProperties"
+    },
+    {
+      "name": "app.cors.allowed-origins",
+      "type": "java.lang.String",
+      "description": "CORS 許可オリジン（カンマ区切り）。例: http://localhost:3000,https://kivio.io"
+    },
+    {
+      "name": "app.rate-limit.auth.capacity",
+      "type": "java.lang.Integer",
+      "description": "認証系エンドポイントのレート制限バケット容量（req/period/IP）。デフォルト 10。"
+    },
+    {
+      "name": "app.rate-limit.auth.refill-duration-seconds",
+      "type": "java.lang.Integer",
+      "description": "認証系レート制限のリフィル間隔（秒）。デフォルト 60。"
+    },
+    {
+      "name": "app.rate-limit.api.capacity",
+      "type": "java.lang.Integer",
+      "description": "認証済み API のレート制限バケット容量（req/period/user）。デフォルト 100。"
+    },
+    {
+      "name": "app.rate-limit.api.refill-duration-seconds",
+      "type": "java.lang.Integer",
+      "description": "認証済み API レート制限のリフィル間隔（秒）。デフォルト 60。"
+    },
+    {
+      "name": "app.rate-limit.public.capacity",
+      "type": "java.lang.Integer",
+      "description": "未認証公開エンドポイントのレート制限バケット容量（req/period/IP）。デフォルト 30。"
+    },
+    {
+      "name": "app.rate-limit.public.refill-duration-seconds",
+      "type": "java.lang.Integer",
+      "description": "公開エンドポイントレート制限のリフィル間隔（秒）。デフォルト 60。"
+    },
+    {
+      "name": "app.problem-base-url",
+      "type": "java.lang.String",
+      "description": "RFC 9457 ProblemDetail の type URI ベース URL。例: https://kivio.io"
+    }
+  ]
+}
