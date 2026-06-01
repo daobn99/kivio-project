@@ -5,9 +5,9 @@ spring:
     problemdetails:
       enabled: true
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/kivio}
+    url: ${DB_URL:jdbc:postgresql://db:5432/kivio}
     username: ${DB_USERNAME:kivio}
-    password: ${DB_PASSWORD:kivio}
+    password: ${DB_PASSWORD:password}
     driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: 10
@@ -18,7 +18,6 @@ spring:
       ddl-auto: validate
     properties:
       hibernate:
-        dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: false
     show-sql: false
     open-in-view: false
@@ -110,11 +109,6 @@ spring:
   flyway:
     clean-disabled: false
     locations: classpath:db/migration
-
-app:
-  jwt:
-    secret: test-only-secret-not-for-production-use-padding-padding-pad
-
 ---
 spring:
   config:

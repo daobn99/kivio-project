@@ -58,7 +58,7 @@ cd kivio-backend
 ## 3. 環境変数一覧
 
 `kivio-backend/.env`（または OS の環境変数）に設定する。
-Spring Boot は `application.yml` の `${VAR_NAME}` 形式でこれらを参照する。
+Spring Boot は `application.yaml` の `${VAR_NAME}` 形式でこれらを参照する。
 
 ### 3.1 データベース
 

@@ -34,6 +34,7 @@ dependencies {
 
 	// Database
 	runtimeOnly("org.postgresql:postgresql")
+	implementation("org.springframework.boot:spring-boot-flyway") // Spring Boot 4.x Flyway autoconfiguration
 	implementation("org.flywaydb:flyway-core")
 	runtimeOnly("org.flywaydb:flyway-database-postgresql")
 

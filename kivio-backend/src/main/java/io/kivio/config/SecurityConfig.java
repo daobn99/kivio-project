@@ -1,6 +1,6 @@
 package io.kivio.config;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import io.kivio.config.filter.JwtAuthenticationFilter;
 import io.kivio.config.filter.RateLimitingFilter;
 import lombok.RequiredArgsConstructor;

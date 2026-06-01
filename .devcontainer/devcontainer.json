@@ -49,7 +49,7 @@
         "dbaeumer.vscode-eslint",
         "bradlc.vscode-tailwindcss",
         // Database
-        "ms-ossdata.vscode-pgsql",
+        "cweijan.vscode-mysql-client2",
         // General dev tools
         "mhutchie.git-graph",
         "redhat.vscode-xml",

@@ -877,7 +877,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BusinessRuleException.class)
     public ProblemDetail handleBusinessRule(BusinessRuleException ex) {
         ProblemDetail detail = ProblemDetail.forStatusAndDetail(
-                HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage());
+                HttpStatus.UNPROCESSABLE_CONTENT, ex.getMessage());
         detail.setProperty("errorCode", ex.getErrorCode());
         return detail;
     }
@@ -885,7 +885,7 @@ public class GlobalExceptionHandler {
     // Bean Validation エラー
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ProblemDetail handleValidation(MethodArgumentNotValidException ex) {
-        ProblemDetail detail = ProblemDetail.forStatus(HttpStatus.UNPROCESSABLE_ENTITY);
+        ProblemDetail detail = ProblemDetail.forStatus(HttpStatus.UNPROCESSABLE_CONTENT);
         detail.setProperty("errorCode", "VALIDATION_ERROR");
         detail.setProperty("errors", ex.getBindingResult().getFieldErrors().stream()
                 .map(e -> Map.of("field", e.getField(), "message", e.getDefaultMessage()))
