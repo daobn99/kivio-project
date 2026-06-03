@@ -1,26 +1,158 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 
+@custom-variant dark (&:is(.dark *));
+
+/* ライトモード */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* ベース */
+  --background:        hsl(270, 100%, 98%);
+  --foreground:        hsl(263,  67%, 35%);
+
+  /* カード / ポップオーバー */
+  --card:              hsl(0, 0%, 100%);
+  --card-foreground:   hsl(263, 67%, 35%);
+  --popover:           hsl(0, 0%, 100%);
+  --popover-foreground: hsl(263, 67%, 35%);
+
+  /* ブランド */
+  --primary:           hsl(262, 83%, 58%);
+  --primary-foreground: hsl(0, 0%, 100%);
+  --secondary:         hsl(258, 100%, 76%);
+  --secondary-foreground: hsl(222, 47%, 11%);
+
+  /* アクセント（CTA / 成功） */
+  --accent:            hsl(142, 72%, 36%);
+  --accent-foreground: hsl(0, 0%, 100%);
+
+  /* ニュートラル */
+  --muted:             hsl(267, 71%, 94%);
+  --muted-foreground:  hsl(258, 30%, 55%);
+  --border:            hsl(259, 100%, 87%);
+  --input:             hsl(259, 100%, 90%);
+  --ring:              hsl(262, 83%, 58%);
+
+  /* フィードバック */
+  --destructive:       hsl(0, 72%, 51%);
+  --destructive-foreground: hsl(0, 0%, 100%);
+  --warning:           hsl(38, 92%, 50%);
+  --warning-foreground: hsl(0, 0%, 100%);
+  --success:           hsl(142, 72%, 36%);
+  --success-foreground: hsl(0, 0%, 100%);
+
+  /* チャート */
+  --chart-1: hsl(262, 83%, 58%);
+  --chart-2: hsl(142, 72%, 36%);
+  --chart-3: hsl(199, 89%, 48%);
+  --chart-4: hsl(38,  92%, 50%);
+  --chart-5: hsl(355, 78%, 60%);
+
+  /* 角丸 */
+  --radius: 0.5rem;
+
+  /* シャドウ */
+  --shadow-sm:   0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md:   0 4px 6px rgba(0, 0, 0, 0.07), 0 2px 4px rgba(0, 0, 0, 0.04);
+  --shadow-lg:   0 10px 15px rgba(0, 0, 0, 0.08), 0 4px 6px rgba(0, 0, 0, 0.04);
+  --shadow-xl:   0 20px 25px rgba(0, 0, 0, 0.10), 0 10px 10px rgba(0, 0, 0, 0.04);
+  --shadow-card: 0 2px 8px rgba(124, 58, 237, 0.08);
+
+  /* アニメーション */
+  --duration-instant: 100ms;
+  --duration-fast:    150ms;
+  --duration-normal:  200ms;
+  --duration-slow:    300ms;
+  --duration-xslow:   400ms;
+  --ease-in:     cubic-bezier(0.4, 0, 1, 1);
+  --ease-out:    cubic-bezier(0, 0, 0.2, 1);
+  --ease-inout:  cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-spring: cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+/* ダークモード */
+.dark {
+  --background:        hsl(263, 80%,  6%);
+  --foreground:        hsl(258, 100%, 93%);
+
+  --card:              hsl(263, 60%, 10%);
+  --card-foreground:   hsl(258, 100%, 93%);
+  --popover:           hsl(263, 60%, 10%);
+  --popover-foreground: hsl(258, 100%, 93%);
+
+  --primary:           hsl(258, 100%, 76%);
+  --primary-foreground: hsl(263, 100%, 10%);
+  --secondary:         hsl(262, 50%,  30%);
+  --secondary-foreground: hsl(258, 100%, 93%);
+
+  --accent:            hsl(142, 60%, 45%);
+  --accent-foreground: hsl(0, 0%, 100%);
+
+  --muted:             hsl(263, 50%, 16%);
+  --muted-foreground:  hsl(258, 30%, 65%);
+  --border:            hsl(263, 40%, 20%);
+  --input:             hsl(263, 40%, 20%);
+  --ring:              hsl(258, 100%, 76%);
+
+  --destructive:       hsl(0, 62%, 50%);
+  --destructive-foreground: hsl(0, 0%, 100%);
+  --warning:           hsl(38, 80%, 55%);
+  --warning-foreground: hsl(0, 0%, 100%);
+  --success:           hsl(142, 60%, 45%);
+  --success-foreground: hsl(0, 0%, 100%);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  /* カラー */
+  --color-background:             var(--background);
+  --color-foreground:             var(--foreground);
+  --color-card:                   var(--card);
+  --color-card-foreground:        var(--card-foreground);
+  --color-popover:                var(--popover);
+  --color-popover-foreground:     var(--popover-foreground);
+  --color-primary:                var(--primary);
+  --color-primary-foreground:     var(--primary-foreground);
+  --color-secondary:              var(--secondary);
+  --color-secondary-foreground:   var(--secondary-foreground);
+  --color-accent:                 var(--accent);
+  --color-accent-foreground:      var(--accent-foreground);
+  --color-muted:                  var(--muted);
+  --color-muted-foreground:       var(--muted-foreground);
+  --color-border:                 var(--border);
+  --color-input:                  var(--input);
+  --color-ring:                   var(--ring);
+  --color-destructive:            var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-warning:                var(--warning);
+  --color-warning-foreground:     var(--warning-foreground);
+  --color-success:                var(--success);
+  --color-success-foreground:     var(--success-foreground);
+  --color-chart-1:                var(--chart-1);
+  --color-chart-2:                var(--chart-2);
+  --color-chart-3:                var(--chart-3);
+  --color-chart-4:                var(--chart-4);
+  --color-chart-5:                var(--chart-5);
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  /* 角丸 */
+  --radius-sm:   calc(var(--radius) - 4px);
+  --radius-md:   var(--radius);
+  --radius-lg:   calc(var(--radius) + 4px);
+  --radius-xl:   calc(var(--radius) + 8px);
+  --radius-full: 9999px;
+
+  /* ブレークポイント（Section 9） */
+  --breakpoint-xs:  375px;
+  --breakpoint-2xl: 1440px;
+
+  /* フォント（layout.tsx の --font-heading / --font-body を参照） */
+  --font-sans:  var(--font-body);
+  --font-serif: var(--font-heading);
+
+  /* シャドウユーティリティ（shadow-card クラスを有効化） */
+  --shadow-card: var(--shadow-card);
 }
 
 body {
-  background: var(--background);
+  background-color: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
 }
