@@ -3,6 +3,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+      # - "8080:8080"
     env_file:
       - path: ../kivio-backend/.env
         required: false
@@ -20,6 +23,8 @@ services:
       - ..:/workspace:cached
       # Named volume for Gradle cache — survives container rebuilds
       - gradle-cache:/home/vscode/.gradle
+      # Named volume for pnpm store — survives container rebuilds, outside workspace
+      - pnpm-store:/home/vscode/.pnpm-store
       # Anonymous volume prevents macOS-mounted node_modules (frontend)
       - /workspace/kivio-frontend/node_modules
     command: sleep infinity
@@ -66,8 +71,8 @@ services:
     image: axllent/mailpit:latest
     restart: unless-stopped
     ports:
-      - "1025:1025"   # SMTP (Spring Boot → Mailpit)
-      - "8025:8025"   # Web UI for viewing sent emails
+      - "1025:1025" # SMTP (Spring Boot → Mailpit)
+      - "8025:8025" # Web UI for viewing sent emails
     networks:
       - kivio-network
 
@@ -75,6 +80,7 @@ volumes:
   postgres-data:
   redis-data:
   gradle-cache:
+  pnpm-store:
 
 networks:
   kivio-network:
