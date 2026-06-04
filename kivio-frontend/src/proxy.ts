@@ -23,5 +23,6 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
+  // _next 静的アセット・画像・favicon・public ディレクトリへのリクエストはプロキシをスキップする
   matcher: ['/((?!_next/static|_next/image|favicon.ico|public).*)'],
 }

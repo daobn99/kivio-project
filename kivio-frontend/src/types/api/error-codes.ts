@@ -1,6 +1,9 @@
-/** docs/design/ERROR_CODES.md 準拠のエラーコード一覧 */
+/**
+ * バックエンドが返す UPPER_SNAKE_CASE エラーコード一覧。
+ * 完全なリストは docs/design/ERROR_CODES.md を参照。
+ */
 export type ApiErrorCode =
-  // 汎用
+  // --- 汎用（どのエンドポイントでも発生しうる） ---
   | 'VALIDATION_FAILED'
   | 'RESOURCE_NOT_FOUND'
   | 'ACCESS_DENIED'
@@ -10,7 +13,7 @@ export type ApiErrorCode =
   | 'RATE_LIMIT_EXCEEDED'
   | 'INTERNAL_SERVER_ERROR'
   | 'DUPLICATE_ENTRY'
-  // 認証・ユーザー
+  // --- 認証・ユーザー ---
   | 'EMAIL_ALREADY_REGISTERED'
   | 'INVALID_CREDENTIALS'
   | 'EMAIL_NOT_VERIFIED'
@@ -20,31 +23,31 @@ export type ApiErrorCode =
   | 'REFRESH_TOKEN_INVALID'
   | 'USER_DEACTIVATED'
   | 'PASSWORD_CHANGE_FAILED'
-  // セラー申請
+  // --- セラー申請 ---
   | 'SELLER_APPLICATION_PENDING'
   | 'SELLER_APPLICATION_ALREADY_APPROVED'
   | 'SELLER_APPLICATION_NOT_REVIEWABLE'
-  // ショップ
+  // --- ショップ ---
   | 'SHOP_NAME_ALREADY_TAKEN'
   | 'SHOP_NOT_FOUND'
-  // 商品
+  // --- 商品 ---
   | 'PRODUCT_NOT_ACTIVE'
   | 'PRODUCT_OUT_OF_STOCK'
   | 'PRODUCT_IMAGE_LIMIT_EXCEEDED'
   | 'PRODUCT_NOT_OWNED'
-  // カート
+  // --- カート ---
   | 'CART_ITEM_QUANTITY_EXCEEDED'
   | 'CANNOT_PURCHASE_OWN_PRODUCT'
-  // 注文・決済
+  // --- 注文・決済 ---
   | 'CART_EMPTY'
   | 'ORDER_NOT_CANCELLABLE'
   | 'ORDER_STATUS_TRANSITION_INVALID'
   | 'PAYMENT_FAILED'
   | 'REFUND_FAILED'
   | 'ORDER_NOT_FOUND'
-  // レビュー
+  // --- レビュー ---
   | 'REVIEW_ALREADY_SUBMITTED'
   | 'REVIEW_NOT_ELIGIBLE'
-  // チャット・通知
+  // --- チャット・通知 ---
   | 'CHAT_ROOM_NOT_FOUND'
   | 'NOTIFICATION_NOT_FOUND'
