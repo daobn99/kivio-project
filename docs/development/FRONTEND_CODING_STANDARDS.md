@@ -20,7 +20,8 @@
 9. [型定義規約](#9-型定義規約)
 10. [フォームバリデーション規約](#10-フォームバリデーション規約)
 11. [JSX 規約](#11-jsx-規約)
-12. [実装チェックリスト](#12-実装チェックリスト)
+13. [コメント規約](#12-コメント規約)
+12. [実装チェックリスト](#13-実装チェックリスト)
 
 > **Next.js 16 移行ポイント:** `middleware.ts` → `proxy.ts`、`params` / `searchParams` / `cookies()` / `headers()` が非同期 (`Promise`) に変更。
 
@@ -1227,9 +1228,120 @@ theme: {
 
 ---
 
-## 12. 実装チェックリスト
+## 12. コメント規約
 
-### 12.1 コンポーネント作成時
+### 12.1 基本原則
+
+コードが「何をするか」は命名で伝える。コメントは**「なぜその実装にしたか」**を伝えるためにのみ使う。
+バックエンドの §14.7 と同じ方針を TypeScript / React に適用する。
+
+### 12.2 TSDoc（`/** */`）— 書く対象と書かない対象
+
+| 対象 | 方針 |
+|---|---|
+| `export` する型・インターフェースのフィールド | **非自明な場合のみ**各フィールドに1行付ける |
+| `export` する Custom Hook | 引数・戻り値の意味が関数名だけでは伝わらない場合 |
+| `export` するユーティリティ関数 | 副作用・戻り値・引数の制約が非自明な場合 |
+| `const` Enum 相当（`src/types/enums.ts`）の各値 | `DATA_DICTIONARY` の論理名を必ず1行付ける |
+| コンポーネント関数そのもの | 原則不要（ファイル名・関数名で自明） |
+| `'use client'` / `'use server'` ディレクティブ | 不要（Next.js の仕様で自明） |
+
+**型フィールドの例:**
+
+```tsx
+interface ProductCardProps {
+  product: ProductDto
+  /** カードをクリック不可にする（スケルトン表示中など） */
+  disabled?: boolean
+  /** true にすると LCP 最適化のため priority 画像として配信される */
+  priority?: boolean
+}
+```
+
+**Custom Hook の例:**
+
+```ts
+/**
+ * 検索クエリをデバウンスし、商品一覧を返す。
+ *
+ * @param initialQuery 初期検索文字列。未指定の場合は空文字。
+ * @returns `products` はデバウンス後のクエリ結果。`isLoading` は fetch 中フラグ。
+ */
+export function useProductSearch(initialQuery?: string) { ... }
+```
+
+**`const` Enum の例（`DATA_DICTIONARY` の論理名を付ける）:**
+
+```ts
+// src/types/enums.ts
+export const OrderStatus = {
+  /** 注文中 */
+  PENDING: 'PENDING',
+  /** 支払い済み */
+  PAID: 'PAID',
+  /** 発送済み */
+  SHIPPED: 'SHIPPED',
+  /** 受取済み */
+  DELIVERED: 'DELIVERED',
+  /** キャンセル済み */
+  CANCELLED: 'CANCELLED',
+} as const
+```
+
+### 12.3 インラインコメント（`//`）
+
+複雑なビジネスロジック・非自明な技術的制約のみ。「何をするか」ではなく「なぜそうするか」を書く。
+
+```ts
+// ✅ ビジネスルールの理由
+if (order.status === OrderStatus.SHIPPED) {
+  // 出荷後はキャンセル不可（配送業者への取り消し連絡が必要になるため）
+  throw new Error('ORDER_NOT_CANCELLABLE')
+}
+
+// ✅ フレームワーク固有の非自明な制約
+// useSearchParams は Suspense 外だとページ全体が CSR にフォールバックする
+const searchParams = useSearchParams()
+
+// ✅ 非自明な技術的判断
+// 204 No Content は res.json() を呼ぶと SyntaxError になるため早期リターン
+if (res.status === 204) return undefined as T
+
+// ❌ コードを読めばわかる
+// カートアイテムの合計を計算する
+const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0)
+```
+
+### 12.4 JSX コメント（`{/* */}`）
+
+JSX 内では `{/* */}` のみ使用する（§11.1 参照）。  
+セクション区切りや技術的な注記に限定して使い、多用しない。
+
+```tsx
+return (
+  <div>
+    {/* ファーストビューの画像は LCP 対象のため priority を設定している */}
+    <Image src={imageUrl} alt={name} priority />
+    <ProductInfo product={product} />
+  </div>
+)
+```
+
+### 12.5 禁止パターン
+
+| 禁止 | 代替・理由 |
+|---|---|
+| コードをコメントアウトして残す | 削除する（`git` で復元可能） |
+| 変更履歴コメント（`// 2026-xx-xx 修正: ...`） | `git log` / `git blame` が代替 |
+| 自明なコメント（`// ローディング中は Skeleton を返す`） | 削除する |
+| `/* ... */` ブロックコメント（JSX 外） | `//` を使う |
+| `TODO` / `FIXME` をコードに残す | GitHub Issue で管理する |
+
+---
+
+## 13. 実装チェックリスト
+
+### 13.1 コンポーネント作成時
 
 - [ ] Server / Client Component のどちらにすべきか判断した
 - [ ] `'use client'` は葉コンポーネントに限定している
@@ -1246,7 +1358,7 @@ theme: {
 - [ ] `transition-all` を使っていない（`transition-transform` 等に限定）
 - [ ] `prefers-reduced-motion` に対応している（`motion-reduce:transition-none`）
 
-### 12.2 ページ作成時
+### 13.2 ページ作成時
 
 - [ ] `generateMetadata` を実装している（SEO 対象ページ）
 - [ ] `params` を `await` している（`const { id } = await params`）
@@ -1257,7 +1369,7 @@ theme: {
 - [ ] URL にフィルター・ページ番号等の状態を反映している（`useSearchParams`）
 - [ ] Server Actions 内で `redirect()` / `notFound()` を try-catch で囲んでいない
 
-### 12.3 データ取得時
+### 13.3 データ取得時
 
 - [ ] Server Component では `lib/api/server/` の関数を使っている
 - [ ] Client Component からの API 呼び出しは TanStack Query を経由している
@@ -1266,7 +1378,7 @@ theme: {
 - [ ] Mutation 後に関連 Query を `invalidateQueries` している
 - [ ] API エラーは `ApiError` として型安全にハンドリングしている
 
-### 12.4 フォーム実装時
+### 13.4 フォーム実装時
 
 - [ ] Zod スキーマを `lib/validations/` に定義している
 - [ ] `autoComplete` 属性を設定している
@@ -1275,7 +1387,7 @@ theme: {
 - [ ] 送信中はボタンを `disabled` にしている
 - [ ] 送信中はボタンにローディングスピナーを表示している
 
-### 12.5 型定義時
+### 13.5 型定義時
 
 - [ ] `any` を使っていない
 - [ ] API レスポンス型は `src/types/api/` に定義している
@@ -1285,7 +1397,7 @@ theme: {
 - [ ] TypeScript の `enum` キーワードを使っていない（`const + type` パターンに統一）
 - [ ] UI 表示用ラベルは `enums.ts` ではなく `lib/constants.ts` に分離している
 
-### 12.6 品質確認（各画面完成時）
+### 13.6 品質確認（各画面完成時）
 
 - [ ] モバイル（375px）でレイアウト崩れがない
 - [ ] デスクトップ（1280px）でレイアウト崩れがない
@@ -1293,3 +1405,11 @@ theme: {
 - [ ] キーボードのみで全操作が可能
 - [ ] `pnpm build` がエラー・型エラーなしで成功する
 - [ ] `pnpm lint` がエラーなしで成功する
+
+### 13.7 コメント確認
+
+- [ ] コメントが「なぜ」を説明している（「何をするか」は書いていない）
+- [ ] コメントアウトしたコードが残っていない
+- [ ] 変更履歴コメント（`// 2026-xx-xx 修正: ...`）が含まれていない
+- [ ] `export` する型の非自明フィールドに TSDoc を付けている
+- [ ] `const` Enum の各値に `DATA_DICTIONARY` の論理名（`/** */`）を付けている

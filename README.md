@@ -178,6 +178,7 @@ pnpm dev                   # → localhost:3000
 
 | ドキュメント | 内容 |
 |---|---|
+| [Git ワークフロー](docs/development/GIT_WORKFLOW.md) | ブランチ戦略・PR ルール・コミットメッセージ規約 |
 | [セットアップガイド](docs/development/SETUP.md) | 環境変数・Flyway 規則・トラブルシュート |
 | [テスト戦略](docs/development/TEST_STRATEGY.md) | テストピラミッド・Testcontainers・モック方針 |
 | [バックエンドコーディング規約](docs/development/BACKEND_CODING_STANDARDS.md) | Lombok・レイヤー・例外・テスト等 |

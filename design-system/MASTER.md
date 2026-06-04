@@ -426,7 +426,7 @@ export default function ProductsPage() {
 }
 
 // スケルトンは実際のコンポーネントと同じサイズ・レイアウトで定義（CLS 防止）
-// shadcn Skeleton: <Skeleton className="h-[200px] w-full rounded-lg" />
+// shadcn Skeleton: <Skeleton className="h-50 w-full rounded-lg" />
 ```
 
 ### エンプティステート
