@@ -1,0 +1,92 @@
+# Kivio — ローカル開発 / 疎通確認用
+# 使い方:
+#   docker compose up           # 全サービス起動
+#   docker compose up -d db     # DB のみ起動
+#   docker compose logs -f      # ログ確認
+#
+# 初回起動前に必要な環境変数 (オプション。未設定時は開発用デフォルト値が使われる):
+#   JWT_SECRET   — 256bit 以上のランダム文字列 (例: openssl rand -base64 32)
+#   AUTH_SECRET  — NextAuth シークレット        (例: openssl rand -base64 32)
+
+services:
+
+  # ── PostgreSQL ─────────────────────────────────────────────────────────────
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: kivio
+      POSTGRES_USER: kivio
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kivio -d kivio"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - kivio-net
+
+  # ── Spring Boot Backend ────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./kivio-backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      DB_URL: jdbc:postgresql://db:5432/kivio
+      DB_USERNAME: kivio
+      DB_PASSWORD: password
+      # 開発用デフォルト。本番環境では必ず上書きすること
+      JWT_SECRET: ${JWT_SECRET:-local-development-secret-at-least-32-bytes-long}
+      JWT_ACCESS_TOKEN_EXPIRATION: "900"
+      JWT_REFRESH_TOKEN_EXPIRATION: "604800"
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-dummy}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-dummy}
+      ALLOWED_ORIGINS: http://localhost:3000
+      PROBLEM_BASE_URL: https://kivio.example.com
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/api/v1/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks:
+      - kivio-net
+
+  # ── Next.js Frontend ───────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./kivio-frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      # サーバーサイドフェッチは Docker 内部ネットワーク経由
+      API_BASE_URL: http://backend:8080
+      # ブラウザからのフェッチはホスト経由
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8080
+      # 開発用デフォルト。本番環境では必ず上書きすること
+      AUTH_SECRET: ${AUTH_SECRET:-local-development-nextauth-secret}
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - kivio-net
+
+volumes:
+  postgres-data:
+
+networks:
+  kivio-net:
+    driver: bridge
