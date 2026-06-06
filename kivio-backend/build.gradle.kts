@@ -3,6 +3,7 @@ plugins {
 	id("org.springframework.boot") version "4.0.6"
 	id("io.spring.dependency-management") version "1.1.7"
 	jacoco
+	checkstyle
 }
 
 group = "io.kivio"
@@ -12,6 +13,13 @@ java {
 	toolchain {
 		languageVersion = JavaLanguageVersion.of(25)
 	}
+}
+
+checkstyle {
+	toolVersion = "10.21.0"
+	configFile = file("config/checkstyle/checkstyle.xml")
+	isIgnoreFailures = false
+	maxWarnings = 0
 }
 
 repositories {

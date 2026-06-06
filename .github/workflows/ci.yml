@@ -1,0 +1,127 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop, main]
+
+# PR では最新のコミットのみ実行し、古いランをキャンセルする
+# develop/main への push は全ランを保持する（各マージ結果を記録）
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+
+jobs:
+  # ── Backend ──────────────────────────────────────────────────────────────────
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: kivio-backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          java-version: "25"
+          distribution: temurin
+          # build.gradle.kts + gradle-wrapper.properties のハッシュでキャッシュキーを生成
+          cache: gradle
+
+      - name: Grant Gradle wrapper execute permission
+        run: chmod +x gradlew
+
+      # ── Static Analysis ─────────────────────────────────────────────────────
+      - name: Checkstyle
+        run: ./gradlew checkstyleMain checkstyleTest --no-daemon --continue
+
+      - name: Upload Checkstyle report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-checkstyle-report
+          path: kivio-backend/build/reports/checkstyle/
+          retention-days: 7
+
+      # ── Test ────────────────────────────────────────────────────────────────
+      # Testcontainers が PostgreSQL コンテナを自動起動するため services: は不要
+      # jacocoTestCoverageVerification: 80% 閾値を CI で強制する
+      - name: Test
+        run: ./gradlew test jacocoTestCoverageVerification --no-daemon
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-results
+          path: |
+            kivio-backend/build/test-results/test/**/*.xml
+            kivio-backend/build/reports/tests/test/
+          retention-days: 14
+
+      - name: Upload JaCoCo coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage-report
+          path: kivio-backend/build/reports/jacoco/test/html/
+          retention-days: 14
+
+      # ── Build ────────────────────────────────────────────────────────────────
+      - name: Build bootJar
+        run: ./gradlew bootJar --no-daemon -x test
+
+  # ── Frontend ─────────────────────────────────────────────────────────────────
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: kivio-frontend
+
+    env:
+      # Husky は CI 環境で不要なため無効化
+      HUSKY: "0"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: kivio-frontend/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # ── Static Analysis ─────────────────────────────────────────────────────
+      - name: Lint
+        run: pnpm lint
+
+      - name: Type check
+        run: pnpm typecheck
+
+      # ── Build ────────────────────────────────────────────────────────────────
+      - name: Build
+        run: pnpm build
+        env:
+          # ビルド時の環境変数（実行時ではなくビルド時のプレースホルダー）
+          API_BASE_URL: http://localhost:8080
+          NEXT_PUBLIC_API_BASE_URL: http://localhost:8080
+          AUTH_SECRET: ci-placeholder-secret-for-build-only

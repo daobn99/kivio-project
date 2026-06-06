@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<!DOCTYPE suppressions PUBLIC
+    "-//Checkstyle//DTD SuppressionFilter Configuration 1.0//EN"
+    "https://checkstyle.org/dtds/suppressions_1_0.dtd">
+
+<suppressions>
+    <!-- テストメソッドは BDD スタイルのアンダースコア命名を許可する -->
+    <!-- 例: should_return_200_when_health_endpoint_called -->
+    <suppress files="[\\/]test[\\/]" checks="MethodName"/>
+</suppressions>

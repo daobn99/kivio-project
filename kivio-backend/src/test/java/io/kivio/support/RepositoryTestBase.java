@@ -17,7 +17,7 @@ public abstract class RepositoryTestBase {
     @SuppressWarnings("resource")
     @Container
     @ServiceConnection
-    private static final PostgreSQLContainer postgres =
+    private static final PostgreSQLContainer POSTGRES =
             new PostgreSQLContainer("postgres:17")
                     .withDatabaseName("kivio_test")
                     .withUsername("test")

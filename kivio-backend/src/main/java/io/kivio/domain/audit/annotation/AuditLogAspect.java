@@ -79,7 +79,9 @@ public class AuditLogAspect {
     }
 
     private UUID extractEntityId(ProceedingJoinPoint pjp, String entityIdParam) {
-        if (entityIdParam.isEmpty()) return null;
+        if (entityIdParam.isEmpty()) {
+            return null;
+        }
         MethodSignature sig = (MethodSignature) pjp.getSignature();
         String[] paramNames = sig.getParameterNames();
         Object[] args = pjp.getArgs();

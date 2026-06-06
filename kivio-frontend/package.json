@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit",
     "prepare": "cd .. && ./kivio-frontend/node_modules/.bin/husky"
   },
   "lint-staged": {
