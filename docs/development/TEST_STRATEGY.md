@@ -1,6 +1,6 @@
 # テスト戦略
 
-> 参照: [アーキテクチャ概要](../architecture/OVERVIEW.md)（レイヤー構成）、[SETUP.md](./SETUP.md)（環境構築）
+> 参照: [アーキテクチャ概要](../architecture/OVERVIEW.md)（レイヤー構成）
 
 ---
 
