@@ -190,21 +190,57 @@ GitHub Container Registry（`ghcr.io`）にイメージを保存します。
 
 ## 5. GitHub の初回セットアップ
 
-### Branch protection rules の設定
+### Branch Ruleset の設定
 
-マージ前に CI 通過を必須にするため、`develop` と `main` に保護ルールを設定します。
+マージ前に CI 通過を必須にするため、`develop` と `main` に Branch Ruleset を設定します。
+
+> **前提: CI を最低1回実行しておく**  
+> 「Add checks」の検索欄にチェック名が表示されるのは、**そのリポジトリで CI ワークフローが少なくとも1回完了した後**です。  
+> まだ CI を実行していない場合は、`develop` ブランチに空コミットを push して CI を通してから Ruleset を設定してください。
+> ```bash
+> git commit --allow-empty -m "chore: trigger CI for initial run"
+> git push origin develop
+> ```
+> GitHub Actions タブで `CI / Backend (pull_request)` と `CI / Frontend (pull_request)` が緑になったことを確認してから次の手順へ進みます。
+
+`develop` と `main` それぞれに対して以下の手順を実施します（設定値は同じ）。
 
 1. GitHub リポジトリの **Settings → Branches** を開く
-2. **Add branch protection rule** をクリック
-3. `develop`（および `main`）に以下を設定する
+2. **Branch protection rules** セクションの **「Add branch ruleset」** をクリック
+3. 各フィールドを設定する
 
-| 設定項目 | 値 |
+| フィールド | 値 |
 |---|---|
-| Branch name pattern | `develop` |
+| Ruleset Name | `protect-develop`（または `protect-main`） |
+| Enforcement status | **Active** |
+
+4. **Target branches** → **「Add target」** → **「Include by pattern」** をクリックし、`develop`（または `main`）を入力して **「Add Inclusion pattern」**
+
+5. **Rules** セクションで以下を有効にする
+
+| ルール | 設定 |
+|---|---|
+| Restrict deletions | ✅ |
+| Block force pushes | ✅ |
 | Require a pull request before merging | ✅ |
-| Require status checks to pass before merging | ✅ |
-| Status checks that are required | `CI / Backend`、`CI / Frontend`（`ワークフロー名 / job名` の形式）|
-| Do not allow bypassing the above settings | ✅ |
+| Require status checks to pass | ✅ → **「Add checks」** の入力欄に `CI / Backend (pull_request)` と入力して Enter、次に `CI / Frontend (pull_request)` も同様に追加する |
+
+> **「Add checks」でチェック名が候補に出ない場合**  
+> ドロップダウンに候補が表示されなくても、**名前を手入力して Enter を押せば登録できます**。  
+> それでも追加できない場合は、`develop` への直接 push ではなく **PR 経由の CI ラン**が必要です。  
+> テスト PR（空コミット）を `develop` に向けて作成し、`CI / Backend (pull_request)` と `CI / Frontend (pull_request)` が緑になったあとに再試行してください。
+> ```bash
+> git checkout -b chore/test-ci-checks
+> git commit --allow-empty -m "chore: test PR for CI check registration"
+> git push origin chore/test-ci-checks
+> # GitHub 上で develop ← chore/test-ci-checks の PR を作成 → CI 完了後に Add checks を再試行
+> ```
+
+6. **Bypass list** は空のまま（バイパスを許可しない）にして **「Create」** をクリック
+
+> **Bypass list について**  
+> Bypass list に Collaborator やロールを追加すると、そのユーザーはルールを迂回してマージできます。  
+> 厳密に保護したい場合は空のままにしてください。
 
 ### ghcr.io イメージの可視性設定
 
@@ -221,7 +257,7 @@ GitHub Container Registry（`ghcr.io`）にイメージを保存します。
 ### PR を出した後の確認手順
 
 1. PR ページの **Checks タブ** を開く
-2. `CI / Backend` と `CI / Frontend` の結果を確認する
+2. `CI / Backend (pull_request)` と `CI / Frontend (pull_request)` の結果を確認する
 3. 失敗している場合は該当 job をクリックして詳細を確認する
 
 ### CI が失敗したときのデバッグ
