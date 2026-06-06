@@ -201,7 +201,7 @@ GitHub Container Registry（`ghcr.io`）にイメージを保存します。
 > git commit --allow-empty -m "chore: trigger CI for initial run"
 > git push origin develop
 > ```
-> GitHub Actions タブで `CI / Backend (pull_request)` と `CI / Frontend (pull_request)` が緑になったことを確認してから次の手順へ進みます。
+> GitHub Actions タブで CI ワークフローの `Backend` ジョブと `Frontend` ジョブが緑になったことを確認してから次の手順へ進みます。
 
 `develop` と `main` それぞれに対して以下の手順を実施します（設定値は同じ）。
 
@@ -223,12 +223,12 @@ GitHub Container Registry（`ghcr.io`）にイメージを保存します。
 | Restrict deletions | ✅ |
 | Block force pushes | ✅ |
 | Require a pull request before merging | ✅ |
-| Require status checks to pass | ✅ → **「Add checks」** の入力欄に `CI / Backend (pull_request)` と入力して Enter、次に `CI / Frontend (pull_request)` も同様に追加する |
+| Require status checks to pass | ✅ → **「Add checks」** の入力欄に `Backend` と入力して候補に表示される **`Backend (Github Actions)`** を選択、次に `Frontend` も同様に追加する |
 
 > **「Add checks」でチェック名が候補に出ない場合**  
 > ドロップダウンに候補が表示されなくても、**名前を手入力して Enter を押せば登録できます**。  
 > それでも追加できない場合は、`develop` への直接 push ではなく **PR 経由の CI ラン**が必要です。  
-> テスト PR（空コミット）を `develop` に向けて作成し、`CI / Backend (pull_request)` と `CI / Frontend (pull_request)` が緑になったあとに再試行してください。
+> テスト PR（空コミット）を `develop` に向けて作成し、`Backend` ジョブと `Frontend` ジョブが緑になったあとに再試行してください。
 > ```bash
 > git checkout -b chore/test-ci-checks
 > git commit --allow-empty -m "chore: test PR for CI check registration"
@@ -257,7 +257,7 @@ GitHub Container Registry（`ghcr.io`）にイメージを保存します。
 ### PR を出した後の確認手順
 
 1. PR ページの **Checks タブ** を開く
-2. `CI / Backend (pull_request)` と `CI / Frontend (pull_request)` の結果を確認する
+2. `Backend` と `Frontend` ジョブの結果を確認する
 3. 失敗している場合は該当 job をクリックして詳細を確認する
 
 ### CI が失敗したときのデバッグ
