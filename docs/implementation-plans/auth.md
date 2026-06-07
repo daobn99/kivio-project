@@ -2,7 +2,7 @@
 **ブランチ:** `feature/auth`  
 **担当 Phase:** Phase 2  
 **最終更新:** 2026-06-07  
-**ステータス:** 🟡 実装中（T-01〜T-05 完了）
+**ステータス:** 🟡 実装中（T-01〜T-09 完了）
 
 ---
 
@@ -369,10 +369,10 @@ src/
 | T-03 | Repository インターフェース実装 | BE | T-02 | ✅ Done |
 | T-04 | DTO クラス実装（Request / Response） | BE | なし | ✅ Done |
 | T-05 | `GoogleTokenVerifier` 実装（infra 層） | BE | なし | ✅ Done |
-| T-06 | `AuthService` 実装（check-email / register / verifyEmail） | BE | T-03, T-04 | ⬜ Todo |
-| T-07 | `AuthService` 実装（login / googleLogin） | BE | T-05, T-06 | ⬜ Todo |
-| T-08 | `AuthService` 実装（refresh / logout） | BE | T-06 | ⬜ Todo [並列可 with T-07] |
-| T-09 | `AuthController` 実装 + `@Auditable` 付与 | BE | T-06, T-07, T-08 | ⬜ Todo |
+| T-06 | `AuthService` 実装（check-email / register / verifyEmail） | BE | T-03, T-04 | ✅ Done |
+| T-07 | `AuthService` 実装（login / googleLogin） | BE | T-05, T-06 | ✅ Done |
+| T-08 | `AuthService` 実装（refresh / logout） | BE | T-06 | ✅ Done |
+| T-09 | `AuthController` 実装 + `@Auditable` 付与 | BE | T-06, T-07, T-08 | ✅ Done |
 | T-10 | Backend 単体テスト（Service 層） | BE | T-06, T-07, T-08 | ⬜ Todo |
 | T-11 | Backend 統合テスト（Controller 層・Testcontainers） | BE | T-09 | ⬜ Todo |
 | T-12 | FE: 型定義（`src/types/auth.ts`） | FE | なし | ⬜ Todo [並列可] |
