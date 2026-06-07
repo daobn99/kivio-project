@@ -6,13 +6,13 @@
 
 INSERT INTO users (id, email, password_hash, display_name, role, status, email_verified) VALUES
   ('00000000-0000-0000-0000-000000000001', 'admin@kivio.example.com',
-   '$2a$12$LX4d.xdSmPdl3R0IG1WNiucX4ePCnBM.gJI/YEoNMRYFdxkMUWMry',
+   '$2a$12$PHqC5.JcceWiajrIOIy.DOGdYyAVTQfXFYZsudQzUrtRAbcMRkqxG',
    'システム管理者', 'ROLE_ADMIN', 'ACTIVE', true),
   ('00000000-0000-0000-0000-000000000002', 'seller1@kivio.example.com',
-   '$2a$12$LX4d.xdSmPdl3R0IG1WNiucX4ePCnBM.gJI/YEoNMRYFdxkMUWMry',
+   '$2a$12$bgHuTkCz2nnsxHIH3qlot.SxWNv3TqTX15ZrWW614faiVc2Tht1hi',
    'テストセラー1', 'ROLE_SELLER', 'ACTIVE', true),
   ('00000000-0000-0000-0000-000000000003', 'buyer1@kivio.example.com',
-   '$2a$12$LX4d.xdSmPdl3R0IG1WNiucX4ePCnBM.gJI/YEoNMRYFdxkMUWMry',
+   '$2a$12$LZ/ytM.tKlqwpviBhR0ppuFlS.0nZB7AO1Pv17N9/hByXDy1Xvz8W',
    'テストバイヤー1', 'ROLE_BUYER', 'ACTIVE', true);
 
 INSERT INTO shops (id, owner_id, name, description, status) VALUES

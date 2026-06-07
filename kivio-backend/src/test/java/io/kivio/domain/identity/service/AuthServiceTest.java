@@ -78,7 +78,7 @@ class AuthServiceTest {
         given(userRepository.existsByEmail("new@example.com")).willReturn(false);
 
         CheckEmailResponse response = authService.checkEmail(
-                CheckEmailRequest.builder().email("new@example.com").build());
+                new CheckEmailRequest("new@example.com"));
 
         assertThat(response.available()).isTrue();
     }
@@ -88,7 +88,7 @@ class AuthServiceTest {
         given(userRepository.existsByEmail("taken@example.com")).willReturn(true);
 
         CheckEmailResponse response = authService.checkEmail(
-                CheckEmailRequest.builder().email("taken@example.com").build());
+                new CheckEmailRequest("taken@example.com"));
 
         assertThat(response.available()).isFalse();
     }
@@ -104,11 +104,8 @@ class AuthServiceTest {
         given(userRepository.existsByEmail("new@example.com")).willReturn(false);
         given(userRepository.saveAndFlush(any(User.class))).willReturn(saved);
 
-        RegisterResponse response = authService.register(RegisterRequest.builder()
-                .email("new@example.com")
-                .password("Password123!")
-                .passwordConfirm("Password123!")
-                .build());
+        RegisterResponse response = authService.register(
+                new RegisterRequest("new@example.com", "Password123!", "Password123!"));
 
         assertThat(response.email()).isEqualTo("new@example.com");
         then(passwordEncoder).should().encode("Password123!");
@@ -119,11 +116,8 @@ class AuthServiceTest {
     void should_throw_EmailAlreadyRegisteredException_when_email_is_duplicate() {
         given(userRepository.existsByEmail("dup@example.com")).willReturn(true);
 
-        assertThatThrownBy(() -> authService.register(RegisterRequest.builder()
-                .email("dup@example.com")
-                .password("Password123!")
-                .passwordConfirm("Password123!")
-                .build()))
+        assertThatThrownBy(() -> authService.register(
+                new RegisterRequest("dup@example.com", "Password123!", "Password123!")))
                 .isInstanceOf(EmailAlreadyRegisteredException.class);
 
         then(userRepository).should(never()).save(any());
@@ -143,7 +137,7 @@ class AuthServiceTest {
         stubJwtPair();
 
         AuthTokenResponse response = authService.verifyEmail(
-                VerifyEmailRequest.builder().token("raw-token").build());
+                new VerifyEmailRequest("raw-token"));
 
         assertThat(response.accessToken()).isEqualTo("test-access-token");
         assertThat(response.refreshToken()).isNotBlank();
@@ -156,7 +150,7 @@ class AuthServiceTest {
                 .willThrow(EmailVerificationTokenInvalidException.class);
 
         assertThatThrownBy(() -> authService.verifyEmail(
-                VerifyEmailRequest.builder().token("bad-token").build()))
+                new VerifyEmailRequest("bad-token")))
                 .isInstanceOf(EmailVerificationTokenInvalidException.class);
     }
 
@@ -166,7 +160,7 @@ class AuthServiceTest {
                 .willThrow(EmailVerificationTokenExpiredException.class);
 
         assertThatThrownBy(() -> authService.verifyEmail(
-                VerifyEmailRequest.builder().token("expired-token").build()))
+                new VerifyEmailRequest("expired-token")))
                 .isInstanceOf(EmailVerificationTokenExpiredException.class);
     }
 
@@ -182,10 +176,8 @@ class AuthServiceTest {
         given(passwordEncoder.matches("Password123!", "hashed")).willReturn(true);
         stubJwtPair();
 
-        AuthTokenResponse response = authService.login(LoginRequest.builder()
-                .email("user@example.com")
-                .password("Password123!")
-                .build());
+        AuthTokenResponse response = authService.login(
+                new LoginRequest("user@example.com", "Password123!"));
 
         assertThat(response.accessToken()).isEqualTo("test-access-token");
         assertThat(response.refreshToken()).isNotBlank();
@@ -197,10 +189,8 @@ class AuthServiceTest {
         given(userRepository.findByEmail("user@example.com")).willReturn(Optional.of(user));
         given(passwordEncoder.matches("wrong", "hashed")).willReturn(false);
 
-        assertThatThrownBy(() -> authService.login(LoginRequest.builder()
-                .email("user@example.com")
-                .password("wrong")
-                .build()))
+        assertThatThrownBy(() -> authService.login(
+                new LoginRequest("user@example.com", "wrong")))
                 .isInstanceOf(InvalidCredentialsException.class);
     }
 
@@ -208,10 +198,8 @@ class AuthServiceTest {
     void should_throw_InvalidCredentialsException_when_email_does_not_exist() {
         given(userRepository.findByEmail("ghost@example.com")).willReturn(Optional.empty());
 
-        assertThatThrownBy(() -> authService.login(LoginRequest.builder()
-                .email("ghost@example.com")
-                .password("Password123!")
-                .build()))
+        assertThatThrownBy(() -> authService.login(
+                new LoginRequest("ghost@example.com", "Password123!")))
                 .isInstanceOf(InvalidCredentialsException.class);
     }
 
@@ -222,10 +210,8 @@ class AuthServiceTest {
         given(userRepository.findByEmail("user@example.com")).willReturn(Optional.of(user));
         given(passwordEncoder.matches("Password123!", "hashed")).willReturn(true);
 
-        assertThatThrownBy(() -> authService.login(LoginRequest.builder()
-                .email("user@example.com")
-                .password("Password123!")
-                .build()))
+        assertThatThrownBy(() -> authService.login(
+                new LoginRequest("user@example.com", "Password123!")))
                 .isInstanceOf(EmailNotVerifiedException.class);
     }
 
@@ -236,10 +222,8 @@ class AuthServiceTest {
         given(userRepository.findByEmail("user@example.com")).willReturn(Optional.of(user));
         given(passwordEncoder.matches("Password123!", "hashed")).willReturn(true);
 
-        assertThatThrownBy(() -> authService.login(LoginRequest.builder()
-                .email("user@example.com")
-                .password("Password123!")
-                .build()))
+        assertThatThrownBy(() -> authService.login(
+                new LoginRequest("user@example.com", "Password123!")))
                 .isInstanceOf(UserDeactivatedException.class);
     }
 
@@ -259,7 +243,7 @@ class AuthServiceTest {
         stubJwtPair();
 
         AuthTokenResponse response = authService.googleLogin(
-                GoogleLoginRequest.builder().idToken("id-token").build());
+                new GoogleLoginRequest("id-token"));
 
         assertThat(response.accessToken()).isEqualTo("test-access-token");
     }
@@ -275,7 +259,7 @@ class AuthServiceTest {
         given(userRepository.save(existing)).willReturn(existing);
         stubJwtPair();
 
-        authService.googleLogin(GoogleLoginRequest.builder().idToken("id-token").build());
+        authService.googleLogin(new GoogleLoginRequest("id-token"));
 
         assertThat(existing.getGoogleId()).isEqualTo("google-sub-002");
     }
@@ -285,7 +269,7 @@ class AuthServiceTest {
         given(googleTokenVerifier.verify(any())).willThrow(GoogleTokenInvalidException.class);
 
         assertThatThrownBy(() -> authService.googleLogin(
-                GoogleLoginRequest.builder().idToken("bad-token").build()))
+                new GoogleLoginRequest("bad-token")))
                 .isInstanceOf(GoogleTokenInvalidException.class);
     }
 
@@ -298,7 +282,7 @@ class AuthServiceTest {
         given(userRepository.findByGoogleId("google-sub-003")).willReturn(Optional.of(deactivated));
 
         assertThatThrownBy(() -> authService.googleLogin(
-                GoogleLoginRequest.builder().idToken("id-token").build()))
+                new GoogleLoginRequest("id-token")))
                 .isInstanceOf(UserDeactivatedException.class);
     }
 
@@ -318,7 +302,7 @@ class AuthServiceTest {
         stubJwtPair();
 
         AuthTokenResponse response = authService.refresh(
-                RefreshRequest.builder().refreshToken(rawToken).build());
+                new RefreshRequest(rawToken));
 
         assertThat(response.accessToken()).isEqualTo("test-access-token");
         assertThat(response.refreshToken()).isNotBlank();
@@ -331,7 +315,7 @@ class AuthServiceTest {
         given(refreshTokenRepository.findByTokenHash(any())).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> authService.refresh(
-                RefreshRequest.builder().refreshToken("unknown-token").build()))
+                new RefreshRequest("unknown-token")))
                 .isInstanceOf(RefreshTokenInvalidException.class);
     }
 
@@ -343,7 +327,7 @@ class AuthServiceTest {
         given(refreshTokenRepository.findByTokenHash(tokenHash)).willReturn(Optional.of(expired));
 
         assertThatThrownBy(() -> authService.refresh(
-                RefreshRequest.builder().refreshToken(rawToken).build()))
+                new RefreshRequest(rawToken)))
                 .isInstanceOf(RefreshTokenInvalidException.class);
     }
 
@@ -357,7 +341,7 @@ class AuthServiceTest {
         given(refreshTokenRepository.findByTokenHash(tokenHash)).willReturn(Optional.of(revoked));
 
         assertThatThrownBy(() -> authService.refresh(
-                RefreshRequest.builder().refreshToken(rawToken).build()))
+                new RefreshRequest(rawToken)))
                 .isInstanceOf(RefreshTokenInvalidException.class);
 
         then(refreshTokenRepository).should().deleteAllByUserId(userId);
@@ -372,7 +356,7 @@ class AuthServiceTest {
         String rawToken = "logout-token";
         String expectedHash = TokenHashUtils.sha256Hex(rawToken);
 
-        authService.logout(LogoutRequest.builder().refreshToken(rawToken).build());
+        authService.logout(new LogoutRequest(rawToken));
 
         then(refreshTokenRepository).should().deleteByTokenHash(expectedHash);
     }

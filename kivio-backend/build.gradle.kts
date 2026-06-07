@@ -116,5 +116,5 @@ tasks.named<org.springframework.boot.gradle.tasks.run.BootRun>("bootRun") {
 }
 
 tasks.withType<JavaCompile> {
-	options.compilerArgs.add("-Xlint:deprecation")
+	options.compilerArgs.addAll(listOf("-parameters", "-Xlint:deprecation"))
 }

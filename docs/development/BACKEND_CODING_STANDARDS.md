@@ -129,9 +129,9 @@ domain/{context}/
 
 | アノテーション | 用途 | 対象 |
 |---|---|---|
-| `@Getter` | 全フィールドの getter を生成 | Entity, Request DTO |
+| `@Getter` | 全フィールドの getter を生成 | Entity |
 | `@RequiredArgsConstructor` | `final` フィールドを引数に取るコンストラクタ生成 | Service, Controller |
-| `@Builder` | Builder パターンを生成 | Entity, Request DTO |
+| `@Builder` | Builder パターンを生成 | Entity |
 | `@Slf4j` | `log` フィールドを生成（SLF4J Logger） | Service, Filter |
 | `@ToString` | `toString()` を生成（`exclude` で機密フィールドを除外） | Entity（任意） |
 | `@EqualsAndHashCode` | Entity の ID ベース equals/hashCode（`onlyExplicitlyIncluded = true`） | Entity |
@@ -176,22 +176,7 @@ public class Product extends BaseEntity {
 
 ### Request DTO への Lombok 適用パターン
 
-```java
-@Getter
-@Builder
-public class CreateProductRequest {
-
-    @NotBlank
-    @Size(max = 100)
-    private String name;
-
-    @Positive
-    private int price;
-
-    @NotNull
-    private UUID categoryId;
-}
-```
+Request DTO は `record` を使用するため、Lombok は不要。
 
 ---
 
@@ -258,31 +243,51 @@ public class ProductController {
 
 ### 4.2 Request DTO（Bean Validation）
 
-**形式:** `@Getter @Builder` の Lombok class を使用する。record は使わない（Bean Validation との相性上）。
+**形式:** `record` を使用する。Jackson は canonical constructor を自動使用するため `@JsonCreator` / `@JsonProperty` は不要。Lombok も不要。
 
 ```java
-@Getter
-@Builder
-public class CreateProductRequest {
+public record CreateProductRequest(
+        /** 商品名 */
+        @NotBlank(message = "商品名は必須です")
+        @Size(max = 100, message = "商品名は100文字以内です")
+        String name,
 
-    @NotBlank(message = "商品名は必須です")
-    @Size(max = 100, message = "商品名は100文字以内です")
-    private String name;
+        /** 説明 */
+        @NotBlank
+        @Size(max = 2000)
+        String description,
 
-    @NotBlank
-    @Size(max = 2000)
-    private String description;
+        /** 価格 */
+        @Positive(message = "価格は正の整数で入力してください")
+        int price,
 
-    @Positive(message = "価格は正の整数で入力してください")
-    private int price;
+        /** カテゴリID */
+        @NotNull
+        UUID categoryId,
 
-    @NotNull
-    private UUID categoryId;
+        /** 公開予定日時（日時フィールドは String ではなく Instant / OffsetDateTime を使う） */
+        @FutureOrPresent
+        Instant publishedAt
+) {}
+```
 
-    // 日時フィールドは String ではなく Instant / OffsetDateTime を使う
-    // Jackson の JavaTimeModule が自動で ISO 8601 形式を変換・検証する
-    @FutureOrPresent
-    private Instant publishedAt;
+**クロスフィールドバリデーション（`@AssertTrue`）:**
+
+```java
+public record RegisterRequest(
+        @NotBlank @Email @Size(max = 255)
+        String email,
+
+        @NotBlank @Size(min = 8, max = 100)
+        String password,
+
+        @NotBlank
+        String passwordConfirm
+) {
+    @AssertTrue(message = "パスワードと確認用パスワードが一致しません")
+    public boolean isPasswordsMatch() {
+        return password != null && password.equals(passwordConfirm);
+    }
 }
 ```
 
@@ -1757,19 +1762,17 @@ public class Product extends BaseEntity {
     private ProductStatus status;
 }
 
-// Request DTO フィールド
-@Getter
-@Builder
-public class CreateProductRequest {
-    /** 商品名 */
-    @NotBlank
-    @Size(max = 100)
-    private String name;
+// Request DTO フィールド（record）
+public record CreateProductRequest(
+        /** 商品名 */
+        @NotBlank
+        @Size(max = 100)
+        String name,
 
-    /** 価格 */
-    @Positive
-    private int price;
-}
+        /** 価格 */
+        @Positive
+        int price
+) {}
 
 // Response DTO フィールド（record）
 public record ProductResponse(

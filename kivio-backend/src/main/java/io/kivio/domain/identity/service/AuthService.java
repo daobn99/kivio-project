@@ -58,7 +58,7 @@ public class AuthService {
      */
     @Transactional(readOnly = true)
     public CheckEmailResponse checkEmail(CheckEmailRequest request) {
-        boolean available = !userRepository.existsByEmail(request.getEmail());
+        boolean available = !userRepository.existsByEmail(request.email());
         return new CheckEmailResponse(available);
     }
 
@@ -69,12 +69,12 @@ public class AuthService {
      */
     @Auditable(action = "USER_REGISTERED", entityType = "USER")
     public RegisterResponse register(RegisterRequest request) {
-        if (userRepository.existsByEmail(request.getEmail())) {
+        if (userRepository.existsByEmail(request.email())) {
             throw new EmailAlreadyRegisteredException();
         }
         User user = User.builder()
-                .email(request.getEmail())
-                .passwordHash(passwordEncoder.encode(request.getPassword()))
+                .email(request.email())
+                .passwordHash(passwordEncoder.encode(request.password()))
                 .build();
         try {
             // saveAndFlush で即時フラッシュし、並行リクエストの一意制約違反をここで捕捉する
@@ -92,7 +92,7 @@ public class AuthService {
      */
     @Auditable(action = "USER_EMAIL_VERIFIED", entityType = "USER")
     public AuthTokenResponse verifyEmail(VerifyEmailRequest request) {
-        EmailVerificationToken tokenEntity = emailVerificationService.validateAndConsume(request.getToken());
+        EmailVerificationToken tokenEntity = emailVerificationService.validateAndConsume(request.token());
         User user = userRepository.findByIdOrThrow(tokenEntity.getUserId());
         user.verifyEmail();
         userRepository.save(user);
@@ -112,11 +112,11 @@ public class AuthService {
      */
     @Auditable(action = "USER_LOGGED_IN", entityType = "USER")
     public AuthTokenResponse login(LoginRequest request) {
-        User user = userRepository.findByEmail(request.getEmail())
+        User user = userRepository.findByEmail(request.email())
                 .orElseThrow(InvalidCredentialsException::new);
 
         // メール存在有無を攻撃者に漏らさないために、パスワード不一致も同じ例外を返す
-        if (!user.hasPassword() || !passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
+        if (!user.hasPassword() || !passwordEncoder.matches(request.password(), user.getPasswordHash())) {
             throw new InvalidCredentialsException();
         }
         if (!user.isEmailVerified()) {
@@ -137,7 +137,7 @@ public class AuthService {
      */
     @Auditable(action = "USER_LOGGED_IN", entityType = "USER")
     public AuthTokenResponse googleLogin(GoogleLoginRequest request) {
-        GoogleUserInfo googleInfo = googleTokenVerifier.verify(request.getIdToken());
+        GoogleUserInfo googleInfo = googleTokenVerifier.verify(request.idToken());
         User user = resolveGoogleUser(googleInfo);
 
         if (!user.isActive()) {
@@ -158,7 +158,7 @@ public class AuthService {
      * @throws RefreshTokenInvalidException トークンが無効・失効・期限切れの場合
      */
     public AuthTokenResponse refresh(RefreshRequest request) {
-        String tokenHash = TokenHashUtils.sha256Hex(request.getRefreshToken());
+        String tokenHash = TokenHashUtils.sha256Hex(request.refreshToken());
         RefreshToken refreshToken = refreshTokenRepository.findByTokenHash(tokenHash)
                 .orElseThrow(RefreshTokenInvalidException::new);
 
@@ -193,7 +193,7 @@ public class AuthService {
      */
     @Auditable(action = "USER_LOGGED_OUT", entityType = "USER")
     public void logout(LogoutRequest request) {
-        String tokenHash = TokenHashUtils.sha256Hex(request.getRefreshToken());
+        String tokenHash = TokenHashUtils.sha256Hex(request.refreshToken());
         refreshTokenRepository.deleteByTokenHash(tokenHash);
         log.info("user_logged_out");
     }
