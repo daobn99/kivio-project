@@ -3,11 +3,15 @@ package io.kivio.config;
 import tools.jackson.databind.ObjectMapper;
 import io.kivio.config.filter.JwtAuthenticationFilter;
 import io.kivio.config.filter.RateLimitingFilter;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -29,7 +33,10 @@ import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWrite
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.springframework.web.servlet.HandlerExecutionChain;
+import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
 
+import java.io.IOException;
 import java.net.URI;
 import java.util.Arrays;
 import java.util.List;
@@ -46,6 +53,11 @@ public class SecurityConfig {
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final RateLimitingFilter rateLimitingFilter;
     private final ObjectMapper objectMapper;
+
+    // SecurityConfig の初期化時点では MVC の RequestMappingHandlerMapping がまだ未確定のため @Lazy で遅延取得する
+    @Lazy
+    @Autowired
+    private RequestMappingHandlerMapping requestMappingHandlerMapping;
 
     @Value("${app.cors.allowed-origins:http://localhost:3000}")
     private String allowedOrigins;
@@ -139,29 +151,48 @@ public class SecurityConfig {
 
     private AuthenticationEntryPoint problemDetailAuthEntryPoint() {
         return (request, response, ex) -> {
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(
-                    HttpStatus.UNAUTHORIZED, "認証が必要です");
-            problem.setType(URI.create(problemBaseUrl + "/problems/unauthorized"));
-            problem.setTitle("Unauthorized");
-            problem.setInstance(URI.create(request.getRequestURI()));
-            problem.setProperty("errorCode", "UNAUTHORIZED");
-            response.setStatus(401);
-            response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
-            objectMapper.writeValue(response.getWriter(), problem);
+            if (!isMappedPath(request)) {
+                writeProblemResponse(response, request,
+                        HttpStatus.NOT_FOUND, "リソースが見つかりません", "not-found", "NOT_FOUND");
+                return;
+            }
+            writeProblemResponse(response, request,
+                    HttpStatus.UNAUTHORIZED, "認証が必要です", "unauthorized", "UNAUTHORIZED");
         };
     }
 
     private AccessDeniedHandler problemDetailAccessDeniedHandler() {
-        return (request, response, ex) -> {
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(
-                    HttpStatus.FORBIDDEN, "このリソースへのアクセス権がありません");
-            problem.setType(URI.create(problemBaseUrl + "/problems/access-denied"));
-            problem.setTitle("Access Denied");
-            problem.setInstance(URI.create(request.getRequestURI()));
-            problem.setProperty("errorCode", "ACCESS_DENIED");
-            response.setStatus(403);
-            response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
-            objectMapper.writeValue(response.getWriter(), problem);
-        };
+        return (request, response, ex) ->
+                writeProblemResponse(response, request,
+                        HttpStatus.FORBIDDEN, "このリソースへのアクセス権がありません", "access-denied", "ACCESS_DENIED");
+    }
+
+    /**
+     * Spring MVC にハンドラーが登録されているパスかどうかを判定します。
+     * getHandler() が null を返した場合はマッピング未登録（404）、
+     * 例外は「パスは存在するがメソッド違い等」と見なして true を返します。
+     */
+    private boolean isMappedPath(HttpServletRequest request) {
+        try {
+            HandlerExecutionChain chain = requestMappingHandlerMapping.getHandler(request);
+            return chain != null;
+        } catch (Exception e) {
+            // MethodNotAllowedException 等：パスは存在するので 401 に委ねる
+            return true;
+        }
+    }
+
+    private void writeProblemResponse(HttpServletResponse response, HttpServletRequest request,
+                                      HttpStatus status, String detail, String typeSlug, String errorCode)
+            throws IOException {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, detail);
+        problem.setType(URI.create(problemBaseUrl + "/problems/" + typeSlug));
+        problem.setTitle(status.getReasonPhrase());
+        problem.setInstance(URI.create(request.getRequestURI()));
+        problem.setProperty("errorCode", errorCode);
+        response.setStatus(status.value());
+        response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
+        response.setCharacterEncoding("UTF-8");
+        objectMapper.writeValue(response.getOutputStream(), problem);
     }
 }

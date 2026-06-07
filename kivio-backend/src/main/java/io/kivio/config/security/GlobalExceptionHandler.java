@@ -5,8 +5,11 @@ import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.validation.FieldError;
@@ -25,6 +28,7 @@ import java.util.Set;
  * グローバル例外ハンドラーを表現します。
  */
 @Slf4j
+@Order(Ordered.HIGHEST_PRECEDENCE)
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
@@ -33,6 +37,10 @@ public class GlobalExceptionHandler {
     @Value("${app.problem-base-url:https://kivio.example.com}")
     private String problemBaseUrl;
 
+    /**
+     * KivioException を処理し、RFC 7807 形式のエラーレスポンスを返します。
+     * すべての KivioException はこのハンドラーで処理されるため、個別の例外クラスごとにハンドラーを定義する必要はありません。
+     */
     @ExceptionHandler(KivioException.class)
     public ProblemDetail handleKivioException(KivioException ex, HttpServletRequest request) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(ex.getStatus(), ex.getMessage());
@@ -40,6 +48,20 @@ public class GlobalExceptionHandler {
         problem.setTitle(toTitle(ex.getErrorCode()));
         problem.setInstance(URI.create(request.getRequestURI()));
         problem.setProperty("errorCode", ex.getErrorCode());
+        return problem;
+    }
+
+    /**
+     * リクエストの JSON 形式エラーを処理します。 例：不正な JSON、数値に文字列が入っている、など
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ProblemDetail handleMessageNotReadable(HttpMessageNotReadableException ex, HttpServletRequest request) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.BAD_REQUEST, "リクエストボディの形式が正しくありません");
+        problem.setType(URI.create(problemBaseUrl + "/problems/invalid-request-body"));
+        problem.setTitle("Invalid Request Body");
+        problem.setInstance(URI.create(request.getRequestURI()));
+        problem.setProperty("errorCode", "INVALID_REQUEST_BODY");
         return problem;
     }
 

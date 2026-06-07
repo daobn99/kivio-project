@@ -166,9 +166,11 @@ Request
                            ▼
 ┌────────────────────────────────────────────────────────┐
 │  5. ExceptionTranslationFilter                         │
-│     AuthenticationException → 401                      │
-│     AccessDeniedException → 403                        │
-│     ProblemDetail 形式でレスポンス                       │
+│     AuthenticationException → AuthenticationEntryPoint │
+│       ├─ Spring MVC に未登録のパス → 404 Not Found      │
+│       └─ 登録済みパスへの未認証アクセス → 401 Unauthorized│
+│     AccessDeniedException → 403 Forbidden              │
+│     ProblemDetail 形式（application/problem+json）      │
 └──────────────────────────┬─────────────────────────────┘
                            │
                            ▼
@@ -266,11 +268,14 @@ public ResponseEntity<?> updateOrderStatus(@PathVariable UUID id, ...) {
 
 ### 5.3 認可エラー
 
-| 状況 | レスポンス |
-|---|---|
-| JWT なし / 無効 / 期限切れ | `401 Unauthorized` |
-| ロール不足 | `403 Forbidden` |
-| 他人のリソースへのアクセス | `403 Forbidden` |
+| 状況 | レスポンス | エラーコード |
+|---|---|---|
+| Spring MVC に未登録のパスへのアクセス（未認証） | `404 Not Found` | `NOT_FOUND` |
+| JWT なし / 無効 / 期限切れ | `401 Unauthorized` | `UNAUTHORIZED` |
+| ロール不足 | `403 Forbidden` | `ACCESS_DENIED` |
+| 他人のリソースへのアクセス | `403 Forbidden` | `ACCESS_DENIED` |
+
+> **404 vs 401 の判定:** `AuthenticationEntryPoint` が `RequestMappingHandlerMapping.getHandler()` を呼び出し、ハンドラーが登録されていないパスには 401 ではなく 404 を返す。これにより HTTP セマンティクスを維持し、クライアントがエンドポイントの存在有無を正確に判断できる。
 
 ---
 

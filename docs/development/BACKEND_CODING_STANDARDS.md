@@ -866,9 +866,35 @@ public class DuplicateEmailException extends ConflictException {
 ### 6.2 グローバル例外ハンドラー
 
 ```java
+// @Order(Ordered.HIGHEST_PRECEDENCE) が必須。
+// spring.mvc.problemdetails.enabled=true を有効にすると Spring Boot が
+// ProblemDetailsExceptionHandler を自動登録し、MethodArgumentNotValidException 等を
+// 横取りする。最高優先度を明示することでカスタムハンドラーを確実に先に適用する。
+@Order(Ordered.HIGHEST_PRECEDENCE)
 @RestControllerAdvice
 @Slf4j
 public class GlobalExceptionHandler {
+
+    // JSON パースエラー（Content-Type 未指定・不正な JSON 形式）
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ProblemDetail handleMessageNotReadable(HttpMessageNotReadableException ex,
+                                                   HttpServletRequest request) {
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(
+                HttpStatus.BAD_REQUEST, "リクエストボディの形式が正しくありません");
+        detail.setProperty("errorCode", "INVALID_REQUEST_BODY");
+        return detail;
+    }
+
+    // Bean Validation エラー（422: フィールド別詳細を errors に含める）
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ProblemDetail handleValidation(MethodArgumentNotValidException ex) {
+        ProblemDetail detail = ProblemDetail.forStatus(HttpStatus.UNPROCESSABLE_CONTENT);
+        detail.setProperty("errorCode", "VALIDATION_FAILED");
+        detail.setProperty("errors", ex.getBindingResult().getFieldErrors().stream()
+                .map(e -> Map.of("field", e.getField(), "message", e.getDefaultMessage()))
+                .toList());
+        return detail;
+    }
 
     // リソース未発見
     @ExceptionHandler(ResourceNotFoundException.class)
@@ -884,17 +910,6 @@ public class GlobalExceptionHandler {
         ProblemDetail detail = ProblemDetail.forStatusAndDetail(
                 HttpStatus.UNPROCESSABLE_CONTENT, ex.getMessage());
         detail.setProperty("errorCode", ex.getErrorCode());
-        return detail;
-    }
-
-    // Bean Validation エラー
-    @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ProblemDetail handleValidation(MethodArgumentNotValidException ex) {
-        ProblemDetail detail = ProblemDetail.forStatus(HttpStatus.UNPROCESSABLE_CONTENT);
-        detail.setProperty("errorCode", "VALIDATION_ERROR");
-        detail.setProperty("errors", ex.getBindingResult().getFieldErrors().stream()
-                .map(e -> Map.of("field", e.getField(), "message", e.getDefaultMessage()))
-                .toList());
         return detail;
     }
 
@@ -921,7 +936,9 @@ public class GlobalExceptionHandler {
 }
 ```
 
-> **設定:** `application.yml` に `spring.mvc.problemdetails.enabled=true` を追加すると、Spring MVC のデフォルト例外（`HttpRequestMethodNotSupportedException`・`MethodNotAllowedException` 等）も自動的に ProblemDetail 形式で返される。カスタムハンドラーと共存可能。
+> **`@Order(Ordered.HIGHEST_PRECEDENCE)` について:** `spring.mvc.problemdetails.enabled=true` を設定すると、Spring Boot が `ProblemDetailsExceptionHandler`（`ResponseEntityExceptionHandler` のサブクラス）を自動登録する。この組み込みハンドラーは `MethodArgumentNotValidException` 等の標準例外を横取りし、カスタムハンドラーより先に実行される場合がある。`@Order(Ordered.HIGHEST_PRECEDENCE)` を付けることでカスタムハンドラーの優先度を明示的に最高にし、バリデーションエラー時の 422 レスポンスと `errors` フィールドが確実に返るようにする。
+
+> **レスポンスの文字コード:** `SecurityConfig` の `AuthenticationEntryPoint` / `AccessDeniedHandler` 内で `ObjectMapper` を使って直接レスポンスに書き込む場合は、`response.setCharacterEncoding("UTF-8")` を `getOutputStream()` の前に呼び出すこと。`getWriter()` を使うと日本語が文字化けする。
 
 ---
 

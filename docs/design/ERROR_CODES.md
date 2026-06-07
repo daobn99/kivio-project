@@ -74,6 +74,8 @@ Spring Boot 3.x の `ProblemDetail` をベースとする。
 | エラーコード | HTTPステータス | title | 発生条件 |
 |---|---|---|---|
 | `VALIDATION_FAILED` | 422 | Validation Failed | Bean Validation失敗（必須項目・文字数・範囲等） |
+| `INVALID_REQUEST_BODY` | 400 | Invalid Request Body | リクエストボディの JSON パース失敗（`Content-Type: application/json` 未指定・不正な JSON 形式） |
+| `NOT_FOUND` | 404 | Not Found | Spring MVC に未登録のパスへのアクセス（エンドポイント自体が存在しない） |
 | `RESOURCE_NOT_FOUND` | 404 | Resource Not Found | 対象リソースが存在しない / soft delete済み |
 | `ACCESS_DENIED` | 403 | Access Denied | 認証済みだが権限不足（他人のリソース・ロール不足） |
 | `UNAUTHORIZED` | 401 | Unauthorized | 認証が必要なAPIへの未認証アクセス |
@@ -196,6 +198,8 @@ Spring Boot 3.x の `ProblemDetail` をベースとする。
 | エラーコード（UPPER_SNAKE_CASE） | type URI パス |
 |---|---|
 | `VALIDATION_FAILED` | `/problems/validation-failed` |
+| `INVALID_REQUEST_BODY` | `/problems/invalid-request-body` |
+| `NOT_FOUND` | `/problems/not-found` |
 | `RESOURCE_NOT_FOUND` | `/problems/resource-not-found` |
 | `EMAIL_ALREADY_REGISTERED` | `/problems/email-already-registered` |
 | `EMAIL_VERIFICATION_TOKEN_INVALID` | `/problems/email-verification-token-invalid` |
