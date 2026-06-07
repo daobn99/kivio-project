@@ -91,25 +91,26 @@ CREATE EXTENSION IF NOT EXISTS pg_trgm;
 |---|---|---|---|---|
 | 1 | `users` | ユーザー | identity | `deleted_at` |
 | 2 | `refresh_tokens` | リフレッシュトークン | identity | - |
-| 3 | `seller_applications` | セラー申請 | identity | - |
-| 4 | `shops` | ショップ | catalog | `deleted_at` |
-| 5 | `shop_shipping_policies` | ショップ配送ポリシー | catalog | - |
-| 6 | `categories` | カテゴリー | catalog | `deleted_at` |
-| 7 | `products` | 商品 | catalog | `status='DELETED'` |
-| 8 | `product_images` | 商品画像 | catalog | - |
-| 9 | `addresses` | 配送先住所 | order | - |
-| 10 | `carts` | カート | order | - |
-| 11 | `cart_items` | カート明細 | order | - |
-| 12 | `orders` | 注文 | order | 削除不可 |
-| 13 | `order_items` | 注文明細 | order | 削除不可 |
-| 14 | `payments` | 決済 | order | 削除不可 |
-| 15 | `reviews` | レビュー | review | - |
-| 16 | `chat_rooms` | チャットルーム | messaging | - |
-| 17 | `chat_messages` | チャットメッセージ | messaging | - |
-| 18 | `notifications` | 通知 | notification | `expires_at` |
-| 19 | `wishlists` | お気に入り | review | - |
-| 20 | `platform_configs` | プラットフォーム設定 | platform | - |
-| 21 | `audit_logs` | 監査ログ | audit | 削除禁止（期限後DROP） |
+| 3 | `email_verification_tokens` | メール認証トークン | identity | - |
+| 4 | `seller_applications` | セラー申請 | identity | - |
+| 5 | `shops` | ショップ | catalog | `deleted_at` |
+| 6 | `shop_shipping_policies` | ショップ配送ポリシー | catalog | - |
+| 7 | `categories` | カテゴリー | catalog | `deleted_at` |
+| 8 | `products` | 商品 | catalog | `status='DELETED'` |
+| 9 | `product_images` | 商品画像 | catalog | - |
+| 10 | `addresses` | 配送先住所 | order | - |
+| 11 | `carts` | カート | order | - |
+| 12 | `cart_items` | カート明細 | order | - |
+| 13 | `orders` | 注文 | order | 削除不可 |
+| 14 | `order_items` | 注文明細 | order | 削除不可 |
+| 15 | `payments` | 決済 | order | 削除不可 |
+| 16 | `reviews` | レビュー | review | - |
+| 17 | `chat_rooms` | チャットルーム | messaging | - |
+| 18 | `chat_messages` | チャットメッセージ | messaging | - |
+| 19 | `notifications` | 通知 | notification | `expires_at` |
+| 20 | `wishlists` | お気に入り | review | - |
+| 21 | `platform_configs` | プラットフォーム設定 | platform | - |
+| 22 | `audit_logs` | 監査ログ | audit | 削除禁止（期限後DROP） |
 
 ---
 
@@ -178,7 +179,34 @@ COMMENT ON COLUMN refresh_tokens.token_hash IS 'トークンのSHA-256ハッシ�
 
 ---
 
-### 3.3 seller_applications（セラー申請）
+### 3.3 email_verification_tokens（メール認証トークン）
+
+```sql
+CREATE TABLE email_verification_tokens (
+  id           UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id      UUID         NOT NULL REFERENCES users(id),
+  token_hash   VARCHAR(255) NOT NULL,   -- SHA-256ハッシュ（平文は保持しない）
+  expires_at   TIMESTAMPTZ  NOT NULL,
+  used_at      TIMESTAMPTZ,             -- NULL: 未使用, NOT NULL: 使用済み
+  created_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+
+  CONSTRAINT email_verification_tokens_token_hash_unique UNIQUE (token_hash)
+);
+
+COMMENT ON TABLE  email_verification_tokens IS 'メールアドレス確認トークン管理。有効期限24時間。一度使用すると used_at が設定され再利用不可。';
+COMMENT ON COLUMN email_verification_tokens.token_hash IS 'トークンのSHA-256ハッシュ値。平文トークンはDBに保存しない。';
+COMMENT ON COLUMN email_verification_tokens.used_at IS 'トークン使用日時。NULL=未使用。NOT NULL=使用済み（再利用不可）。';
+```
+
+**インデックス：**
+```sql
+CREATE INDEX idx_email_verification_tokens_user_id    ON email_verification_tokens (user_id);
+CREATE INDEX idx_email_verification_tokens_token_hash ON email_verification_tokens (token_hash);
+```
+
+**保持ポリシー：** 有効期限切れ（`expires_at < NOW()`）または使用済み（`used_at IS NOT NULL`）は30日後に物理削除（バッチ）
+
+### 3.4 seller_applications（セラー申請）
 
 ```sql
 CREATE TABLE seller_applications (
@@ -207,7 +235,7 @@ COMMENT ON COLUMN seller_applications.reviewer_id IS '審査した管理者の�
 
 ---
 
-### 3.4 shops（ショップ）
+### 3.5 shops（ショップ）
 
 ```sql
 CREATE TABLE shops (
@@ -237,7 +265,7 @@ COMMENT ON COLUMN shops.deleted_at IS 'users.deleted_at設定時に連動して�
 
 ---
 
-### 3.5 shop_shipping_policies（ショップ配送ポリシー）
+### 3.6 shop_shipping_policies（ショップ配送ポリシー）
 
 ```sql
 CREATE TABLE shop_shipping_policies (
@@ -267,7 +295,7 @@ COMMENT ON COLUMN shop_shipping_policies.free_threshold  IS '送料無料にな�
 
 ---
 
-### 3.6 categories（カテゴリー）
+### 3.7 categories（カテゴリー）
 
 ```sql
 CREATE TABLE categories (
@@ -291,7 +319,7 @@ COMMENT ON COLUMN categories.slug      IS 'URL用スラッグ（英数字・ハ�
 
 ---
 
-### 3.7 products（商品）
+### 3.8 products（商品）
 
 ```sql
 CREATE TABLE products (
@@ -322,7 +350,7 @@ COMMENT ON COLUMN products.status        IS 'DRAFT=下書き, ACTIVE=公開, INA
 
 ---
 
-### 3.8 product_images（商品画像）
+### 3.9 product_images（商品画像）
 
 ```sql
 CREATE TABLE product_images (
@@ -341,7 +369,7 @@ COMMENT ON COLUMN product_images.display_order IS '表示順序。0が先頭（�
 
 ---
 
-### 3.9 addresses（配送先住所）
+### 3.10 addresses（配送先住所）
 
 ```sql
 CREATE TABLE addresses (
@@ -365,7 +393,7 @@ COMMENT ON TABLE  addresses IS 'ユーザーの配送先住所。複数登録可
 
 ---
 
-### 3.10 carts（カート）
+### 3.11 carts（カート）
 
 ```sql
 CREATE TABLE carts (
@@ -382,7 +410,7 @@ COMMENT ON TABLE carts IS 'ユーザーごとに1つのカート（user_id UNIQU
 
 ---
 
-### 3.11 cart_items（カート明細）
+### 3.12 cart_items（カート明細）
 
 ```sql
 CREATE TABLE cart_items (
@@ -401,7 +429,7 @@ CREATE TABLE cart_items (
 
 ---
 
-### 3.12 orders（注文）
+### 3.13 orders（注文）
 
 ```sql
 CREATE TABLE orders (
@@ -459,7 +487,7 @@ COMMENT ON COLUMN orders.stripe_payment_intent_id IS 'Stripe PaymentIntentのID�
 
 ---
 
-### 3.13 order_items（注文明細）
+### 3.14 order_items（注文明細）
 
 ```sql
 CREATE TABLE order_items (
@@ -487,7 +515,7 @@ COMMENT ON COLUMN order_items.is_reviewed       IS 'レビュー投稿済みフ�
 
 ---
 
-### 3.14 payments（決済）
+### 3.15 payments（決済）
 
 ```sql
 CREATE TABLE payments (
@@ -514,7 +542,7 @@ COMMENT ON COLUMN payments.stripe_refund_id IS 'Stripe Refunds APIのrefund ID�
 
 ---
 
-### 3.15 reviews（レビュー）
+### 3.16 reviews（レビュー）
 
 ```sql
 CREATE TABLE reviews (
@@ -539,7 +567,7 @@ COMMENT ON COLUMN reviews.reviewer_id IS 'ユーザー匿名化後はNULL。コ�
 
 ---
 
-### 3.16 chat_rooms（チャットルーム）
+### 3.17 chat_rooms（チャットルーム）
 
 ```sql
 CREATE TABLE chat_rooms (
@@ -557,7 +585,7 @@ COMMENT ON TABLE chat_rooms IS 'バイヤーとショップの1対1チャット�
 
 ---
 
-### 3.17 chat_messages（チャットメッセージ）
+### 3.18 chat_messages（チャットメッセージ）
 
 ```sql
 CREATE TABLE chat_messages (
@@ -577,7 +605,7 @@ COMMENT ON COLUMN chat_messages.read_at IS 'NULL=未読。相手が開封した�
 
 ---
 
-### 3.18 notifications（通知）
+### 3.19 notifications（通知）
 
 ```sql
 CREATE TABLE notifications (
@@ -604,7 +632,7 @@ COMMENT ON COLUMN notifications.related_entity_type IS '通知に関連するエ
 
 ---
 
-### 3.19 wishlists（お気に入り）
+### 3.20 wishlists（お気に入り）
 
 ```sql
 CREATE TABLE wishlists (
@@ -621,7 +649,7 @@ COMMENT ON TABLE wishlists IS 'お気に入り商品。商品削除時はCASCADE
 
 ---
 
-### 3.20 platform_configs（プラットフォーム設定）
+### 3.21 platform_configs（プラットフォーム設定）
 
 ```sql
 CREATE TABLE platform_configs (
@@ -649,7 +677,7 @@ COMMENT ON COLUMN platform_configs.config_key IS '設定キー（UPPER_SNAKE_CAS
 
 ---
 
-### 3.21 audit_logs（監査ログ）
+### 3.22 audit_logs（監査ログ）
 
 パーティショニングを適用するため、主キーに `created_at` を含める。
 

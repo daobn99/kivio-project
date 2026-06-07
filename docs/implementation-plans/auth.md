@@ -2,7 +2,7 @@
 **ブランチ:** `feature/auth`  
 **担当 Phase:** Phase 2  
 **最終更新:** 2026-06-07  
-**ステータス:** 🟡 実装中
+**ステータス:** 🟡 実装中（T-01〜T-05 完了）
 
 ---
 
@@ -364,11 +364,11 @@ src/
 
 | ID | タスク | 担当 | 依存 | ステータス |
 |---|---|---|---|---|
-| T-01 | `V2__auth_tables.sql` 作成・マイグレーション確認 | BE | なし | ⬜ Todo |
-| T-02 | Domain Entity（User / RefreshToken / EmailVerificationToken）実装 | BE | T-01 | ⬜ Todo |
-| T-03 | Repository インターフェース実装 | BE | T-02 | ⬜ Todo |
-| T-04 | DTO クラス実装（Request / Response） | BE | なし | ⬜ Todo [並列可] |
-| T-05 | `GoogleTokenVerifier` 実装（infra 層） | BE | なし | ⬜ Todo [並列可] |
+| T-01 | `V2__auth_tables.sql` 作成・マイグレーション確認 | BE | なし | ✅ Done |
+| T-02 | Domain Entity（User / RefreshToken / EmailVerificationToken）実装 | BE | T-01 | ✅ Done |
+| T-03 | Repository インターフェース実装 | BE | T-02 | ✅ Done |
+| T-04 | DTO クラス実装（Request / Response） | BE | なし | ✅ Done |
+| T-05 | `GoogleTokenVerifier` 実装（infra 層） | BE | なし | ✅ Done |
 | T-06 | `AuthService` 実装（check-email / register / verifyEmail） | BE | T-03, T-04 | ⬜ Todo |
 | T-07 | `AuthService` 実装（login / googleLogin） | BE | T-05, T-06 | ⬜ Todo |
 | T-08 | `AuthService` 実装（refresh / logout） | BE | T-06 | ⬜ Todo [並列可 with T-07] |
