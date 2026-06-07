@@ -2,7 +2,7 @@
 **ブランチ:** `feature/auth`  
 **担当 Phase:** Phase 2  
 **最終更新:** 2026-06-07  
-**ステータス:** 🟡 実装中（T-01〜T-09 完了）
+**ステータス:** 🟡 実装中（T-01〜T-11 完了）
 
 ---
 
@@ -373,8 +373,8 @@ src/
 | T-07 | `AuthService` 実装（login / googleLogin） | BE | T-05, T-06 | ✅ Done |
 | T-08 | `AuthService` 実装（refresh / logout） | BE | T-06 | ✅ Done |
 | T-09 | `AuthController` 実装 + `@Auditable` 付与 | BE | T-06, T-07, T-08 | ✅ Done |
-| T-10 | Backend 単体テスト（Service 層） | BE | T-06, T-07, T-08 | ⬜ Todo |
-| T-11 | Backend 統合テスト（Controller 層・Testcontainers） | BE | T-09 | ⬜ Todo |
+| T-10 | Backend 単体テスト（Service 層） | BE | T-06, T-07, T-08 | ✅ Done |
+| T-11 | Backend 統合テスト（Controller 層・Testcontainers） | BE | T-09 | ✅ Done |
 | T-12 | FE: 型定義（`src/types/auth.ts`） | FE | なし | ⬜ Todo [並列可] |
 | T-13 | FE: Zod スキーマ（`src/lib/validations/auth.ts`） | FE | なし | ⬜ Todo [並列可] |
 | T-14 | FE: API クライアント関数（`src/lib/api/auth.ts`） | FE | T-12 | ⬜ Todo |

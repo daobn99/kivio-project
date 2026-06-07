@@ -21,6 +21,7 @@ import io.kivio.domain.identity.exception.EmailNotVerifiedException;
 import io.kivio.domain.identity.exception.InvalidCredentialsException;
 import io.kivio.domain.identity.exception.RefreshTokenInvalidException;
 import io.kivio.domain.identity.exception.UserDeactivatedException;
+import org.springframework.dao.DataIntegrityViolationException;
 import io.kivio.domain.identity.repository.RefreshTokenRepository;
 import io.kivio.domain.identity.repository.UserRepository;
 import io.kivio.infra.google.GoogleTokenVerifier;
@@ -75,10 +76,15 @@ public class AuthService {
                 .email(request.getEmail())
                 .passwordHash(passwordEncoder.encode(request.getPassword()))
                 .build();
-        User saved = userRepository.save(user);
-        emailVerificationService.createAndSendVerificationToken(saved);
-        log.info("user_registered userId={}", saved.getId());
-        return RegisterResponse.from(saved);
+        try {
+            // saveAndFlush で即時フラッシュし、並行リクエストの一意制約違反をここで捕捉する
+            User saved = userRepository.saveAndFlush(user);
+            emailVerificationService.createAndSendVerificationToken(saved);
+            log.info("user_registered userId={}", saved.getId());
+            return RegisterResponse.from(saved);
+        } catch (DataIntegrityViolationException e) {
+            throw new EmailAlreadyRegisteredException();
+        }
     }
 
     /**
@@ -90,6 +96,9 @@ public class AuthService {
         User user = userRepository.findByIdOrThrow(tokenEntity.getUserId());
         user.verifyEmail();
         userRepository.save(user);
+        if (!user.isActive()) {
+            throw new UserDeactivatedException();
+        }
         log.info("email_verified userId={}", user.getId());
         return generateTokenPair(user);
     }
@@ -161,10 +170,16 @@ public class AuthService {
         }
 
         if (refreshToken.isExpired()) {
+            // 期限切れトークンは即時削除して DB の肥大化を防ぐ
+            refreshTokenRepository.deleteByTokenHash(tokenHash);
             throw new RefreshTokenInvalidException();
         }
 
         User user = userRepository.findByIdOrThrow(refreshToken.getUserId());
+
+        if (!user.isActive()) {
+            throw new UserDeactivatedException();
+        }
 
         // Token Rotation: 旧トークンを失効済みにマークして新しいトークンペアを発行する
         // 物理削除せず revoked = true で保持することで次回の Reuse Detection を有効にする

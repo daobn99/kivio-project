@@ -10,6 +10,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -36,6 +38,9 @@ public class EmailVerificationService {
      * 平文のトークンはメール本文にのみ含め、ログや DB に記録しません。
      */
     public void createAndSendVerificationToken(User user) {
+        // 未使用の旧トークンを無効化して複数の有効トークンが同時に存在する状態を防ぐ
+        tokenRepository.deleteUnusedByUserId(user.getId());
+
         String rawToken = UUID.randomUUID().toString();
         String tokenHash = TokenHashUtils.sha256Hex(rawToken);
 
@@ -47,10 +52,22 @@ public class EmailVerificationService {
 
         tokenRepository.save(token);
 
-        // メール送信は既存トランザクションが完了する前に呼ばれる。
-        // 本番導入時は @TransactionalEventListener(AFTER_COMMIT) + 非同期送信に切り替えること
-        emailSender.sendVerificationEmail(user.getEmail(), rawToken);
-        log.info("email_verification_token_created userId={}", user.getId());
+        // トランザクションのコミット後にメールを送信する。
+        // コミット前に送信するとロールバック時にトークンが存在しないリンクが届く問題を防ぐ。
+        String email = user.getEmail();
+        UUID userId = user.getId();
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    emailSender.sendVerificationEmail(email, rawToken);
+                    log.info("email_verification_token_created userId={}", userId);
+                }
+            });
+        } else {
+            emailSender.sendVerificationEmail(email, rawToken);
+            log.info("email_verification_token_created userId={}", userId);
+        }
     }
 
     /**
