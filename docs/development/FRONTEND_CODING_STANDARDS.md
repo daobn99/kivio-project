@@ -35,39 +35,41 @@
 kivio-frontend/
 ├── src/
 │   ├── app/                        # Next.js App Router（ルーティング専用）
-│   │   ├── (auth)/                 # 認証系レイアウトグループ
+│   │   ├── (public)/               # 公開画面レイアウトグループ
+│   │   │   ├── layout.tsx
+│   │   │   └── page.tsx            # ホームページ /
+│   │   ├── (authenticated)/        # 認証済みユーザー向けレイアウトグループ
+│   │   │   ├── layout.tsx
+│   │   │   ├── cart/page.tsx
+│   │   │   ├── orders/[id]/page.tsx
+│   │   │   └── wishlist/page.tsx
+│   │   ├── (seller)/               # セラーダッシュボードレイアウトグループ
+│   │   │   ├── layout.tsx          # SellerSidebar を含む、セグメントスコープダーク対応
+│   │   │   ├── dashboard/page.tsx
+│   │   │   └── products/
+│   │   │       ├── page.tsx
+│   │   │       ├── new/page.tsx
+│   │   │       └── [id]/edit/page.tsx
+│   │   ├── (admin)/                # 管理者ダッシュボードレイアウトグループ
+│   │   │   ├── layout.tsx          # AdminHeader + AdminSidebar、セグメントスコープダーク対応
+│   │   │   ├── dashboard/page.tsx
+│   │   │   └── users/page.tsx
+│   │   ├── (auth)/                 # 認証系レイアウトグループ（ヘッダー・フッター非表示）
 │   │   │   ├── layout.tsx
 │   │   │   ├── login/page.tsx
 │   │   │   └── register/page.tsx
-│   │   ├── (buyer)/                # バイヤー系レイアウトグループ
-│   │   │   ├── layout.tsx
-│   │   │   ├── cart/page.tsx
-│   │   │   ├── checkout/page.tsx
-│   │   │   ├── orders/[id]/page.tsx
-│   │   │   └── wishlist/page.tsx
-│   │   ├── (seller)/               # セラー系レイアウトグループ
-│   │   │   ├── layout.tsx          # SellerSidebar を含む
-│   │   │   ├── seller/dashboard/page.tsx
-│   │   │   ├── seller/products/
-│   │   │   │   ├── page.tsx
-│   │   │   │   ├── new/page.tsx
-│   │   │   │   └── [id]/edit/page.tsx
-│   │   │   └── seller/orders/page.tsx
-│   │   ├── (admin)/                # 管理者系レイアウトグループ
-│   │   │   ├── layout.tsx
-│   │   │   ├── admin/users/page.tsx
-│   │   │   └── admin/seller-applications/page.tsx
 │   │   ├── products/[id]/page.tsx
 │   │   ├── shops/[id]/page.tsx
 │   │   ├── search/page.tsx
-│   │   ├── layout.tsx              # ルートレイアウト（ThemeProvider・Navbar・Footer）
-│   │   ├── page.tsx                # ホーム
+│   │   ├── layout.tsx              # ルートレイアウト（ThemeProvider・QueryProvider のみ）
 │   │   ├── loading.tsx
 │   │   ├── error.tsx
 │   │   ├── not-found.tsx
+│   │   ├── unauthorized.tsx        # 401 エラー画面（Next.js 16）
+│   │   ├── forbidden.tsx           # 403 エラー画面（Next.js 16）
 │   │   └── global-error.tsx
 │   ├── components/
-│   │   ├── layout/                 # Navbar, Footer, SellerSidebar
+│   │   ├── layout/                 # GlobalHeader, GlobalFooter, SellerSidebar, AdminHeader/Sidebar
 │   │   ├── ui/                     # shadcn/ui ラッパー + 共通 UI（EmptyState, ErrorFallback）
 │   │   ├── product/                # ProductCard, ProductGrid, ProductForm
 │   │   ├── order/                  # OrderCard, OrderSummary
@@ -1174,57 +1176,78 @@ const nextConfig = {
 
 ### 11.6 フォント最適化
 
-フォントは必ず `next/font` を使う。Google Fonts や `<link>` タグによる外部読み込みは **レイアウトシフトの原因になるため禁止**。
+フォントは必ず `next/font` を使う。Google Fonts や `<link>` タグによる外部読み込みは **レイアウトシフトの原因になるため禁止**。  
+見出しは `Noto Serif JP`、本文は `Noto Sans JP` を使い、CSS 変数 `--font-heading` / `--font-body` で制御する（MASTER.md §3 準拠）。
 
 ```tsx
 // src/app/layout.tsx
-import { Noto_Sans_JP, Inter } from 'next/font/google'
+import { Noto_Serif_JP, Noto_Sans_JP } from 'next/font/google'
 
-const notoSansJP = Noto_Sans_JP({
+const notoSerif = Noto_Serif_JP({
   subsets: ['latin'],
-  weight: ['400', '500', '700'],
-  variable: '--font-noto-sans-jp',
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-heading',
   display: 'swap',
+  preload: false,
 })
 
-const inter = Inter({
+const notoSans = Noto_Sans_JP({
   subsets: ['latin'],
-  variable: '--font-inter',
+  weight: ['300', '400', '500', '700'],
+  variable: '--font-body',
   display: 'swap',
+  preload: false,
 })
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ja" className={`${notoSansJP.variable} ${inter.variable}`}>
+    <html lang="ja" className={`${notoSerif.variable} ${notoSans.variable}`}>
       <body className="font-sans">{children}</body>
     </html>
   )
 }
 ```
 
-```ts
-// tailwind.config.ts
-theme: {
-  extend: {
-    fontFamily: {
-      sans: ['var(--font-noto-sans-jp)', 'var(--font-inter)', 'sans-serif'],
-    },
-  },
+`app/globals.css` の `@theme inline` で Tailwind トークンにマッピングする：
+
+```css
+/* app/globals.css */
+@theme inline {
+  --font-sans: var(--font-body);     /* 本文 */
+  --font-serif: var(--font-heading); /* 見出し */
 }
 ```
 
+使い分け：見出し（h1–h2、ページタイトル）は `font-serif`、本文・ラベル・ボタンは `font-sans` を明示する。
+
 ### 11.7 ダークモード
+
+公開画面（`/` `(public)/*`）はライトモード固定。Seller・Admin ダッシュボードはセグメントスコープダークモード対応の拡張性を保つ（Phase 3+）が、**Phase 2 では実装不要**。
+
+**ライトモード固定（現在）:**
 
 ```tsx
 // ✅ CSS 変数を使った条件分岐不要のスタイリング
 <div className="bg-background text-foreground border-border" />
-
-// ✅ ダークモード専用スタイルが必要な場合
-<div className="bg-white dark:bg-zinc-900" />
-
-// tailwind.config.ts: darkMode: ['class']
-// ThemeProvider の設定で next-themes を使用
 ```
+
+**セグメントスコープダークモード（Phase 3+ での拡張用）:**
+
+`globals.css` の `@custom-variant dark (&:is(.dark *))` により、`.dark` クラスを持つ祖先要素配下にダークテーマを適用できる。
+
+```tsx
+// src/app/(seller)/layout.tsx — 例（Phase 3+）
+export default function SellerLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="dark min-h-screen bg-background text-foreground">
+      <SellerSidebar />
+      <main>{children}</main>
+    </div>
+  )
+}
+```
+
+詳細は `design-system/pages/layout.md §1` を参照。
 
 ---
 

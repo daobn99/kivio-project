@@ -1,26 +1,28 @@
-import type { NextConfig } from "next";
+import type { NextConfig } from 'next'
 
-const API_BASE_URL = process.env.API_BASE_URL ?? "http://localhost:8080";
+const API_BASE_URL = process.env.API_BASE_URL ?? 'http://localhost:8080'
 
 const nextConfig: NextConfig = {
-  output: "standalone",
+  output: 'standalone',
   async rewrites() {
     return [
       {
-        source: "/api/v1/:path*",
+        source: '/api/v1/:path*',
         destination: `${API_BASE_URL}/api/v1/:path*`,
       },
-    ];
+    ]
   },
   images: {
+    dangerouslyAllowSVG: true,
+    contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
     remotePatterns: [
       {
-        protocol: "https",
-        hostname: "res.cloudinary.com",
-        pathname: "/**",
+        protocol: 'https',
+        hostname: 'res.cloudinary.com',
+        pathname: '/**',
       },
     ],
   },
-};
+}
 
-export default nextConfig;
+export default nextConfig
