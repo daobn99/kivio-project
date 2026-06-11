@@ -3,6 +3,8 @@ package io.kivio.domain.identity.domain;
 import io.kivio.common.entity.SoftDeletableEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -57,14 +59,16 @@ public class User extends SoftDeletableEntity {
     private String avatarUrl;
 
     /** ロール */
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     @Builder.Default
-    private String role = "ROLE_BUYER";
+    private UserRole role = UserRole.ROLE_BUYER;
 
     /** ステータス */
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     @Builder.Default
-    private String status = "ACTIVE";
+    private UserStatus status = UserStatus.ACTIVE;
 
     /** メール確認済みフラグ */
     @Column(name = "email_verified", nullable = false)
@@ -80,7 +84,7 @@ public class User extends SoftDeletableEntity {
     }
 
     public boolean isActive() {
-        return "ACTIVE".equals(status);
+        return status == UserStatus.ACTIVE;
     }
 
     public boolean hasPassword() {

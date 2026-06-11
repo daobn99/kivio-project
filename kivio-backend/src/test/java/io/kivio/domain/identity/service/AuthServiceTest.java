@@ -5,6 +5,7 @@ import io.kivio.config.jwt.JwtProvider;
 import io.kivio.domain.identity.domain.EmailVerificationToken;
 import io.kivio.domain.identity.domain.RefreshToken;
 import io.kivio.domain.identity.domain.User;
+import io.kivio.domain.identity.domain.UserStatus;
 import io.kivio.domain.identity.dto.request.CheckEmailRequest;
 import io.kivio.domain.identity.dto.request.GoogleLoginRequest;
 import io.kivio.domain.identity.dto.request.LoginRequest;
@@ -100,7 +101,7 @@ class AuthServiceTest {
     @Test
     void should_save_user_and_send_verification_email_when_register_succeeds() {
         UUID userId = UUID.randomUUID();
-        User saved = buildUser(userId, "new@example.com", "hashed", true, "ACTIVE");
+        User saved = buildUser(userId, "new@example.com", "hashed", true, UserStatus.ACTIVE);
         given(userRepository.existsByEmail("new@example.com")).willReturn(false);
         given(userRepository.saveAndFlush(any(User.class))).willReturn(saved);
 
@@ -131,7 +132,7 @@ class AuthServiceTest {
     void should_return_tokens_and_verify_user_when_token_is_valid() {
         UUID userId = UUID.randomUUID();
         EmailVerificationToken tokenEntity = buildVerificationToken(userId, false);
-        User user = buildUser(userId, "user@example.com", "hashed", false, "ACTIVE");
+        User user = buildUser(userId, "user@example.com", "hashed", false, UserStatus.ACTIVE);
         given(emailVerificationService.validateAndConsume("raw-token")).willReturn(tokenEntity);
         given(userRepository.findByIdOrThrow(userId)).willReturn(user);
         stubJwtPair();
@@ -171,7 +172,7 @@ class AuthServiceTest {
     @Test
     void should_return_tokens_when_login_with_valid_credentials() {
         UUID userId = UUID.randomUUID();
-        User user = buildUser(userId, "user@example.com", "hashed", true, "ACTIVE");
+        User user = buildUser(userId, "user@example.com", "hashed", true, UserStatus.ACTIVE);
         given(userRepository.findByEmail("user@example.com")).willReturn(Optional.of(user));
         given(passwordEncoder.matches("Password123!", "hashed")).willReturn(true);
         stubJwtPair();
@@ -185,7 +186,7 @@ class AuthServiceTest {
 
     @Test
     void should_throw_InvalidCredentialsException_when_password_does_not_match() {
-        User user = buildUser(UUID.randomUUID(), "user@example.com", "hashed", true, "ACTIVE");
+        User user = buildUser(UUID.randomUUID(), "user@example.com", "hashed", true, UserStatus.ACTIVE);
         given(userRepository.findByEmail("user@example.com")).willReturn(Optional.of(user));
         given(passwordEncoder.matches("wrong", "hashed")).willReturn(false);
 
@@ -206,7 +207,7 @@ class AuthServiceTest {
     @Test
     void should_throw_EmailNotVerifiedException_when_email_is_not_verified() {
         // emailVerified = false
-        User user = buildUser(UUID.randomUUID(), "user@example.com", "hashed", false, "ACTIVE");
+        User user = buildUser(UUID.randomUUID(), "user@example.com", "hashed", false, UserStatus.ACTIVE);
         given(userRepository.findByEmail("user@example.com")).willReturn(Optional.of(user));
         given(passwordEncoder.matches("Password123!", "hashed")).willReturn(true);
 
@@ -217,8 +218,8 @@ class AuthServiceTest {
 
     @Test
     void should_throw_UserDeactivatedException_when_account_is_deactivated() {
-        // status = SUSPENDED (非ACTIVE)
-        User user = buildUser(UUID.randomUUID(), "user@example.com", "hashed", true, "SUSPENDED");
+        // status = INACTIVE (非ACTIVE)
+        User user = buildUser(UUID.randomUUID(), "user@example.com", "hashed", true, UserStatus.INACTIVE);
         given(userRepository.findByEmail("user@example.com")).willReturn(Optional.of(user));
         given(passwordEncoder.matches("Password123!", "hashed")).willReturn(true);
 
@@ -235,7 +236,7 @@ class AuthServiceTest {
     void should_create_new_user_and_return_tokens_when_google_user_has_no_existing_account() {
         GoogleUserInfo info = new GoogleUserInfo("google-sub-001", "newgoogle@example.com");
         UUID newUserId = UUID.randomUUID();
-        User created = buildUser(newUserId, "newgoogle@example.com", null, true, "ACTIVE");
+        User created = buildUser(newUserId, "newgoogle@example.com", null, true, UserStatus.ACTIVE);
         given(googleTokenVerifier.verify("id-token")).willReturn(info);
         given(userRepository.findByGoogleId("google-sub-001")).willReturn(Optional.empty());
         given(userRepository.findByEmail("newgoogle@example.com")).willReturn(Optional.empty());
@@ -252,7 +253,7 @@ class AuthServiceTest {
     void should_link_google_id_to_existing_account_when_same_email_already_exists() {
         UUID userId = UUID.randomUUID();
         GoogleUserInfo info = new GoogleUserInfo("google-sub-002", "existing@example.com");
-        User existing = buildUser(userId, "existing@example.com", "hashed", true, "ACTIVE");
+        User existing = buildUser(userId, "existing@example.com", "hashed", true, UserStatus.ACTIVE);
         given(googleTokenVerifier.verify("id-token")).willReturn(info);
         given(userRepository.findByGoogleId("google-sub-002")).willReturn(Optional.empty());
         given(userRepository.findByEmail("existing@example.com")).willReturn(Optional.of(existing));
@@ -277,7 +278,7 @@ class AuthServiceTest {
     void should_throw_UserDeactivatedException_when_google_user_account_is_deactivated() {
         UUID userId = UUID.randomUUID();
         GoogleUserInfo info = new GoogleUserInfo("google-sub-003", "deactivated@example.com");
-        User deactivated = buildUser(userId, "deactivated@example.com", null, true, "SUSPENDED");
+        User deactivated = buildUser(userId, "deactivated@example.com", null, true, UserStatus.INACTIVE);
         given(googleTokenVerifier.verify("id-token")).willReturn(info);
         given(userRepository.findByGoogleId("google-sub-003")).willReturn(Optional.of(deactivated));
 
@@ -295,7 +296,7 @@ class AuthServiceTest {
         String rawToken = "valid-raw-refresh-token";
         String tokenHash = TokenHashUtils.sha256Hex(rawToken);
         UUID userId = UUID.randomUUID();
-        User user = buildUser(userId, "user@example.com", "hashed", true, "ACTIVE");
+        User user = buildUser(userId, "user@example.com", "hashed", true, UserStatus.ACTIVE);
         RefreshToken token = buildRefreshToken(userId, tokenHash, false, 3600L);
         given(refreshTokenRepository.findByTokenHash(tokenHash)).willReturn(Optional.of(token));
         given(userRepository.findByIdOrThrow(userId)).willReturn(user);
@@ -371,7 +372,7 @@ class AuthServiceTest {
     }
 
     private User buildUser(UUID id, String email, String passwordHash,
-                           boolean emailVerified, String status) {
+                           boolean emailVerified, UserStatus status) {
         return User.builder()
                 .id(id)
                 .email(email)

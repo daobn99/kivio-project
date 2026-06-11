@@ -24,7 +24,7 @@ public record RegisterResponse(
         return new RegisterResponse(
                 user.getId(),
                 user.getEmail(),
-                user.getRole(),
+                user.getRole().name(),
                 user.isEmailVerified(),
                 user.getCreatedAt()
         );

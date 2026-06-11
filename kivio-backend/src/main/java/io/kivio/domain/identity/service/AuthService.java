@@ -237,7 +237,7 @@ public class AuthService {
      * ユーザー情報からアクセストークンとリフレッシュトークンを発行します。
      */
     private AuthTokenResponse generateTokenPair(User user) {
-        String accessToken = jwtProvider.generateAccessToken(user.getId(), user.getRole());
+        String accessToken = jwtProvider.generateAccessToken(user.getId(), user.getRole().name());
         String rawRefreshToken = UUID.randomUUID().toString();
         String tokenHash = TokenHashUtils.sha256Hex(rawRefreshToken);
 
