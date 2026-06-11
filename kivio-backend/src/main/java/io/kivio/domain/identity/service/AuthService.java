@@ -1,33 +1,35 @@
 package io.kivio.domain.identity.service;
 
+import io.kivio.config.AuthProperties;
 import io.kivio.config.jwt.JwtProperties;
 import io.kivio.config.jwt.JwtProvider;
 import io.kivio.domain.audit.annotation.Auditable;
-import io.kivio.domain.identity.domain.EmailVerificationToken;
 import io.kivio.domain.identity.domain.RefreshToken;
 import io.kivio.domain.identity.domain.User;
 import io.kivio.domain.identity.dto.request.CheckEmailRequest;
+import io.kivio.domain.identity.dto.request.CompleteRegistrationRequest;
 import io.kivio.domain.identity.dto.request.GoogleLoginRequest;
 import io.kivio.domain.identity.dto.request.LoginRequest;
 import io.kivio.domain.identity.dto.request.LogoutRequest;
 import io.kivio.domain.identity.dto.request.RefreshRequest;
-import io.kivio.domain.identity.dto.request.RegisterRequest;
-import io.kivio.domain.identity.dto.request.VerifyEmailRequest;
+import io.kivio.domain.identity.dto.request.RequestOtpRequest;
+import io.kivio.domain.identity.dto.request.VerifyOtpRequest;
 import io.kivio.domain.identity.dto.response.AuthTokenResponse;
 import io.kivio.domain.identity.dto.response.CheckEmailResponse;
-import io.kivio.domain.identity.dto.response.RegisterResponse;
+import io.kivio.domain.identity.dto.response.RequestOtpResponse;
+import io.kivio.domain.identity.dto.response.VerifyOtpResponse;
 import io.kivio.domain.identity.exception.EmailAlreadyRegisteredException;
-import io.kivio.domain.identity.exception.EmailNotVerifiedException;
 import io.kivio.domain.identity.exception.InvalidCredentialsException;
 import io.kivio.domain.identity.exception.RefreshTokenInvalidException;
 import io.kivio.domain.identity.exception.UserDeactivatedException;
-import org.springframework.dao.DataIntegrityViolationException;
 import io.kivio.domain.identity.repository.RefreshTokenRepository;
 import io.kivio.domain.identity.repository.UserRepository;
+import io.kivio.infra.email.EmailSender;
 import io.kivio.infra.google.GoogleTokenVerifier;
 import io.kivio.infra.google.GoogleUserInfo;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,6 +40,9 @@ import java.util.UUID;
 
 /**
  * 認証サービスを表現します。
+ *
+ * <p>新規登録は OTP（メール認証コード）+ Redis 一時ストレージによる 3 ステップ方式です。
+ * {@code users} レコードはメール認証（OTP 検証）完了後の登録完了時にのみ作成します。
  */
 @Slf4j
 @Service
@@ -47,10 +52,13 @@ public class AuthService {
 
     private final UserRepository userRepository;
     private final RefreshTokenRepository refreshTokenRepository;
-    private final EmailVerificationService emailVerificationService;
+    private final OtpService otpService;
+    private final RegistrationSessionService registrationSessionService;
+    private final EmailSender emailSender;
     private final GoogleTokenVerifier googleTokenVerifier;
     private final JwtProvider jwtProvider;
     private final JwtProperties jwtProperties;
+    private final AuthProperties authProperties;
     private final PasswordEncoder passwordEncoder;
 
     /**
@@ -63,51 +71,72 @@ public class AuthService {
     }
 
     /**
-     * メールアドレスとパスワードでユーザーを登録します。
+     * 認証コード（OTP）を生成してメール送信します（登録ステップ1）。
+     *
+     * <p>この時点では {@code users} レコードは作成しません。OTP は Redis に TTL 付きで保存します。
      *
      * @throws EmailAlreadyRegisteredException 既にメールアドレスが登録されている場合
      */
-    @Auditable(action = "USER_REGISTERED", entityType = "USER")
-    public RegisterResponse register(RegisterRequest request) {
+    @Transactional(readOnly = true)
+    public RequestOtpResponse requestOtp(RequestOtpRequest request) {
         if (userRepository.existsByEmail(request.email())) {
             throw new EmailAlreadyRegisteredException();
         }
+
+        String otp = otpService.issue(request.email());
+        emailSender.sendRegistrationOtp(request.email(), otp);
+        log.info("registration_otp_requested");
+
+        return RequestOtpResponse.of(authProperties.otp().ttl().toSeconds());
+    }
+
+    /**
+     * 認証コード（OTP）を検証して登録セッション（registrationToken）を発行します（登録ステップ2）。
+     *
+     * <p>DB は参照しません（OTP・登録セッションは Redis のみ）。
+     */
+    @Transactional(readOnly = true)
+    public VerifyOtpResponse verifyOtp(VerifyOtpRequest request) {
+        otpService.verify(request.email(), request.otp());
+        String registrationToken = registrationSessionService.create(request.email());
+        log.info("registration_otp_verified");
+        return VerifyOtpResponse.of(
+                registrationToken, authProperties.registrationSession().ttl().toSeconds());
+    }
+
+    /**
+     * パスワードを設定してユーザーを作成し、自動ログイン用のトークンを発行します（登録ステップ3）。
+     *
+     * <p>登録セッションから認証済みメールアドレスを取得し、{@code users} を新規作成します。
+     *
+     * @throws io.kivio.domain.identity.exception.RegistrationSessionInvalidException 登録セッションが無効・期限切れ・使用済みの場合
+     * @throws EmailAlreadyRegisteredException 検証〜完了の間に同一メールが登録された場合
+     */
+    @Auditable(action = "USER_REGISTERED", entityType = "USER")
+    public AuthTokenResponse completeRegistration(CompleteRegistrationRequest request) {
+        String email = registrationSessionService.consume(request.registrationToken());
+
         User user = User.builder()
-                .email(request.email())
+                .email(email)
                 .passwordHash(passwordEncoder.encode(request.password()))
+                .displayName(request.displayName() == null ? "" : request.displayName())
                 .build();
         try {
             // saveAndFlush で即時フラッシュし、並行リクエストの一意制約違反をここで捕捉する
             User saved = userRepository.saveAndFlush(user);
-            emailVerificationService.createAndSendVerificationToken(saved);
             log.info("user_registered userId={}", saved.getId());
-            return RegisterResponse.from(saved);
+            return generateTokenPair(saved);
         } catch (DataIntegrityViolationException e) {
             throw new EmailAlreadyRegisteredException();
         }
     }
 
     /**
-     * メール確認トークンを検証してアクセストークンを発行します。
-     */
-    @Auditable(action = "USER_EMAIL_VERIFIED", entityType = "USER")
-    public AuthTokenResponse verifyEmail(VerifyEmailRequest request) {
-        EmailVerificationToken tokenEntity = emailVerificationService.validateAndConsume(request.token());
-        User user = userRepository.findByIdOrThrow(tokenEntity.getUserId());
-        user.verifyEmail();
-        userRepository.save(user);
-        if (!user.isActive()) {
-            throw new UserDeactivatedException();
-        }
-        log.info("email_verified userId={}", user.getId());
-        return generateTokenPair(user);
-    }
-
-    /**
      * メールアドレスとパスワードでログインします。
      *
+     * <p>{@code users} には認証済みユーザーのみが存在するため、メール確認状態のチェックは行いません。
+     *
      * @throws InvalidCredentialsException 認証情報が不正の場合（メール・パスワード不一致を区別しない）
-     * @throws EmailNotVerifiedException   メールアドレス未確認の場合
      * @throws UserDeactivatedException    アカウントが無効化されている場合
      */
     @Auditable(action = "USER_LOGGED_IN", entityType = "USER")
@@ -118,9 +147,6 @@ public class AuthService {
         // メール存在有無を攻撃者に漏らさないために、パスワード不一致も同じ例外を返す
         if (!user.hasPassword() || !passwordEncoder.matches(request.password(), user.getPasswordHash())) {
             throw new InvalidCredentialsException();
-        }
-        if (!user.isEmailVerified()) {
-            throw new EmailNotVerifiedException();
         }
         if (!user.isActive()) {
             throw new UserDeactivatedException();
@@ -214,22 +240,20 @@ public class AuthService {
         return userRepository.findByEmail(googleInfo.email())
                 .map(existingUser -> {
                     existingUser.linkGoogleId(googleInfo.subject());
-                    // Google がメールアドレスを確認済みのため、未確認ユーザーでも確認済みにする
-                    existingUser.verifyEmail();
                     return userRepository.save(existingUser);
                 });
     }
 
     /**
      * 同メールアドレスのユーザーがいない場合、新規にユーザーを作成して返します。
+     *
+     * <p>Google はメールアドレスを検証済みのため、確認フラグを持たずにそのまま作成します。
      */
     private User createGoogleUser(GoogleUserInfo googleInfo) {
         User newUser = User.builder()
                 .email(googleInfo.email())
                 .googleId(googleInfo.subject())
                 .build();
-        // Google はメールアドレスを検証済みのため、確認済みとして扱う
-        newUser.verifyEmail();
         return userRepository.save(newUser);
     }
 

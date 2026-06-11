@@ -39,6 +39,20 @@ spring:
       keepalive-time: 60000
       pool-name: KivioHikariPool
 
+  # Redis: 登録 OTP・登録セッションの TTL 一時ストレージ
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 2s
+      lettuce:
+        pool:
+          enabled: true
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+
   jpa:
     hibernate:
       # スキーマ管理は Flyway に任せる。起動時に DDL は変更しない
@@ -84,6 +98,16 @@ app:
     secret: ${JWT_SECRET}
     access-token-expiration: ${JWT_ACCESS_TOKEN_EXPIRATION:900}
     refresh-token-expiration: ${JWT_REFRESH_TOKEN_EXPIRATION:604800}
+  # 登録 OTP / 登録セッション設定。すべて Redis の TTL として適用される
+  auth:
+    otp:
+      length: ${AUTH_OTP_LENGTH:6}
+      ttl: ${AUTH_OTP_TTL:PT10M}                       # OTP 有効期限
+      max-attempts: ${AUTH_OTP_MAX_ATTEMPTS:5}         # 検証試行上限（超過で失効）
+      resend-cooldown: ${AUTH_OTP_RESEND_COOLDOWN:PT60S} # 再送信クールダウン
+      max-per-hour: ${AUTH_OTP_MAX_PER_HOUR:5}         # メール単位の 1 時間あたり送信上限
+    registration-session:
+      ttl: ${AUTH_REGISTRATION_SESSION_TTL:PT30M}      # registrationToken 有効期限
   cors:
     allowed-origins: ${ALLOWED_ORIGINS:http://localhost:3000}
   rate-limit:

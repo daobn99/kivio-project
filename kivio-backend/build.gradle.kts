@@ -30,6 +30,8 @@ dependencies {
 	// Spring Boot Starters
 	implementation("org.springframework.boot:spring-boot-starter-actuator")
 	implementation("org.springframework.boot:spring-boot-starter-data-jpa")
+	// Redis（登録 OTP・登録セッションの TTL 一時ストレージ）
+	implementation("org.springframework.boot:spring-boot-starter-data-redis")
 	implementation("org.springframework.boot:spring-boot-starter-security")
 	implementation("org.springframework.boot:spring-boot-starter-security-oauth2-client")
 	implementation("org.springframework.boot:spring-boot-starter-oauth2-resource-server")
@@ -72,6 +74,8 @@ dependencies {
 	// Testcontainers 2.x ではモジュール名が "testcontainers-" プレフィックス付きに変更
 	testImplementation("org.testcontainers:testcontainers-junit-jupiter")
 	testImplementation("org.testcontainers:testcontainers-postgresql")
+	// Redis は core の GenericContainer を使用（image 名 "redis" は Spring Boot の @ServiceConnection が認識する）
+	testImplementation("org.testcontainers:testcontainers")
 	testCompileOnly("org.projectlombok:lombok")
 	testAnnotationProcessor("org.projectlombok:lombok")
 	testRuntimeOnly("org.junit.platform:junit-platform-launcher")

@@ -1,30 +1,33 @@
 package io.kivio.domain.identity.controller;
 
 import io.kivio.domain.identity.dto.request.CheckEmailRequest;
+import io.kivio.domain.identity.dto.request.CompleteRegistrationRequest;
 import io.kivio.domain.identity.dto.request.GoogleLoginRequest;
 import io.kivio.domain.identity.dto.request.LoginRequest;
 import io.kivio.domain.identity.dto.request.LogoutRequest;
 import io.kivio.domain.identity.dto.request.RefreshRequest;
-import io.kivio.domain.identity.dto.request.RegisterRequest;
-import io.kivio.domain.identity.dto.request.VerifyEmailRequest;
+import io.kivio.domain.identity.dto.request.RequestOtpRequest;
+import io.kivio.domain.identity.dto.request.VerifyOtpRequest;
 import io.kivio.domain.identity.dto.response.AuthTokenResponse;
 import io.kivio.domain.identity.dto.response.CheckEmailResponse;
-import io.kivio.domain.identity.dto.response.RegisterResponse;
+import io.kivio.domain.identity.dto.response.RequestOtpResponse;
+import io.kivio.domain.identity.dto.response.VerifyOtpResponse;
 import io.kivio.domain.identity.service.AuthService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.net.URI;
-
 /**
  * 認証 API を表現します。
+ *
+ * <p>新規登録は OTP（メール認証コード）+ Redis 一時ストレージによる 3 ステップ方式です。
  */
 @RestController
 @RequestMapping("/api/v1/auth")
@@ -44,23 +47,31 @@ public class AuthController {
     }
 
     /**
-     * メールアドレスとパスワードでユーザーを登録します。
+     * 認証コード（OTP）をメール送信します（登録ステップ1）。
      */
-    @PostMapping("/register")
-    @Operation(summary = "メールアドレス・パスワード登録")
-    public ResponseEntity<RegisterResponse> register(@Valid @RequestBody RegisterRequest request) {
-        RegisterResponse response = authService.register(request);
-        URI location = URI.create("/api/v1/users/" + response.id());
-        return ResponseEntity.created(location).body(response);
+    @PostMapping("/register/request-otp")
+    @Operation(summary = "認証コード(OTP)送信")
+    public ResponseEntity<RequestOtpResponse> requestOtp(@Valid @RequestBody RequestOtpRequest request) {
+        return ResponseEntity.accepted().body(authService.requestOtp(request));
     }
 
     /**
-     * メールアドレス確認トークンを検証し、ユーザーを有効化します。
+     * 認証コード（OTP）を検証して登録セッションを発行します（登録ステップ2）。
      */
-    @PostMapping("/verify-email")
-    @Operation(summary = "メールアドレス確認")
-    public ResponseEntity<AuthTokenResponse> verifyEmail(@Valid @RequestBody VerifyEmailRequest request) {
-        return ResponseEntity.ok(authService.verifyEmail(request));
+    @PostMapping("/register/verify-otp")
+    @Operation(summary = "認証コード(OTP)検証")
+    public ResponseEntity<VerifyOtpResponse> verifyOtp(@Valid @RequestBody VerifyOtpRequest request) {
+        return ResponseEntity.ok(authService.verifyOtp(request));
+    }
+
+    /**
+     * パスワードを設定して登録を完了し、自動ログイン用のトークンを発行します（登録ステップ3）。
+     */
+    @PostMapping("/register/complete")
+    @Operation(summary = "パスワード設定・登録完了・自動ログイン")
+    public ResponseEntity<AuthTokenResponse> completeRegistration(
+            @Valid @RequestBody CompleteRegistrationRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(authService.completeRegistration(request));
     }
 
     /**

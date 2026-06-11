@@ -1,31 +1,35 @@
 package io.kivio.domain.identity.service;
 
+import io.kivio.config.AuthProperties;
 import io.kivio.config.jwt.JwtProperties;
 import io.kivio.config.jwt.JwtProvider;
-import io.kivio.domain.identity.domain.EmailVerificationToken;
 import io.kivio.domain.identity.domain.RefreshToken;
 import io.kivio.domain.identity.domain.User;
 import io.kivio.domain.identity.domain.UserStatus;
 import io.kivio.domain.identity.dto.request.CheckEmailRequest;
+import io.kivio.domain.identity.dto.request.CompleteRegistrationRequest;
 import io.kivio.domain.identity.dto.request.GoogleLoginRequest;
 import io.kivio.domain.identity.dto.request.LoginRequest;
 import io.kivio.domain.identity.dto.request.LogoutRequest;
 import io.kivio.domain.identity.dto.request.RefreshRequest;
-import io.kivio.domain.identity.dto.request.RegisterRequest;
-import io.kivio.domain.identity.dto.request.VerifyEmailRequest;
+import io.kivio.domain.identity.dto.request.RequestOtpRequest;
+import io.kivio.domain.identity.dto.request.VerifyOtpRequest;
 import io.kivio.domain.identity.dto.response.AuthTokenResponse;
 import io.kivio.domain.identity.dto.response.CheckEmailResponse;
-import io.kivio.domain.identity.dto.response.RegisterResponse;
+import io.kivio.domain.identity.dto.response.RequestOtpResponse;
+import io.kivio.domain.identity.dto.response.VerifyOtpResponse;
 import io.kivio.domain.identity.exception.EmailAlreadyRegisteredException;
-import io.kivio.domain.identity.exception.EmailNotVerifiedException;
-import io.kivio.domain.identity.exception.EmailVerificationTokenExpiredException;
-import io.kivio.domain.identity.exception.EmailVerificationTokenInvalidException;
 import io.kivio.domain.identity.exception.GoogleTokenInvalidException;
 import io.kivio.domain.identity.exception.InvalidCredentialsException;
+import io.kivio.domain.identity.exception.OtpExpiredException;
+import io.kivio.domain.identity.exception.OtpInvalidException;
+import io.kivio.domain.identity.exception.OtpMaxAttemptsExceededException;
 import io.kivio.domain.identity.exception.RefreshTokenInvalidException;
+import io.kivio.domain.identity.exception.RegistrationSessionInvalidException;
 import io.kivio.domain.identity.exception.UserDeactivatedException;
 import io.kivio.domain.identity.repository.RefreshTokenRepository;
 import io.kivio.domain.identity.repository.UserRepository;
+import io.kivio.infra.email.EmailSender;
 import io.kivio.infra.google.GoogleTokenVerifier;
 import io.kivio.infra.google.GoogleUserInfo;
 import org.junit.jupiter.api.BeforeEach;
@@ -33,8 +37,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
@@ -46,28 +52,35 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.never;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.BDDMockito.willThrow;
 
 @ExtendWith(MockitoExtension.class)
 class AuthServiceTest {
 
     @Mock private UserRepository userRepository;
     @Mock private RefreshTokenRepository refreshTokenRepository;
-    @Mock private EmailVerificationService emailVerificationService;
+    @Mock private OtpService otpService;
+    @Mock private RegistrationSessionService registrationSessionService;
+    @Mock private EmailSender emailSender;
     @Mock private GoogleTokenVerifier googleTokenVerifier;
     @Mock private JwtProvider jwtProvider;
     @Mock private PasswordEncoder passwordEncoder;
 
-    // JwtProperties はレコードのためリアルインスタンスを使用する
+    // レコードはモック不可のためリアルインスタンスを使用する
     private static final JwtProperties JWT_PROPERTIES = new JwtProperties(
             "dGVzdC1vbmx5LXNlY3JldC1yZXBsYWNlLWluLXByb2QtIQ==", 900L, 604800L);
+    private static final AuthProperties AUTH_PROPERTIES = new AuthProperties(
+            new AuthProperties.Otp(6, Duration.ofMinutes(10), 5, Duration.ofSeconds(60), 5),
+            new AuthProperties.RegistrationSession(Duration.ofMinutes(30)));
 
     private AuthService authService;
 
     @BeforeEach
     void setUp() {
         authService = new AuthService(
-                userRepository, refreshTokenRepository, emailVerificationService,
-                googleTokenVerifier, jwtProvider, JWT_PROPERTIES, passwordEncoder);
+                userRepository, refreshTokenRepository, otpService, registrationSessionService,
+                emailSender, googleTokenVerifier, jwtProvider, JWT_PROPERTIES, AUTH_PROPERTIES,
+                passwordEncoder);
     }
 
     // ============================================================
@@ -95,74 +108,121 @@ class AuthServiceTest {
     }
 
     // ============================================================
-    // register
+    // requestOtp（登録ステップ1）
     // ============================================================
 
     @Test
-    void should_save_user_and_send_verification_email_when_register_succeeds() {
-        UUID userId = UUID.randomUUID();
-        User saved = buildUser(userId, "new@example.com", "hashed", true, UserStatus.ACTIVE);
+    void should_issue_otp_and_send_email_when_request_otp_succeeds() {
         given(userRepository.existsByEmail("new@example.com")).willReturn(false);
-        given(userRepository.saveAndFlush(any(User.class))).willReturn(saved);
+        given(otpService.issue("new@example.com")).willReturn("428170");
 
-        RegisterResponse response = authService.register(
-                new RegisterRequest("new@example.com", "Password123!", "Password123!"));
+        RequestOtpResponse response = authService.requestOtp(
+                new RequestOtpRequest("new@example.com"));
 
-        assertThat(response.email()).isEqualTo("new@example.com");
-        then(passwordEncoder).should().encode("Password123!");
-        then(emailVerificationService).should().createAndSendVerificationToken(saved);
+        assertThat(response.expiresInSeconds()).isEqualTo(600);
+        then(otpService).should().issue("new@example.com");
+        then(emailSender).should().sendRegistrationOtp("new@example.com", "428170");
     }
 
     @Test
-    void should_throw_EmailAlreadyRegisteredException_when_email_is_duplicate() {
+    void should_throw_EmailAlreadyRegisteredException_when_request_otp_for_duplicate_email() {
         given(userRepository.existsByEmail("dup@example.com")).willReturn(true);
 
-        assertThatThrownBy(() -> authService.register(
-                new RegisterRequest("dup@example.com", "Password123!", "Password123!")))
+        assertThatThrownBy(() -> authService.requestOtp(new RequestOtpRequest("dup@example.com")))
                 .isInstanceOf(EmailAlreadyRegisteredException.class);
 
-        then(userRepository).should(never()).save(any());
+        then(otpService).should(never()).issue(anyString());
+        then(emailSender).should(never()).sendRegistrationOtp(anyString(), anyString());
     }
 
     // ============================================================
-    // verifyEmail
+    // verifyOtp（登録ステップ2）
     // ============================================================
 
     @Test
-    void should_return_tokens_and_verify_user_when_token_is_valid() {
+    void should_return_registration_token_when_otp_is_valid() {
+        given(registrationSessionService.create("user@example.com")).willReturn("reg-token-uuid");
+
+        VerifyOtpResponse response = authService.verifyOtp(
+                new VerifyOtpRequest("user@example.com", "428170"));
+
+        assertThat(response.registrationToken()).isEqualTo("reg-token-uuid");
+        assertThat(response.expiresInSeconds()).isEqualTo(1800);
+        then(otpService).should().verify("user@example.com", "428170");
+    }
+
+    @Test
+    void should_propagate_OtpInvalidException_when_otp_does_not_match() {
+        willThrow(new OtpInvalidException()).given(otpService).verify(anyString(), anyString());
+
+        assertThatThrownBy(() -> authService.verifyOtp(
+                new VerifyOtpRequest("user@example.com", "000000")))
+                .isInstanceOf(OtpInvalidException.class);
+
+        then(registrationSessionService).should(never()).create(anyString());
+    }
+
+    @Test
+    void should_propagate_OtpExpiredException_when_otp_is_expired() {
+        willThrow(new OtpExpiredException()).given(otpService).verify(anyString(), anyString());
+
+        assertThatThrownBy(() -> authService.verifyOtp(
+                new VerifyOtpRequest("user@example.com", "428170")))
+                .isInstanceOf(OtpExpiredException.class);
+    }
+
+    @Test
+    void should_propagate_OtpMaxAttemptsExceededException_when_attempts_exhausted() {
+        willThrow(new OtpMaxAttemptsExceededException()).given(otpService).verify(anyString(), anyString());
+
+        assertThatThrownBy(() -> authService.verifyOtp(
+                new VerifyOtpRequest("user@example.com", "428170")))
+                .isInstanceOf(OtpMaxAttemptsExceededException.class);
+    }
+
+    // ============================================================
+    // completeRegistration（登録ステップ3）
+    // ============================================================
+
+    @Test
+    void should_create_user_and_return_tokens_when_complete_registration_succeeds() {
         UUID userId = UUID.randomUUID();
-        EmailVerificationToken tokenEntity = buildVerificationToken(userId, false);
-        User user = buildUser(userId, "user@example.com", "hashed", false, UserStatus.ACTIVE);
-        given(emailVerificationService.validateAndConsume("raw-token")).willReturn(tokenEntity);
-        given(userRepository.findByIdOrThrow(userId)).willReturn(user);
+        User saved = buildUser(userId, "new@example.com", "hashed", UserStatus.ACTIVE);
+        given(registrationSessionService.consume("reg-token")).willReturn("new@example.com");
+        given(passwordEncoder.encode("Password123!")).willReturn("hashed");
+        given(userRepository.saveAndFlush(any(User.class))).willReturn(saved);
         stubJwtPair();
 
-        AuthTokenResponse response = authService.verifyEmail(
-                new VerifyEmailRequest("raw-token"));
+        AuthTokenResponse response = authService.completeRegistration(
+                new CompleteRegistrationRequest("reg-token", "Password123!", "Password123!", "Alice"));
 
         assertThat(response.accessToken()).isEqualTo("test-access-token");
         assertThat(response.refreshToken()).isNotBlank();
-        then(userRepository).should().save(user);
+        then(passwordEncoder).should().encode("Password123!");
     }
 
     @Test
-    void should_propagate_EmailVerificationTokenInvalidException_when_token_is_not_found() {
-        given(emailVerificationService.validateAndConsume(any()))
-                .willThrow(EmailVerificationTokenInvalidException.class);
+    void should_propagate_RegistrationSessionInvalidException_when_token_is_invalid() {
+        willThrow(new RegistrationSessionInvalidException())
+                .given(registrationSessionService).consume(anyString());
 
-        assertThatThrownBy(() -> authService.verifyEmail(
-                new VerifyEmailRequest("bad-token")))
-                .isInstanceOf(EmailVerificationTokenInvalidException.class);
+        assertThatThrownBy(() -> authService.completeRegistration(
+                new CompleteRegistrationRequest("bad-token", "Password123!", "Password123!", "Alice")))
+                .isInstanceOf(RegistrationSessionInvalidException.class);
+
+        then(userRepository).should(never()).saveAndFlush(any());
     }
 
     @Test
-    void should_propagate_EmailVerificationTokenExpiredException_when_token_is_expired() {
-        given(emailVerificationService.validateAndConsume(any()))
-                .willThrow(EmailVerificationTokenExpiredException.class);
+    void should_throw_EmailAlreadyRegisteredException_when_unique_violation_on_complete() {
+        given(registrationSessionService.consume("reg-token")).willReturn("dup@example.com");
+        given(passwordEncoder.encode(anyString())).willReturn("hashed");
+        given(userRepository.saveAndFlush(any(User.class)))
+                .willThrow(new DataIntegrityViolationException("unique"));
 
-        assertThatThrownBy(() -> authService.verifyEmail(
-                new VerifyEmailRequest("expired-token")))
-                .isInstanceOf(EmailVerificationTokenExpiredException.class);
+        assertThatThrownBy(() -> authService.completeRegistration(
+                new CompleteRegistrationRequest("reg-token", "Password123!", "Password123!", "Alice")))
+                .isInstanceOf(EmailAlreadyRegisteredException.class);
     }
 
     // ============================================================
@@ -172,7 +232,7 @@ class AuthServiceTest {
     @Test
     void should_return_tokens_when_login_with_valid_credentials() {
         UUID userId = UUID.randomUUID();
-        User user = buildUser(userId, "user@example.com", "hashed", true, UserStatus.ACTIVE);
+        User user = buildUser(userId, "user@example.com", "hashed", UserStatus.ACTIVE);
         given(userRepository.findByEmail("user@example.com")).willReturn(Optional.of(user));
         given(passwordEncoder.matches("Password123!", "hashed")).willReturn(true);
         stubJwtPair();
@@ -186,7 +246,7 @@ class AuthServiceTest {
 
     @Test
     void should_throw_InvalidCredentialsException_when_password_does_not_match() {
-        User user = buildUser(UUID.randomUUID(), "user@example.com", "hashed", true, UserStatus.ACTIVE);
+        User user = buildUser(UUID.randomUUID(), "user@example.com", "hashed", UserStatus.ACTIVE);
         given(userRepository.findByEmail("user@example.com")).willReturn(Optional.of(user));
         given(passwordEncoder.matches("wrong", "hashed")).willReturn(false);
 
@@ -205,21 +265,8 @@ class AuthServiceTest {
     }
 
     @Test
-    void should_throw_EmailNotVerifiedException_when_email_is_not_verified() {
-        // emailVerified = false
-        User user = buildUser(UUID.randomUUID(), "user@example.com", "hashed", false, UserStatus.ACTIVE);
-        given(userRepository.findByEmail("user@example.com")).willReturn(Optional.of(user));
-        given(passwordEncoder.matches("Password123!", "hashed")).willReturn(true);
-
-        assertThatThrownBy(() -> authService.login(
-                new LoginRequest("user@example.com", "Password123!")))
-                .isInstanceOf(EmailNotVerifiedException.class);
-    }
-
-    @Test
     void should_throw_UserDeactivatedException_when_account_is_deactivated() {
-        // status = INACTIVE (非ACTIVE)
-        User user = buildUser(UUID.randomUUID(), "user@example.com", "hashed", true, UserStatus.INACTIVE);
+        User user = buildUser(UUID.randomUUID(), "user@example.com", "hashed", UserStatus.INACTIVE);
         given(userRepository.findByEmail("user@example.com")).willReturn(Optional.of(user));
         given(passwordEncoder.matches("Password123!", "hashed")).willReturn(true);
 
@@ -236,7 +283,7 @@ class AuthServiceTest {
     void should_create_new_user_and_return_tokens_when_google_user_has_no_existing_account() {
         GoogleUserInfo info = new GoogleUserInfo("google-sub-001", "newgoogle@example.com");
         UUID newUserId = UUID.randomUUID();
-        User created = buildUser(newUserId, "newgoogle@example.com", null, true, UserStatus.ACTIVE);
+        User created = buildUser(newUserId, "newgoogle@example.com", null, UserStatus.ACTIVE);
         given(googleTokenVerifier.verify("id-token")).willReturn(info);
         given(userRepository.findByGoogleId("google-sub-001")).willReturn(Optional.empty());
         given(userRepository.findByEmail("newgoogle@example.com")).willReturn(Optional.empty());
@@ -253,7 +300,7 @@ class AuthServiceTest {
     void should_link_google_id_to_existing_account_when_same_email_already_exists() {
         UUID userId = UUID.randomUUID();
         GoogleUserInfo info = new GoogleUserInfo("google-sub-002", "existing@example.com");
-        User existing = buildUser(userId, "existing@example.com", "hashed", true, UserStatus.ACTIVE);
+        User existing = buildUser(userId, "existing@example.com", "hashed", UserStatus.ACTIVE);
         given(googleTokenVerifier.verify("id-token")).willReturn(info);
         given(userRepository.findByGoogleId("google-sub-002")).willReturn(Optional.empty());
         given(userRepository.findByEmail("existing@example.com")).willReturn(Optional.of(existing));
@@ -278,7 +325,7 @@ class AuthServiceTest {
     void should_throw_UserDeactivatedException_when_google_user_account_is_deactivated() {
         UUID userId = UUID.randomUUID();
         GoogleUserInfo info = new GoogleUserInfo("google-sub-003", "deactivated@example.com");
-        User deactivated = buildUser(userId, "deactivated@example.com", null, true, UserStatus.INACTIVE);
+        User deactivated = buildUser(userId, "deactivated@example.com", null, UserStatus.INACTIVE);
         given(googleTokenVerifier.verify("id-token")).willReturn(info);
         given(userRepository.findByGoogleId("google-sub-003")).willReturn(Optional.of(deactivated));
 
@@ -296,7 +343,7 @@ class AuthServiceTest {
         String rawToken = "valid-raw-refresh-token";
         String tokenHash = TokenHashUtils.sha256Hex(rawToken);
         UUID userId = UUID.randomUUID();
-        User user = buildUser(userId, "user@example.com", "hashed", true, UserStatus.ACTIVE);
+        User user = buildUser(userId, "user@example.com", "hashed", UserStatus.ACTIVE);
         RefreshToken token = buildRefreshToken(userId, tokenHash, false, 3600L);
         given(refreshTokenRepository.findByTokenHash(tokenHash)).willReturn(Optional.of(token));
         given(userRepository.findByIdOrThrow(userId)).willReturn(user);
@@ -371,24 +418,12 @@ class AuthServiceTest {
                 .willReturn("test-access-token");
     }
 
-    private User buildUser(UUID id, String email, String passwordHash,
-                           boolean emailVerified, UserStatus status) {
+    private User buildUser(UUID id, String email, String passwordHash, UserStatus status) {
         return User.builder()
                 .id(id)
                 .email(email)
                 .passwordHash(passwordHash)
-                .emailVerified(emailVerified)
                 .status(status)
-                .build();
-    }
-
-    private EmailVerificationToken buildVerificationToken(UUID userId, boolean expired) {
-        return EmailVerificationToken.builder()
-                .userId(userId)
-                .tokenHash("token-hash")
-                .expiresAt(expired
-                        ? Instant.now().minusSeconds(3600)
-                        : Instant.now().plusSeconds(3600))
                 .build();
     }
 

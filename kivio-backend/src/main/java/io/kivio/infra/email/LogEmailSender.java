@@ -13,8 +13,8 @@ import org.springframework.stereotype.Component;
 public class LogEmailSender implements EmailSender {
 
     @Override
-    public void sendVerificationEmail(String to, String rawToken) {
-        // 本番では Resend API を呼び出す。開発中はトークンをログに出力して代替する
-        log.info("DEV_VERIFICATION_EMAIL to={} token={}", to, rawToken);
+    public void sendRegistrationOtp(String to, String otpCode) {
+        // 本番では Resend API を呼び出す。開発中は OTP をログに出力して代替する
+        log.info("DEV_REGISTRATION_OTP to={} otp={}", to, otpCode);
     }
 }

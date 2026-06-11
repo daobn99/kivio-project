@@ -70,15 +70,6 @@ public class User extends SoftDeletableEntity {
     @Builder.Default
     private UserStatus status = UserStatus.ACTIVE;
 
-    /** メール確認済みフラグ */
-    @Column(name = "email_verified", nullable = false)
-    @Builder.Default
-    private boolean emailVerified = false;
-
-    public void verifyEmail() {
-        this.emailVerified = true;
-    }
-
     public void linkGoogleId(String googleId) {
         this.googleId = googleId;
     }

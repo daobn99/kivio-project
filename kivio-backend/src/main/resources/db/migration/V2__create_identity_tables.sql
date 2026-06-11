@@ -7,7 +7,7 @@ CREATE TABLE users (
   avatar_url       TEXT,
   role             VARCHAR(20)  NOT NULL DEFAULT 'ROLE_BUYER',
   status           VARCHAR(20)  NOT NULL DEFAULT 'ACTIVE',
-  email_verified   BOOLEAN      NOT NULL DEFAULT FALSE,
+  -- メール認証は登録時（OTP）に完了済みのため email_verified 列は持たない
   created_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
   updated_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
   deleted_at       TIMESTAMPTZ,

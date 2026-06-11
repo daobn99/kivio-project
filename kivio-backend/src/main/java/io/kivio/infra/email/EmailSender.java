@@ -6,10 +6,10 @@ package io.kivio.infra.email;
 public interface EmailSender {
 
     /**
-     * メールアドレス確認メールを送信します。
+     * 登録時の認証コード（OTP）メールを送信します。
      *
-     * @param to       送信先メールアドレス
-     * @param rawToken 平文の確認トークン（メール本文に埋め込む）
+     * @param to      送信先メールアドレス
+     * @param otpCode 平文の認証コード（メール本文に記載する。ログ・DB には保存しない）
      */
-    void sendVerificationEmail(String to, String rawToken);
+    void sendRegistrationOtp(String to, String otpCode);
 }
