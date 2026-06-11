@@ -91,26 +91,27 @@ CREATE EXTENSION IF NOT EXISTS pg_trgm;
 |---|---|---|---|---|
 | 1 | `users` | ユーザー | identity | `deleted_at` |
 | 2 | `refresh_tokens` | リフレッシュトークン | identity | - |
-| 3 | `email_verification_tokens` | メール認証トークン | identity | - |
-| 4 | `seller_applications` | セラー申請 | identity | - |
-| 5 | `shops` | ショップ | catalog | `deleted_at` |
-| 6 | `shop_shipping_policies` | ショップ配送ポリシー | catalog | - |
-| 7 | `categories` | カテゴリー | catalog | `deleted_at` |
-| 8 | `products` | 商品 | catalog | `status='DELETED'` |
-| 9 | `product_images` | 商品画像 | catalog | - |
-| 10 | `addresses` | 配送先住所 | order | - |
-| 11 | `carts` | カート | order | - |
-| 12 | `cart_items` | カート明細 | order | - |
-| 13 | `orders` | 注文 | order | 削除不可 |
-| 14 | `order_items` | 注文明細 | order | 削除不可 |
-| 15 | `payments` | 決済 | order | 削除不可 |
-| 16 | `reviews` | レビュー | review | - |
-| 17 | `chat_rooms` | チャットルーム | messaging | - |
-| 18 | `chat_messages` | チャットメッセージ | messaging | - |
-| 19 | `notifications` | 通知 | notification | `expires_at` |
-| 20 | `wishlists` | お気に入り | review | - |
-| 21 | `platform_configs` | プラットフォーム設定 | platform | - |
-| 22 | `audit_logs` | 監査ログ | audit | 削除禁止（期限後DROP） |
+| 3 | `seller_applications` | セラー申請 | identity | - |
+| 4 | `shops` | ショップ | catalog | `deleted_at` |
+| 5 | `shop_shipping_policies` | ショップ配送ポリシー | catalog | - |
+| 6 | `categories` | カテゴリー | catalog | `deleted_at` |
+| 7 | `products` | 商品 | catalog | `status='DELETED'` |
+| 8 | `product_images` | 商品画像 | catalog | - |
+| 9 | `addresses` | 配送先住所 | order | - |
+| 10 | `carts` | カート | order | - |
+| 11 | `cart_items` | カート明細 | order | - |
+| 12 | `orders` | 注文 | order | 削除不可 |
+| 13 | `order_items` | 注文明細 | order | 削除不可 |
+| 14 | `payments` | 決済 | order | 削除不可 |
+| 15 | `reviews` | レビュー | review | - |
+| 16 | `chat_rooms` | チャットルーム | messaging | - |
+| 17 | `chat_messages` | チャットメッセージ | messaging | - |
+| 18 | `notifications` | 通知 | notification | `expires_at` |
+| 19 | `wishlists` | お気に入り | review | - |
+| 20 | `platform_configs` | プラットフォーム設定 | platform | - |
+| 21 | `audit_logs` | 監査ログ | audit | 削除禁止（期限後DROP） |
+
+> メール認証コード（OTP）・登録セッションは Redis に一時保存し、DB テーブルを持たない（§ 3.3）。
 
 ---
 
@@ -132,7 +133,6 @@ CREATE TABLE users (
                                                           -- ROLE_BUYER | ROLE_SELLER | ROLE_ADMIN
   status           VARCHAR(20)  NOT NULL DEFAULT 'ACTIVE',
                                                           -- ACTIVE | INACTIVE
-  email_verified   BOOLEAN      NOT NULL DEFAULT FALSE,
   created_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
   updated_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
   deleted_at       TIMESTAMPTZ,                           -- NULL: 有効, NOT NULL: soft delete済み
@@ -150,6 +150,7 @@ COMMENT ON COLUMN users.deleted_at IS 'Soft delete タイムスタンプ。NULL=
 ```
 
 **業務ルール：**
+- `users` レコードは**メール認証（OTP）完了後にのみ作成**する。未認証ユーザーが `users` に存在しないため `email_verified` 列は持たない（メール登録ユーザーは OTP 検証済み、Google OAuth ユーザーは Google 側で検証済み）。OTP・登録セッションは Redis に一時保存する（[ADR-006](../../adr/ADR-006-email-otp-redis.md)）
 - `email` と `google_id` の両方がある場合はアカウント統合済みユーザー
 - `password_hash` と `google_id` が両方 NULL になることはない（アプリ側で保証）
 - `deleted_at IS NOT NULL` のユーザーは `@SQLRestriction` で通常クエリから自動除外
@@ -179,32 +180,16 @@ COMMENT ON COLUMN refresh_tokens.token_hash IS 'トークンのSHA-256ハッシ�
 
 ---
 
-### 3.3 email_verification_tokens（メール認証トークン）
+### 3.3 メール認証コード（OTP）— Redis 一時ストレージ（DB テーブルなし）
 
-```sql
-CREATE TABLE email_verification_tokens (
-  id           UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id      UUID         NOT NULL REFERENCES users(id),
-  token_hash   VARCHAR(255) NOT NULL,   -- SHA-256ハッシュ（平文は保持しない）
-  expires_at   TIMESTAMPTZ  NOT NULL,
-  used_at      TIMESTAMPTZ,             -- NULL: 未使用, NOT NULL: 使用済み
-  created_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+メールアドレス確認用の認証コード（OTP）と登録セッションは **DB に永続化せず Redis に TTL 付きで一時保存**する。未認証ユーザーの仮レコードを `users` に残さないための設計（[ADR-006](../../adr/ADR-006-email-otp-redis.md)）。TTL により期限切れデータは自動消滅するため、クリーンアップバッチは不要。
 
-  CONSTRAINT email_verification_tokens_token_hash_unique UNIQUE (token_hash)
-);
+| キー | 値 | TTL | 用途 |
+|---|---|---|---|
+| `reg:otp:{email}` | `{otpHash: SHA-256(otp), attempts: int}` | 10 分 | OTP 検証。試行 5 回超過で失効 |
+| `reg:session:{registrationToken}` | `{email}` | 30 分 | OTP 検証済みメールの登録セッション |
 
-COMMENT ON TABLE  email_verification_tokens IS 'メールアドレス確認トークン管理。有効期限24時間。一度使用すると used_at が設定され再利用不可。';
-COMMENT ON COLUMN email_verification_tokens.token_hash IS 'トークンのSHA-256ハッシュ値。平文トークンはDBに保存しない。';
-COMMENT ON COLUMN email_verification_tokens.used_at IS 'トークン使用日時。NULL=未使用。NOT NULL=使用済み（再利用不可）。';
-```
-
-**インデックス：**
-```sql
-CREATE INDEX idx_email_verification_tokens_user_id    ON email_verification_tokens (user_id);
-CREATE INDEX idx_email_verification_tokens_token_hash ON email_verification_tokens (token_hash);
-```
-
-**保持ポリシー：** 有効期限切れ（`expires_at < NOW()`）または使用済み（`used_at IS NOT NULL`）は30日後に物理削除（バッチ）
+> OTP 平文・パスワードは Redis に保存しない（OTP は SHA-256 ハッシュのみ）。`registrationToken` は不透明な UUID v4。
 
 ### 3.4 seller_applications（セラー申請）
 

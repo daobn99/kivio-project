@@ -144,7 +144,7 @@ export type NotificationType = (typeof NotificationType)[keyof typeof Notificati
 ### 2.2 認証型
 
 ```typescript
-// POST /auth/login, /auth/google, /auth/verify-email のレスポンス
+// POST /auth/login, /auth/google, /auth/register/complete のレスポンス
 export interface AuthTokens {
   accessToken: string
   refreshToken: string          // 上記3エンドポイントのみ返す
@@ -166,7 +166,6 @@ export interface AuthUser {
   avatarUrl: string | null
   role: UserRole
   status: 'ACTIVE' | 'INACTIVE'
-  emailVerified: boolean
   createdAt: string
 }
 ```
@@ -508,15 +507,16 @@ TanStack Query では部分キー一致による一括 invalidation が可能。
 |---|---|---|---|---|
 | ログイン | `/auth/login` | `POST /auth/login` | `accessToken`, `refreshToken`, `expiresIn` | ロール別リダイレクト（§4.4） |
 | | | `POST /auth/google` | 同上 | Google ID Token を `idToken` に詰めて送信 |
-| 新規登録 Step1 | `/auth/register` | `POST /auth/check-email` | `available: boolean` | onBlur で呼び出し。`EMAIL_ALREADY_REGISTERED` でインラインエラー |
-| 新規登録 Step2 | `/auth/register` | `POST /auth/register` | `id`, `email`, `role` | 201 → 確認メール送信済み画面へ遷移 |
-| メール認証 | `/auth/verify-email` | `POST /auth/verify-email` | `accessToken`, `refreshToken` | URL `?token=` を Body に詰め替えて送信（サーバーログ露出防止）。成功後 `router.replace('/')` |
+| 新規登録 Step1（メール） | `/auth/register` | `POST /auth/check-email` | `available: boolean` | onBlur のインライン重複チェック（任意）。`EMAIL_ALREADY_REGISTERED` でインラインエラー |
+| 新規登録 Step1（送信） | `/auth/register` | `POST /auth/register/request-otp` | `expiresInSeconds` | 202 → OTP 入力ステップへ遷移。`EMAIL_ALREADY_REGISTERED` でログイン誘導 |
+| 新規登録 Step2（OTP） | `/auth/register` | `POST /auth/register/verify-otp` | `registrationToken`, `expiresInSeconds` | 6桁コード入力。`OTP_INVALID`/`OTP_EXPIRED`/`OTP_MAX_ATTEMPTS_EXCEEDED` を分岐表示（後2者は再送信ボタン） |
+| 新規登録 Step3（パスワード） | `/auth/register` | `POST /auth/register/complete` | `accessToken`, `refreshToken` | 201 → 自動ログイン → `router.replace('/')`。`REGISTRATION_SESSION_INVALID` で Step1 へ戻す |
 
 #### 6.2 プロフィール設定（`/profile/settings`）
 
 | API コール | 用途 | 必要フィールド |
 |---|---|---|
-| `GET /users/me` | 初期値でフォームを埋める | `displayName`, `avatarUrl`, `email`, `role`, `emailVerified` |
+| `GET /users/me` | 初期値でフォームを埋める | `displayName`, `avatarUrl`, `email`, `role` |
 | `PATCH /users/me` | 表示名・アバター URL 更新 | `displayName?`, `avatarUrl?` |
 | `PATCH /users/me/password` | パスワード変更 | `currentPassword`, `newPassword` |
 | `DELETE /users/me` | 退会 | 204 → `clearAuth()` → `/` |
@@ -961,10 +961,11 @@ stompClient.subscribe(`/topic/chat/${chatRoomId}`, (frame) => {
 | エラーコード | HTTP | UI 表示方法 | 日本語メッセージ |
 |---|---|---|---|
 | `INVALID_CREDENTIALS` | 401 | インライン（フォーム下部） | 「メールアドレスまたはパスワードが正しくありません」 |
-| `EMAIL_NOT_VERIFIED` | 403 | インライン（フォーム下部） | 「メールアドレスの確認が完了していません。受信ボックスをご確認ください」 |
-| `EMAIL_ALREADY_REGISTERED` | 409 | インライン（email フィールド） | 「このメールアドレスはすでに登録されています」 |
-| `EMAIL_VERIFICATION_TOKEN_INVALID` | 400 | インライン + 再送信ボタン | 「認証リンクが無効または使用済みです。再送信してください」 |
-| `EMAIL_VERIFICATION_TOKEN_EXPIRED` | 400 | インライン + 再送信ボタン | 「認証リンクの有効期限が切れました（24時間）。再送信してください」 |
+| `EMAIL_ALREADY_REGISTERED` | 409 | インライン（email フィールド） | 「このメールアドレスはすでに登録されています」（ログインへ誘導） |
+| `OTP_INVALID` | 400 | インライン（OTP フィールド） | 「認証コードが正しくありません（残り{n}回）」 |
+| `OTP_EXPIRED` | 400 | インライン + 再送信ボタン | 「認証コードの有効期限が切れました（10分）。コードを再送信してください」 |
+| `OTP_MAX_ATTEMPTS_EXCEEDED` | 429 | インライン + 再送信ボタン | 「試行回数の上限に達しました。コードを再送信してください」 |
+| `REGISTRATION_SESSION_INVALID` | 400 | バナー + Step1 へ戻す | 「登録セッションの有効期限が切れました。最初からやり直してください」 |
 | `GOOGLE_TOKEN_INVALID` | 401 | Toast（エラー） | 「Google 認証に失敗しました。再度お試しください」 |
 | `REFRESH_TOKEN_INVALID` | 401 | ページリダイレクト | — (ログアウト → `/auth/login`) |
 | `USER_DEACTIVATED` | 403 | インライン（フォーム下部） | 「このアカウントは無効化されています。サポートにお問い合わせください」 |

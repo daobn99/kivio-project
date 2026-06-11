@@ -255,11 +255,20 @@ class AuthIntegrationTest {
     }
 
     @Autowired TestRestTemplate restTemplate;
+    @Autowired UserRepository userRepository;
+    @Autowired PasswordEncoder passwordEncoder;
 
     @Test
     void should_issue_tokens_when_credentials_are_valid() {
-        RegisterRequest register = new RegisterRequest("test@example.com", "password123");
-        restTemplate.postForEntity("/api/v1/auth/register", register, Void.class);
+        // メール登録は OTP 認証を伴う3ステップ（OTP は Redis）のため、
+        // ログイン検証用のユーザーは認証済み状態で直接永続化する
+        userRepository.save(User.builder()
+            .email("test@example.com")
+            .passwordHash(passwordEncoder.encode("password123"))
+            .displayName("Test")
+            .role(UserRole.ROLE_BUYER)
+            .status(UserStatus.ACTIVE)
+            .build());
 
         LoginRequest login = new LoginRequest("test@example.com", "password123");
         ResponseEntity<TokenResponse> response =

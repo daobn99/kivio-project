@@ -184,7 +184,7 @@ Request
 http.authorizeHttpRequests(auth -> auth
     // 認証不要（公開エンドポイント）
     .requestMatchers(POST, "/api/v1/auth/check-email").permitAll()
-    .requestMatchers(POST, "/api/v1/auth/register").permitAll()
+    .requestMatchers(POST, "/api/v1/auth/register/**").permitAll()  // request-otp / verify-otp / complete
     .requestMatchers(POST, "/api/v1/auth/login").permitAll()
     .requestMatchers(POST, "/api/v1/auth/google").permitAll()
     .requestMatchers(POST, "/api/v1/auth/refresh").permitAll()
@@ -211,9 +211,12 @@ http.authorizeHttpRequests(auth -> auth
 | エンドポイント区分 | 制限 | 制限単位 |
 |---|---|---|
 | 認証系（`/api/v1/auth/*`） | 10 リクエスト / 分 | IP アドレス |
+| OTP 送信（`/auth/register/request-otp`） | 同一メールへ 60 秒に 1 回・1 時間に 5 回まで | メールアドレス |
 | API 全般（認証済みユーザー） | 100 リクエスト / 分 | ユーザー ID |
 | 公開 API（未認証） | 30 リクエスト / 分 | IP アドレス |
 | Stripe Webhook | 制限なし | - |
+
+> **OTP のメール単位スロットリング:** IP 単位のレート制限だけではクロス IP でのメール爆撃を防げないため、`request-otp` は**メールアドレス単位**でも制限する。カウンタは Redis（`reg:otp:cooldown:{email}` 等）で TTL 管理する。OTP 検証側は試行回数 5 回で失効（`reg:otp:{email}` の `attempts`）。
 
 超過時のレスポンス:
 

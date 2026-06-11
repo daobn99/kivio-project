@@ -771,8 +771,10 @@ public class RateLimitingFilter extends OncePerRequestFilter {
     private Bucket createBucket(HttpServletRequest request) {
         boolean isAuthEndpoint = request.getRequestURI().startsWith("/api/v1/auth/");
         int capacity = isAuthEndpoint ? 10 : 100;
+        // Bucket4j 8.x: Bandwidth.classic / Refill は非推奨。builder API を使う
         return Bucket.builder()
-                .addLimit(Bandwidth.classic(capacity, Refill.intervally(capacity, Duration.ofMinutes(1))))
+                .addLimit(limit -> limit.capacity(capacity)
+                        .refillIntervally(capacity, Duration.ofMinutes(1)))
                 .build();
     }
 }
@@ -1401,13 +1403,14 @@ class ProductControllerTest {
 
     @Autowired MockMvc mockMvc;
     @Autowired ObjectMapper objectMapper;
-    @MockBean ProductService productService;
+    // @MockBean は Spring Boot 4 で削除された。@MockitoBean を使う
+    @MockitoBean ProductService productService;
 
     @Test
     @WithMockUser(roles = "SELLER")
     void should_return_201_when_product_is_created() throws Exception {
-        CreateProductRequest request = CreateProductRequest.builder()
-                .name("テスト商品").price(1000).build();
+        // Request DTO は record のため builder ではなく canonical constructor を使う
+        CreateProductRequest request = new CreateProductRequest("テスト商品", 1000);
         given(productService.create(any())).willReturn(sampleProductResponse());
 
         mockMvc.perform(post("/api/v1/products")
@@ -1427,8 +1430,7 @@ class ProductControllerTest {
     @Test
     @WithMockUser(roles = "SELLER")
     void should_return_422_when_price_is_negative() throws Exception {
-        CreateProductRequest invalid = CreateProductRequest.builder()
-                .name("商品").price(-1).build();
+        CreateProductRequest invalid = new CreateProductRequest("商品", -1);
 
         mockMvc.perform(post("/api/v1/products")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -1535,42 +1537,42 @@ class UserRepositoryTest {
 
 ### 13.8 カバレッジ（JaCoCo）
 
-`build.gradle` に JaCoCo を設定し、ライン カバレッジ 80% 以上を CI で強制する。
+`build.gradle.kts` に JaCoCo を設定し、ライン カバレッジ 80% 以上を CI で強制する。
 
-```groovy
-// build.gradle
+```kotlin
+// build.gradle.kts
 plugins {
-    id 'jacoco'
+    jacoco
 }
 
-jacocoTestReport {
+tasks.jacocoTestReport {
     reports {
-        xml.required = true
-        html.required = true
+        xml.required.set(true)
+        html.required.set(true)
     }
     // DTO・設定クラス・generated コードをカバレッジ対象から除外
-    afterEvaluate {
-        classDirectories.setFrom(files(classDirectories.files.collect {
-            fileTree(dir: it, exclude: [
-                '**/dto/**', '**/config/**', '**/KivioApplication*'
-            ])
-        }))
-    }
+    classDirectories.setFrom(
+        files(classDirectories.files.map {
+            fileTree(it) {
+                exclude("**/dto/**", "**/config/**", "**/KivioApplication*")
+            }
+        })
+    )
 }
 
-jacocoTestCoverageVerification {
+tasks.jacocoTestCoverageVerification {
     violationRules {
         rule {
             limit {
-                minimum = 0.80
+                minimum = "0.80".toBigDecimal()
             }
         }
     }
 }
 
 // test → jacocoTestReport → jacocoTestCoverageVerification の順で実行
-check.dependsOn jacocoTestCoverageVerification
-test.finalizedBy jacocoTestReport
+tasks.check { dependsOn(tasks.jacocoTestCoverageVerification) }
+tasks.test { finalizedBy(tasks.jacocoTestReport) }
 ```
 
 実行コマンド: `./gradlew test jacocoTestReport jacocoTestCoverageVerification`

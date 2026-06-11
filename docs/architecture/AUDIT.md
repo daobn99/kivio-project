@@ -279,8 +279,7 @@ audit_logs
 
 | カテゴリ | アクション名 | トリガー | old/new 値 |
 |---|---|---|---|
-| **認証** | `USER_REGISTERED` | 新規会員登録完了 | - |
-| 認証 | `USER_EMAIL_VERIFIED` | メールアドレス確認完了 | - |
+| **認証** | `USER_REGISTERED` | 新規会員登録完了（OTP 認証 → パスワード設定完了） | - |
 | 認証 | `USER_LOGGED_IN` | ログイン成功 | - |
 | 認証 | `USER_LOGIN_FAILED` | ログイン失敗 | - |
 | 認証 | `USER_LOGGED_OUT` | ログアウト | - |

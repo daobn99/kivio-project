@@ -201,8 +201,7 @@ Domain Events はドメイン間の疎結合な通信に使用する。イベン
 
 | イベント名 | 発行タイミング | 主な購読側 |
 |---|---|---|
-| `UserRegisteredEvent` | 会員登録完了 | audit |
-| `UserEmailVerifiedEvent` | メールアドレス確認完了 | audit |
+| `UserRegisteredEvent` | 会員登録完了（OTP 認証 → パスワード設定完了） | audit |
 | `UserLoggedInEvent` | ログイン成功 | audit |
 | `UserLoginFailedEvent` | ログイン失敗 | audit |
 | `UserLoggedOutEvent` | ログアウト | audit |

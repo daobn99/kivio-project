@@ -143,37 +143,44 @@ Content-Type: application/problem+json
 
 ---
 
-### POST /api/v1/auth/register
+### 新規登録フロー（OTP 方式・3 ステップ）
 
-**概要:** 会員登録（登録ステップ2）  
+> **設計方針:** ユーザーレコード（`users`）は**メール認証完了後にのみ**作成する。未認証の仮レコードを `users` に残さないため、認証コード（OTP）と登録セッションは **Redis に TTL 付きで一時保存**する（DB テーブルを持たない）。これにより「未確認アカウントの滞留」「未確認状態での即ログイン」「期限切れリンクの再送信」といった問題を構造的に排除する。詳細は [ADR-006](../../adr/ADR-006-email-otp-redis.md) を参照。
+>
+> | ステップ | エンドポイント | Redis キー | TTL |
+> |---|---|---|---|
+> | ① コード送信 | `POST /auth/register/request-otp` | `reg:otp:{email}` | 10 分 |
+> | ② コード検証 | `POST /auth/register/verify-otp` | `reg:session:{registrationToken}` | 30 分 |
+> | ③ 登録完了 | `POST /auth/register/complete` | （消費して削除） | - |
+
+---
+
+### POST /api/v1/auth/register/request-otp
+
+**概要:** 認証コード（OTP）をメール送信（登録ステップ1）  
 **認証:** 不要  
 **権限:** 公開
+
+メールアドレスの重複を確認し、利用可能なら 6 桁の数値 OTP を生成して `reg:otp:{email}`（Redis, TTL 10 分・SHA-256 ハッシュ保存・試行回数カウンタ付き）に保存し、Resend 経由でメール送信する。同一メールへの再送信はレート制限（後述）の対象。
 
 #### リクエストボディ
 
 ```json
 {
-  "email": "alice@example.com",
-  "password": "password123",
-  "passwordConfirm": "password123"
+  "email": "alice@example.com"
 }
 ```
 
 | フィールド | 型 | 必須 | 制約 |
 |---|---|---|---|
 | `email` | string | ◯ | メール形式、255文字以内 |
-| `password` | string | ◯ | 8文字以上 |
-| `passwordConfirm` | string | ◯ | `password` と一致すること |
 
-#### レスポンス（201 Created）
+#### レスポンス（202 Accepted）
 
 ```json
 {
-  "id": "550e8400-e29b-41d4-a716-446655440000",
-  "email": "alice@example.com",
-  "role": "ROLE_BUYER",
-  "emailVerified": false,
-  "createdAt": "2026-05-24T10:00:00Z"
+  "message": "認証コードを送信しました",
+  "expiresInSeconds": 600
 }
 ```
 
@@ -182,6 +189,98 @@ Content-Type: application/problem+json
 | エラーコード | HTTP | 条件 |
 |---|---|---|
 | `EMAIL_ALREADY_REGISTERED` | 409 | メールアドレスが既に登録済み |
+| `VALIDATION_FAILED` | 422 | メール形式が不正 |
+| `RATE_LIMIT_EXCEEDED` | 429 | 再送信間隔が短すぎる / 同一メールへの送信が上限超過 |
+
+---
+
+### POST /api/v1/auth/register/verify-otp
+
+**概要:** 認証コード（OTP）を検証（登録ステップ2）  
+**認証:** 不要  
+**権限:** 公開
+
+`reg:otp:{email}` の OTP と照合する。一致したら OTP キーを削除し、不透明な `registrationToken`（UUID v4）を発行して `reg:session:{registrationToken}` → `{email}`（Redis, TTL 30 分）に保存する。検証失敗のたびに試行回数を加算し、5 回で OTP キーを失効させる（再送信が必要）。
+
+#### リクエストボディ
+
+```json
+{
+  "email": "alice@example.com",
+  "otp": "428170"
+}
+```
+
+| フィールド | 型 | 必須 | 制約 |
+|---|---|---|---|
+| `email` | string | ◯ | メール形式 |
+| `otp` | string | ◯ | 6 桁の数値 |
+
+#### レスポンス（200 OK）
+
+```json
+{
+  "registrationToken": "9f1c3b7e-2d4a-4c6b-8e0f-1a2b3c4d5e6f",
+  "expiresInSeconds": 1800
+}
+```
+
+#### エラー
+
+| エラーコード | HTTP | 条件 |
+|---|---|---|
+| `OTP_INVALID` | 400 | 認証コードが不一致 |
+| `OTP_EXPIRED` | 400 | 認証コードの有効期限切れ（10分） |
+| `OTP_MAX_ATTEMPTS_EXCEEDED` | 429 | 試行回数が上限（5回）に達した。再送信が必要 |
+| `VALIDATION_FAILED` | 422 | バリデーション失敗 |
+
+---
+
+### POST /api/v1/auth/register/complete
+
+**概要:** パスワードを設定して登録完了・自動ログイン（登録ステップ3）  
+**認証:** 不要  
+**権限:** 公開
+
+`registrationToken` から認証済みメールアドレスを取得し、`users` レコードを新規作成（`ROLE_BUYER`）する。完了後 `registrationToken` を削除し、Access Token + Refresh Token を発行してそのままログイン状態にする。
+
+#### リクエストボディ
+
+```json
+{
+  "registrationToken": "9f1c3b7e-2d4a-4c6b-8e0f-1a2b3c4d5e6f",
+  "password": "password123",
+  "passwordConfirm": "password123",
+  "displayName": "Alice"
+}
+```
+
+| フィールド | 型 | 必須 | 制約 |
+|---|---|---|---|
+| `registrationToken` | string | ◯ | verify-otp で発行された UUID |
+| `password` | string | ◯ | 8文字以上 |
+| `passwordConfirm` | string | ◯ | `password` と一致すること |
+| `displayName` | string | | 100文字以内（省略時は空文字。後でプロフィールで設定可） |
+
+#### レスポンス（201 Created）
+
+`POST /auth/login` と同形式（自動ログイン）。
+
+```json
+{
+  "accessToken": "eyJhbGciOiJIUzI1NiIs...",
+  "refreshToken": "dGhpcyBpcyBhIHJlZnJlc2g...",
+  "tokenType": "Bearer",
+  "expiresIn": 900
+}
+```
+
+#### エラー
+
+| エラーコード | HTTP | 条件 |
+|---|---|---|
+| `REGISTRATION_SESSION_INVALID` | 400 | `registrationToken` が無効・期限切れ・使用済み。登録を最初からやり直す |
+| `EMAIL_ALREADY_REGISTERED` | 409 | 検証〜完了の間に同一メールが登録された（競合） |
 | `VALIDATION_FAILED` | 422 | バリデーション失敗 |
 
 ---
@@ -223,7 +322,6 @@ Content-Type: application/problem+json
 | エラーコード | HTTP | 条件 |
 |---|---|---|
 | `INVALID_CREDENTIALS` | 401 | メールアドレスまたはパスワードが不一致 |
-| `EMAIL_NOT_VERIFIED` | 403 | メール未確認ユーザー |
 | `USER_DEACTIVATED` | 403 | アカウントが無効化済み |
 | `VALIDATION_FAILED` | 422 | バリデーション失敗 |
 
@@ -325,7 +423,6 @@ Content-Type: application/problem+json
   "avatarUrl": "https://res.cloudinary.com/kivio/...",
   "role": "ROLE_BUYER",
   "status": "ACTIVE",
-  "emailVerified": true,
   "createdAt": "2026-05-24T10:00:00Z"
 }
 ```

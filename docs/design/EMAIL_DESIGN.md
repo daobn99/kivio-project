@@ -49,7 +49,7 @@
 
 | ID | イベント | Phase | 送信先 | 送信タイミング / API 起点 |
 |---|---|---|---|---|
-| AUTH-01 | メール認証 | 2 | 登録ユーザ | `POST /api/v1/auth/register` 完了後 |
+| AUTH-01 | メール認証コード（OTP） | 2 | 登録希望者 | `POST /api/v1/auth/register/request-otp` |
 | SEL-01 | 出品者申請 承認通知 | 2 | 申請者 | `PATCH /api/v1/admin/seller-applications/{id}/approve` |
 | SEL-02 | 出品者申請 拒否通知 | 2 | 申請者 | `PATCH /api/v1/admin/seller-applications/{id}/reject` |
 | ORD-01 | 注文確定通知 | 5 | Buyer | Stripe Webhook `payment_intent.succeeded` |
@@ -80,58 +80,56 @@
 
 ---
 
-### AUTH-01: メール認証
+### AUTH-01: メール認証コード（OTP）
 
-**送信タイミング:** 新規登録直後 (`POST /auth/register`)  
-**有効期限:** 24時間  
+**送信タイミング:** 認証コード要求時 (`POST /auth/register/request-otp`)  
+**有効期限:** 10分  
 **SEQUENCE_FLOW.md 参照:** § 1.1
 
 > **セキュリティ方針:**  
-> - メール内リンクはフロントエンド URL（`/auth/verify-email?token=<uuid>`）に誘導する  
-> - フロントエンドがトークンをリクエストボディに含めてバックエンド API に送信（URL 露出を防ぐ）  
-> - クリック後は Access Token + Refresh Token が発行され、そのままログイン状態になる（自動ログイン）  
-> - トークンはワンタイム（`used_at` フラグで管理）。使用済みリンクの再利用は不可  
-> - DB には `token_hash`（SHA-256）のみ保存。平文トークンは保持しない
+> - メール本文に **6 桁の認証コード（OTP）** を記載する。ユーザーは登録画面の入力欄にコードを入力して検証する（マジックリンクは使わない）  
+> - OTP は Redis `reg:otp:{email}` に **SHA-256 ハッシュ + 試行回数** で保存（TTL 10 分）。平文 OTP は保存しない  
+> - 検証は 5 回まで。超過で失効し、再送信が必要  
+> - この段階では `users` レコードは未作成（OTP 検証 → パスワード設定完了で初めて作成）  
+> - 登録セッション（`registrationToken`）も Redis に保存（TTL 30 分）。詳細は [ADR-006](../../adr/ADR-006-email-otp-redis.md)
 
 | 項目 | 内容 |
 |---|---|
-| 件名（ja） | `【Kivio】ご登録メールアドレスの確認をお願いします` |
+| 件名（ja） | `【Kivio】認証コード: {{otpCode}}` |
 | 件名（en） | _(未定義)_ |
-| テンプレートキー | `emails/ja/email-verification.html` |
-| 送信先 | 登録者のメールアドレス |
+| テンプレートキー | `emails/ja/registration-otp.html` |
+| 送信先 | 登録希望者のメールアドレス |
 
 #### 本文変数
 
 | 変数名 | 型 | 説明 | 取得元 |
 |---|---|---|---|
-| `{{userName}}` | String | 登録時の表示名 | `users.display_name` |
-| `{{verificationUrl}}` | String | 認証リンク（トークン埋め込み済み） | `APP_BASE_URL + /auth/verify-email?token=<uuid>` |
-| `{{expiresIn}}` | String | 有効期限の説明文 | 固定: `"24時間"` |
+| `{{otpCode}}` | String | 6 桁の認証コード | サーバー生成（Redis に SHA-256 で保存） |
+| `{{expiresIn}}` | String | 有効期限の説明文 | 固定: `"10分"` |
+
+> この時点では表示名（`display_name`）が未確定のため、宛名は固定文言（「Kivio をご利用の皆さま」）とする。
 
 #### 本文構造
 
 ```
 [タイトル]
-メールアドレスのご確認
+メールアドレスの確認
 
 [本文]
-{{userName}} 様
+Kivio をご利用の皆さま
 
-このたびはKivioにご登録いただき、誠にありがとうございます。
+Kivio のアカウント登録ありがとうございます。
+登録画面に以下の認証コードを入力して、メールアドレスの確認を完了してください。
 
-以下のボタンをクリックして、メールアドレスの確認を完了してください。
-確認完了後、そのままKivioにログインした状態になります。
-このリンクは {{expiresIn}} 後に失効します（1回のみ有効）。
+[認証コード]
+{{otpCode}}
 
-[CTA]
-「メールアドレスを確認してログインする」→ {{verificationUrl}}
+このコードは {{expiresIn}} 後に失効します。
+入力を 5 回間違えるとコードは無効になります（その場合はコードを再送信してください）。
 
 [補足]
-※ このメールにお心当たりのない場合は、そのまま削除してください。
-  アカウントが有効化されることはありません。
-※ ボタンが機能しない場合は、以下のURLをブラウザに直接貼り付けてください。
-  {{verificationUrl}}
-※ リンクは1回のみ有効です。期限切れの場合はログイン画面から再送信できます。
+※ このメールにお心当たりのない場合は、そのまま破棄してください。
+  コードを第三者と共有しないでください。Kivio からコードをお尋ねすることはありません。
 ```
 
 ---
@@ -531,7 +529,7 @@ Kivioに新しい注文が届きました。
 ```
 src/main/resources/templates/emails/
 ├── ja/
-│   ├── email-verification.html
+│   ├── registration-otp.html
 │   ├── seller-approved.html
 │   ├── seller-rejected.html
 │   ├── order-confirmed.html
@@ -577,7 +575,7 @@ com.kivio/
 
 ```java
 public interface EmailService {
-    void sendEmailVerification(String toEmail, String userName, String verificationUrl);
+    void sendRegistrationOtp(String toEmail, String otpCode);                // AUTH-01
     void sendSellerApproved(String toEmail, String userName);
     void sendSellerRejected(String toEmail, String userName, String rejectionReason);
     void sendOrderConfirmed(String toEmail, OrderEmailDto order);            // ORD-01
@@ -606,10 +604,10 @@ public class ResendEmailService implements EmailService {
     @Async                                            // メール失敗でビジネスロジックを止めない
     @Retryable(maxAttempts = 3, backoff = @Backoff(delay = 1000, multiplier = 2))
     @Override
-    public void sendEmailVerification(String toEmail, String userName, String verificationUrl) {
-        var body = formatter.render("emails/ja/email-verification.html",
-            Map.of("userName", userName, "verificationUrl", verificationUrl, "expiresIn", "24時間"));
-        resendClient.send(toEmail, "【Kivio】ご登録メールアドレスの確認をお願いします", body);
+    public void sendRegistrationOtp(String toEmail, String otpCode) {
+        var body = formatter.render("emails/ja/registration-otp.html",
+            Map.of("otpCode", otpCode, "expiresIn", "10分"));
+        resendClient.send(toEmail, "【Kivio】認証コード: " + otpCode, body);
     }
     // ... 他メソッド
 }
@@ -644,7 +642,7 @@ Content-Type: application/json
 {
   "from": "Kivio <noreply@kivio.example.com>",
   "to": ["user@example.com"],
-  "subject": "【Kivio】ご登録メールアドレスの確認をお願いします",
+  "subject": "【Kivio】認証コード: 428170",
   "html": "<html>...</html>"
 }
 ```

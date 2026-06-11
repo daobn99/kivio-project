@@ -207,7 +207,7 @@ scaffolding が動いた後に書く。詳細は既存 docs に委ねるため�
 
 | # | タスク名 | ブランチ名 | Phase | 主要 API |
 |---|---|---|---|---|
-| 1 | 認証（登録・ログイン・OAuth） | `feature/auth` | 2 | `POST /auth/check-email`, `/auth/register`, `/auth/login`, `/auth/google`, `/auth/refresh`, `/auth/logout` |
+| 1 | 認証（登録・ログイン・OAuth） | `feature/auth` | 2 | `POST /auth/check-email`, `/auth/register/request-otp`, `/auth/register/verify-otp`, `/auth/register/complete`, `/auth/login`, `/auth/google`, `/auth/refresh`, `/auth/logout`（OTP/登録セッションは Redis） |
 | 2 | ユーザープロフィール・住所 | `feature/user-profile` | 2 | `GET/PATCH /users/me`, `PATCH /users/me/password`, `DELETE /users/me`（退会申請）, `GET/POST/PATCH/DELETE /users/me/addresses` |
 | 3 | 出品者申請 | `feature/seller-application` | 2 | `POST /seller-applications`, `GET /seller-applications/me` |
 | 4 | ショップ・商品 CRUD | `feature/catalog` | 2 | `GET/PATCH /shops/me`, `PATCH /shops/me/shipping-policy`, `GET /shops/{id}`, `POST/PATCH/DELETE /products`, `POST/DELETE /products/{id}/images`, `GET /categories` |

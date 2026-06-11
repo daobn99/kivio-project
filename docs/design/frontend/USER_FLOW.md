@@ -11,27 +11,39 @@
 
 ### 1.1 認証フロー（新規登録）
 
+> **設計方針:** `users` レコードはメール認証（OTP）完了後にのみ作成する。OTP・登録セッションは Redis に TTL 付きで一時保存（DB 不使用）。未認証アカウントが残らないため「期限切れリンクの再送信」「未確認状態の即ログイン」は発生しない。OTP 期限切れ・無効時は同じ画面でコードを再送信する（再登録不要）。詳細は [ADR-006](../../../adr/ADR-006-email-otp-redis.md)。
+
 ```mermaid
 flowchart TD
   A([未ログイン]) --> B["新規登録 /auth/register"]
   B --> C["ステップ1: メールアドレス入力"]
-  C --> D["POST /api/v1/auth/check-email\nメール重複チェック"]
-  D --> DA{チェック結果}
-  DA -- EMAIL_ALREADY_REGISTERED --> E(["エラー表示\nこのメールは登録済みです"])
-  E --> C
-  DA -- OK --> F["ステップ2: パスワード入力\nPOST /api/v1/auth/register"]
-  F --> G{登録結果}
+  C --> CB["onBlur: POST /api/v1/auth/check-email\nインライン重複チェック（任意）"]
+  CB -- EMAIL_ALREADY_REGISTERED --> E(["インラインエラー\nこのメールは登録済みです → ログインへ誘導"])
+  C --> F["「認証コードを送信」\nPOST /api/v1/auth/register/request-otp"]
+  F --> G{送信結果}
+  G -- EMAIL_ALREADY_REGISTERED --> E
   G -- VALIDATION_FAILED --> H([フィールドエラー表示])
-  H --> F
-  G -- 成功 --> I(["確認メール送信\nResend 経由"])
-  I --> J["メール内リンクをクリック\nhttps://kivio.example.com/auth/verify-email?token=uuid"]
-  J --> K["フロントエンド /auth/verify-email ページ表示"]
-  K --> L["POST /api/v1/auth/verify-email\nbody: token をリクエストボディで送信\n※URLパラメータではなくBodyで送信しサーバーログへの露出を防ぐ"]
-  L --> M{検証結果}
-  M -- EMAIL_VERIFICATION_TOKEN_INVALID --> N(["エラー: リンクが無効または使用済み\n再送信ボタンを表示"])
-  M -- EMAIL_VERIFICATION_TOKEN_EXPIRED --> O(["エラー: リンクの有効期限切れ\n再送信ボタンを表示"])
-  M -- 成功 --> PA["Access Token + Refresh Token 受け取り\nrouter.replace で URL からトークンを即時除去"]
-  PA --> Q(["ホーム / へリダイレクト\n自動ログイン完了"])
+  H --> C
+  G -- 202 成功 --> I(["OTPメール送信\nResend 経由・有効期限10分"])
+  I --> J["ステップ2: 認証コード入力\n6桁OTPを入力欄に入力"]
+  J --> K["POST /api/v1/auth/register/verify-otp\nbody: email, otp"]
+  K --> L{検証結果}
+  L -- OTP_INVALID --> M(["エラー: コードが違います\n再入力（残り試行回数を表示）"])
+  M --> J
+  L -- OTP_EXPIRED --> N(["エラー: コードの有効期限切れ\n「コードを再送信」ボタン"])
+  N --> F
+  L -- OTP_MAX_ATTEMPTS_EXCEEDED --> O(["エラー: 試行回数上限\n「コードを再送信」ボタン"])
+  O --> F
+  L -- 200 成功 --> P["registrationToken 受け取り（30分有効）"]
+  P --> Q["ステップ3: パスワード設定\nパスワード・確認・表示名(任意)を入力"]
+  Q --> R["POST /api/v1/auth/register/complete\nbody: registrationToken, password, ..."]
+  R --> S{登録結果}
+  S -- REGISTRATION_SESSION_INVALID --> T(["エラー: 登録セッション期限切れ\nステップ1からやり直し"])
+  T --> C
+  S -- VALIDATION_FAILED --> U([フィールドエラー表示])
+  U --> Q
+  S -- 201 成功 --> V["Access Token + Refresh Token 受け取り"]
+  V --> W(["ホーム / へリダイレクト\n自動ログイン完了"])
 ```
 
 ### 1.2 認証フロー（ログイン）
@@ -47,7 +59,6 @@ flowchart TD
   F --> G
   G -- INVALID_CREDENTIALS --> H(["エラー表示\nメールまたはパスワードが違います"])
   H --> B
-  G -- EMAIL_NOT_VERIFIED --> I(["エラー表示\nメールアドレスを確認してください"])
   G -- USER_DEACTIVATED --> J(["エラー表示\nアカウントが無効化されています"])
   G -- 成功 --> K["Access Token + Refresh Token 発行"]
   K --> L{ユーザーのロール}
@@ -536,12 +547,12 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-  A{メールトリガーイベント} --> B["会員登録完了\nMAIL-01"]
+  A{メールトリガーイベント} --> B["登録時の認証コード送信\nMAIL-01"]
   A --> C["注文確定\nMAIL-02 MAIL-03"]
   A --> D["注文ステータス変更\nMAIL-04"]
 
-  B --> E["確認メール送信\nResend 経由\n件名: Kivio アカウントの確認"]
-  E --> F(["メール内リンクをクリック\n→ /auth/verify-email?token=uuid\n→ 自動ログイン完了"])
+  B --> E["OTPメール送信\nResend 経由\n件名: 【Kivio】認証コード: NNNNNN\n有効期限10分"]
+  E --> F(["登録画面でコードを入力\n→ パスワード設定 → 自動ログイン完了"])
 
   C --> G["注文確認メールをバイヤーへ送信\n注文番号・商品一覧・合計金額"]
   C --> H["注文受付メールをセラーへ送信\n注文明細・配送先・セラー取り分"]

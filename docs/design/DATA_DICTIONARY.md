@@ -47,7 +47,7 @@
 |---|---|---|---|
 | 1 | [ユーザー](#1-ユーザー) | `users` | identity |
 | 2 | [リフレッシュトークン](#2-リフレッシュトークン) | `refresh_tokens` | identity |
-| 3 | [メール認証トークン](#3-メール認証トークン) | `email_verification_tokens` | identity |
+| 3 | [メール認証コード（OTP）](#3-メール認証コードotp) | Redis（DBテーブルなし） | identity |
 | 4 | [セラー申請](#4-セラー申請) | `seller_applications` | identity |
 | 5 | [ショップ](#5-ショップ) | `shops` | catalog |
 | 6 | [ショップ配送ポリシー](#6-ショップ配送ポリシー) | `shop_shipping_policies` | catalog |
@@ -85,7 +85,6 @@
 | アバター画像URL | avatar_url | `String` | | | | | - | null | Cloudinaryの画像URL | - |
 | ロール | role | `String` | | | | ◯ | 20 | `ROLE_BUYER` | `ROLE_BUYER`（バイヤー）/ `ROLE_SELLER`（セラー）/ `ROLE_ADMIN`（管理者） | - |
 | ステータス | status | `String` | | | | ◯ | 20 | `ACTIVE` | `ACTIVE`（有効）/ `INACTIVE`（無効・停止中） | - |
-| メール確認済みフラグ | email_verified | `Boolean` | | | | ◯ | - | `false` | `true`のユーザーのみログイン可能 | - |
 | 作成日時 | created_at | `Instant` | | | | ◯ | - | auto | レコード作成日時（UTC） | - |
 | 更新日時 | updated_at | `Instant` | | | | ◯ | - | auto | レコード更新日時（UTC、自動更新） | - |
 | ソフト削除日時 | deleted_at | `Instant` | | | | | - | null | null=有効。退会申請時に設定。90日後に匿名化バッチ実行 | - |
@@ -108,19 +107,17 @@
 
 ---
 
-## 3. メール認証トークン
+## 3. メール認証コード（OTP）
 
-**テーブル名：** `email_verification_tokens`  
-**概要：** メールアドレス確認用の一時トークン管理テーブル。有効期限24時間。一度使用するとused_atが設定され再利用不可。
+**ストレージ：** Redis（**DB テーブルなし**）  
+**概要：** メールアドレス確認用の認証コード（OTP）と登録セッションは、未認証ユーザーの仮レコードを `users` に残さないため DB に永続化せず Redis に TTL 付きで一時保存する。TTL により期限切れデータは自動消滅するためクリーンアップバッチは不要。設計判断は [ADR-006](../../adr/ADR-006-email-otp-redis.md) を参照。
 
-| 項目名（論理） | 項目名（物理） | Java型 | PK | FK | UQ | 必須 | 桁数 | デフォルト値 | 概要/備考 | 参照先 |
-|---|---|:---:|:---:|:---:|:---:|:---:|:---:|---|---|---|
-| トークンID | id | `UUID` | ◯ | | | ◯ | - | auto | 主キー | - |
-| ユーザーID | user_id | `UUID` | | ◯ | | ◯ | - | - | トークン発行対象ユーザー | ユーザー.ユーザーID |
-| トークンハッシュ | token_hash | `String` | | | ◯ | ◯ | 255 | - | SHA-256ハッシュ値。平文はDBに保存しない | - |
-| 有効期限 | expires_at | `Instant` | | | | ◯ | - | - | 発行から24時間後を設定 | - |
-| 使用日時 | used_at | `Instant` | | | | | - | null | null=未使用。メール確認完了時に設定。NOT NULLのトークンは再利用不可 | - |
-| 作成日時 | created_at | `Instant` | | | | ◯ | - | auto | レコード作成日時（UTC） | - |
+| キー | 値（JSON） | TTL | 用途 |
+|---|---|---|---|
+| `reg:otp:{email}` | `{otpHash, attempts}` | 10 分 | OTP 検証。`otpHash`=SHA-256(OTP)。`attempts`≧5 で失効 |
+| `reg:session:{registrationToken}` | `{email}` | 30 分 | OTP 検証済みメールの登録セッション。`registrationToken`=UUID v4 |
+
+> OTP 平文・パスワードは Redis に保存しない。
 
 ---
 

@@ -166,8 +166,19 @@ export const authHandlers = [
     })
   ),
 
-  http.post('/api/v1/auth/register', () =>
-    HttpResponse.json({ id: 'user-1', email: 'test@example.com' }, { status: 201 })
+  http.post('/api/v1/auth/register/request-otp', () =>
+    HttpResponse.json({ message: '認証コードを送信しました', expiresInSeconds: 600 }, { status: 202 })
+  ),
+
+  http.post('/api/v1/auth/register/verify-otp', () =>
+    HttpResponse.json({ registrationToken: 'test-registration-token', expiresInSeconds: 1800 })
+  ),
+
+  http.post('/api/v1/auth/register/complete', () =>
+    HttpResponse.json(
+      { accessToken: 'test-access-token', refreshToken: 'test-refresh-token', tokenType: 'Bearer', expiresIn: 900 },
+      { status: 201 }
+    )
   ),
 ]
 ```

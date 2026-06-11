@@ -104,11 +104,12 @@ user_mfa_methods（将来テーブル）:
 
 | # | 要件 |
 |---|---|
-| AUTH-01 | ユーザーはメールアドレス・パスワードで新規登録できる（2ステップフォーム形式） |
-| AUTH-01-A | ステップ1：メールアドレスのみ入力し「次へ」ボタンでメール重複チェックを行う。既登録の場合は `EMAIL_ALREADY_REGISTERED` エラーを返す |
-| AUTH-01-B | ステップ2：パスワード（8文字以上）とパスワード確認を入力し「アカウントを作成する」ボタンで本登録を完了する。表示名は登録後のプロフィール設定で変更可能 |
-| AUTH-02 | 登録後、確認メールが送信される（Resend経由） |
-| AUTH-03 | メール確認済みのユーザーのみログイン可能 |
+| AUTH-01 | ユーザーはメールアドレス・パスワードで新規登録できる（3ステップ・メール認証コード（OTP）方式）。`users` レコードはメール認証完了後にのみ作成する（[ADR-006](../../adr/ADR-006-email-otp-redis.md)） |
+| AUTH-01-A | ステップ1：メールアドレスを入力し「認証コードを送信」ボタンで重複チェック後に 6 桁の OTP をメール送信する。既登録の場合は `EMAIL_ALREADY_REGISTERED` を返す。OTP は Redis に TTL 10 分で一時保存（DB に永続化しない） |
+| AUTH-01-B | ステップ2：メール記載の 6 桁 OTP を入力して検証する。成功で登録セッション（`registrationToken`・Redis TTL 30 分）を発行。期限切れ・無効・試行 5 回超過時は同じ画面でコードを再送信できる |
+| AUTH-01-C | ステップ3：パスワード（8文字以上）とパスワード確認を入力し「アカウントを作成する」で `users` を作成し自動ログイン（トークン発行）する。表示名は任意（後でプロフィールで変更可能） |
+| AUTH-02 | OTP 認証コードメールが送信される（Resend経由・有効期限10分） |
+| ~~AUTH-03~~ | ~~メール確認済みのユーザーのみログイン可能~~（廃止：`users` は認証完了後にのみ作成するため未確認ユーザーが存在しない。[ADR-006](../../adr/ADR-006-email-otp-redis.md)） |
 | AUTH-04 | ログイン成功時、Access Token（有効期限15分）とRefresh Token（有効期限7日）が発行される |
 | AUTH-05 | Refresh TokenによるAccess Token再発行ができる |
 | AUTH-06 | ログアウト時にRefresh Tokenが無効化される |
@@ -286,7 +287,7 @@ PENDING_PAYMENT → PAYMENT_CONFIRMED → PROCESSING → SHIPPED → DELIVERED �
 
 | # | 要件 |
 |---|---|
-| MAIL-01 | 会員登録確認メールを送信する（Resend） |
+| MAIL-01 | 会員登録時にメール認証コード（OTP）を送信する（Resend） |
 | MAIL-02 | 注文確定メールをバイヤーに送信する |
 | MAIL-03 | 注文受付メールをセラーに送信する |
 | MAIL-04 | ステータス変更メールをバイヤーに送信する |
@@ -419,8 +420,7 @@ PENDING_PAYMENT → PAYMENT_CONFIRMED → PROCESSING → SHIPPED → DELIVERED �
 
 | カテゴリ | アクション名 | トリガー |
 |---|---|---|
-| 認証 | `USER_REGISTERED` | 新規会員登録完了 |
-| 認証 | `USER_EMAIL_VERIFIED` | メールアドレス確認完了 |
+| 認証 | `USER_REGISTERED` | 新規会員登録完了（OTP 認証 → パスワード設定完了） |
 | 認証 | `USER_LOGGED_IN` | ログイン成功 |
 | 認証 | `USER_LOGIN_FAILED` | ログイン失敗（メール不一致・パスワード不一致） |
 | 認証 | `USER_LOGGED_OUT` | ログアウト |
@@ -554,7 +554,7 @@ PENDING_PAYMENT → PAYMENT_CONFIRMED → PROCESSING → SHIPPED → DELIVERED �
 
 | エンティティ（論理名） | テーブル名（物理名） | 主な属性 | 主な関連 |
 |---|---|---|---|
-| ユーザー | `users` | メールアドレス、パスワード（ハッシュ）、Google ID、表示名、アバター画像URL、ロール、ステータス、メール確認済みフラグ、**deleted_at**（soft delete） | - |
+| ユーザー | `users` | メールアドレス、パスワード（ハッシュ）、Google ID、表示名、アバター画像URL、ロール、ステータス、**deleted_at**（soft delete）。※メール認証は登録時に完了済みのため確認済みフラグは持たない | - |
 | リフレッシュトークン | `refresh_tokens` | トークンハッシュ、有効期限、失効フラグ | ユーザー（多:1） |
 | セラー申請 | `seller_applications` | 申請理由、審査状態、審査コメント、審査者、審査日時 | ユーザー（申請者）、ユーザー（審査者） |
 | ショップ | `shops` | ショップ名、紹介文、ロゴ画像URL、公開ステータス、**deleted_at**（soft delete） | ユーザー・セラー（1:1） |
@@ -699,8 +699,10 @@ POST /api/v1/admin/seller-applications/{id}/approve  ✓
 
 ```
 # ── 認証 ────────────────────────────────────────────────────
-POST   /api/v1/auth/check-email           # メールアドレス重複チェック（登録ステップ1）
-POST   /api/v1/auth/register              # 会員登録（登録ステップ2）
+POST   /api/v1/auth/check-email           # メールアドレス重複チェック（インラインUX・任意）
+POST   /api/v1/auth/register/request-otp  # 認証コード(OTP)送信（登録ステップ1）
+POST   /api/v1/auth/register/verify-otp   # 認証コード(OTP)検証 → registrationToken（登録ステップ2）
+POST   /api/v1/auth/register/complete     # パスワード設定・登録完了・自動ログイン（登録ステップ3）
 POST   /api/v1/auth/login                 # メールログイン
 POST   /api/v1/auth/google                # Google ID Token 検証 → JWT発行
 POST   /api/v1/auth/refresh               # Access Token 再発行
@@ -998,6 +1000,10 @@ GET /api/v1/products?q=レザーウォレット
 | `TOKEN_INVALID` | 401 | JWTトークンが不正 |
 | `DUPLICATE_ENTRY` | 409 | 重複登録（同一メール等） |
 | `EMAIL_ALREADY_REGISTERED` | 409 | メールアドレスが既に登録済み（登録ステップ1チェック） |
+| `OTP_INVALID` | 400 | 認証コード（OTP）が不一致（登録ステップ2） |
+| `OTP_EXPIRED` | 400 | 認証コード（OTP）の有効期限切れ（10分） |
+| `OTP_MAX_ATTEMPTS_EXCEEDED` | 429 | OTP 検証の試行回数上限超過（5回）。再送信が必要 |
+| `REGISTRATION_SESSION_INVALID` | 400 | 登録セッション（registrationToken）が無効・期限切れ（登録ステップ3） |
 | `RATE_LIMIT_EXCEEDED` | 429 | レート制限超過 |
 | `PRODUCT_OUT_OF_STOCK` | 409 | 商品の在庫不足 |
 | `ORDER_NOT_CANCELLABLE` | 409 | キャンセル不可の注文ステータス |
@@ -1209,7 +1215,7 @@ com.kivio/
 | 商品レコメンド | Phase 5以降で検討 |
 | SEO最適化（OGP・サイトマップ等） | 基本的なメタタグは実装、高度なSEOは後回し |
 | 複数スタッフによるショップ管理 | ドメインモデルに設計考慮済み、実装は将来 |
-| Redis Pub/Sub（WebSocketスケーリング） | インターフェース設計済み、実装は将来 |
+| Redis Pub/Sub（WebSocketスケーリング） | インターフェース設計済み、実装は将来。※Redis 自体は Phase 2 で OTP・登録セッションの一時ストレージとして導入済み（[ADR-006](../../adr/ADR-006-email-otp-redis.md)） |
 | モバイルアプリ（iOS/Android） | Web（レスポンシブ）のみ |
 | 多言語対応 | 構造のみi18n対応、UIは日本語のみ |
 | 二段階認証（2FA）複数方式 | DB設計考慮済み（`user_mfa_methods`）、実装は将来 |
