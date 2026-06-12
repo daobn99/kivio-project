@@ -6,7 +6,6 @@ import io.kivio.config.filter.RateLimitingFilter;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
@@ -54,10 +53,10 @@ public class SecurityConfig {
     private final RateLimitingFilter rateLimitingFilter;
     private final ObjectMapper objectMapper;
 
-    // SecurityConfig の初期化時点では MVC の RequestMappingHandlerMapping がまだ未確定のため @Lazy で遅延取得する
+    // SecurityConfig の初期化時点では MVC の RequestMappingHandlerMapping がまだ未確定のため @Lazy
+    // で遅延取得する
     @Lazy
-    @Autowired
-    private RequestMappingHandlerMapping requestMappingHandlerMapping;
+    private final RequestMappingHandlerMapping requestMappingHandlerMapping;
 
     @Value("${app.cors.allowed-origins:http://localhost:3000}")
     private String allowedOrigins;
@@ -76,10 +75,10 @@ public class SecurityConfig {
                         // prod では springdoc.swagger-ui.enabled=false で Swagger 自体を無効化する
                         .contentSecurityPolicy(csp -> csp.policyDirectives(
                                 "default-src 'self'; " +
-                                "script-src 'self' 'unsafe-inline'; " +
-                                "style-src 'self' 'unsafe-inline'; " +
-                                "img-src 'self' data: https:; " +
-                                "font-src 'self' data:"))
+                                        "script-src 'self' 'unsafe-inline'; " +
+                                        "style-src 'self' 'unsafe-inline'; " +
+                                        "img-src 'self' data: https:; " +
+                                        "font-src 'self' data:"))
                         .frameOptions(HeadersConfigurer.FrameOptionsConfig::sameOrigin)
                         .xssProtection(Customizer.withDefaults())
                         .referrerPolicy(rp -> rp.policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.NO_REFERRER)))
@@ -162,9 +161,8 @@ public class SecurityConfig {
     }
 
     private AccessDeniedHandler problemDetailAccessDeniedHandler() {
-        return (request, response, ex) ->
-                writeProblemResponse(response, request,
-                        HttpStatus.FORBIDDEN, "このリソースへのアクセス権がありません", "access-denied", "ACCESS_DENIED");
+        return (request, response, ex) -> writeProblemResponse(response, request,
+                HttpStatus.FORBIDDEN, "このリソースへのアクセス権がありません", "access-denied", "ACCESS_DENIED");
     }
 
     /**
@@ -183,7 +181,7 @@ public class SecurityConfig {
     }
 
     private void writeProblemResponse(HttpServletResponse response, HttpServletRequest request,
-                                      HttpStatus status, String detail, String typeSlug, String errorCode)
+            HttpStatus status, String detail, String typeSlug, String errorCode)
             throws IOException {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, detail);
         problem.setType(URI.create(problemBaseUrl + "/problems/" + typeSlug));

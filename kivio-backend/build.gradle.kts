@@ -32,6 +32,8 @@ dependencies {
 	implementation("org.springframework.boot:spring-boot-starter-data-jpa")
 	// Redis（登録 OTP・登録セッションの TTL 一時ストレージ）
 	implementation("org.springframework.boot:spring-boot-starter-data-redis")
+	// Lettuce プーリング（application.yaml の lettuce.pool.enabled=true に必要。starter には推移的に含まれない）
+	implementation("org.apache.commons:commons-pool2")
 	implementation("org.springframework.boot:spring-boot-starter-security")
 	implementation("org.springframework.boot:spring-boot-starter-security-oauth2-client")
 	implementation("org.springframework.boot:spring-boot-starter-oauth2-resource-server")
