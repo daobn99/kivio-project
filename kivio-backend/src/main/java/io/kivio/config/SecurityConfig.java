@@ -181,13 +181,13 @@ public class SecurityConfig {
     }
 
     private void writeProblemResponse(HttpServletResponse response, HttpServletRequest request,
-            HttpStatus status, String detail, String typeSlug, String errorCode)
+            HttpStatus status, String detail, String typeSlug, String code)
             throws IOException {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, detail);
         problem.setType(URI.create(problemBaseUrl + "/problems/" + typeSlug));
         problem.setTitle(status.getReasonPhrase());
         problem.setInstance(URI.create(request.getRequestURI()));
-        problem.setProperty("errorCode", errorCode);
+        problem.setProperty("code", code);
         response.setStatus(status.value());
         response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
         response.setCharacterEncoding("UTF-8");

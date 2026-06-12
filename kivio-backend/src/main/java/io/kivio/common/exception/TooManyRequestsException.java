@@ -7,7 +7,7 @@ import org.springframework.http.HttpStatus;
  */
 public abstract class TooManyRequestsException extends KivioException {
 
-    protected TooManyRequestsException(String errorCode, String message) {
-        super(errorCode, message, HttpStatus.TOO_MANY_REQUESTS);
+    protected TooManyRequestsException(String code, String message) {
+        super(code, message, HttpStatus.TOO_MANY_REQUESTS);
     }
 }

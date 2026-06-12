@@ -804,15 +804,15 @@ KivioException（abstract）
 // 基底例外クラス
 public abstract class KivioException extends RuntimeException {
 
-    private final String errorCode;
+    private final String code;
 
-    protected KivioException(String message, String errorCode) {
+    protected KivioException(String message, String code) {
         super(message);
-        this.errorCode = errorCode;
+        this.code = code;
     }
 
-    public String getErrorCode() {
-        return errorCode;
+    public String getCode() {
+        return code;
     }
 }
 
@@ -827,8 +827,8 @@ public class ResourceNotFoundException extends KivioException {
 // 422: ビジネスルール違反の基底（サブクラスで具体的な例外を定義）
 public abstract class BusinessRuleException extends KivioException {
 
-    protected BusinessRuleException(String message, String errorCode) {
-        super(message, errorCode);
+    protected BusinessRuleException(String message, String code) {
+        super(message, code);
     }
 }
 
@@ -852,8 +852,8 @@ public class OrderNotCancellableException extends BusinessRuleException {
 // 409: 競合
 public class ConflictException extends KivioException {
 
-    protected ConflictException(String message, String errorCode) {
-        super(message, errorCode);
+    protected ConflictException(String message, String code) {
+        super(message, code);
     }
 }
 
@@ -883,7 +883,7 @@ public class GlobalExceptionHandler {
                                                    HttpServletRequest request) {
         ProblemDetail detail = ProblemDetail.forStatusAndDetail(
                 HttpStatus.BAD_REQUEST, "リクエストボディの形式が正しくありません");
-        detail.setProperty("errorCode", "INVALID_REQUEST_BODY");
+        detail.setProperty("code", "INVALID_REQUEST_BODY");
         return detail;
     }
 
@@ -891,7 +891,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ProblemDetail handleValidation(MethodArgumentNotValidException ex) {
         ProblemDetail detail = ProblemDetail.forStatus(HttpStatus.UNPROCESSABLE_CONTENT);
-        detail.setProperty("errorCode", "VALIDATION_FAILED");
+        detail.setProperty("code", "VALIDATION_FAILED");
         detail.setProperty("errors", ex.getBindingResult().getFieldErrors().stream()
                 .map(e -> Map.of("field", e.getField(), "message", e.getDefaultMessage()))
                 .toList());
@@ -902,7 +902,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ResourceNotFoundException.class)
     public ProblemDetail handleNotFound(ResourceNotFoundException ex) {
         ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
-        detail.setProperty("errorCode", ex.getErrorCode());
+        detail.setProperty("code", ex.getErrorCode());
         return detail;
     }
 
@@ -911,7 +911,7 @@ public class GlobalExceptionHandler {
     public ProblemDetail handleBusinessRule(BusinessRuleException ex) {
         ProblemDetail detail = ProblemDetail.forStatusAndDetail(
                 HttpStatus.UNPROCESSABLE_CONTENT, ex.getMessage());
-        detail.setProperty("errorCode", ex.getErrorCode());
+        detail.setProperty("code", ex.getErrorCode());
         return detail;
     }
 
@@ -934,7 +934,7 @@ public class GlobalExceptionHandler {
   "title": "Unprocessable Entity",
   "status": 422,
   "detail": "在庫が不足しています",
-  "errorCode": "INSUFFICIENT_STOCK"
+  "code": "INSUFFICIENT_STOCK"
 }
 ```
 

@@ -72,7 +72,7 @@ export interface ApiError {
   type: string
   title: string
   status: number
-  errorCode: string             // UPPER_SNAKE_CASE — UI 分岐に使用（CODING_STANDARDS §9.3）
+  code: string                  // UPPER_SNAKE_CASE — UI 分岐に使用（CODING_STANDARDS §9.3）
   detail: string
   instance: string
   errors?: ValidationFieldError[]
@@ -210,10 +210,10 @@ apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config
-    const errorCode: string | undefined = error.response?.data?.errorCode
+    const code: string | undefined = error.response?.data?.code
 
     // TOKEN_INVALID は即ログアウト。TOKEN_EXPIRED のみリフレッシュを試みる
-    if (errorCode === 'TOKEN_EXPIRED' && !originalRequest._retried) {
+    if (code === 'TOKEN_EXPIRED' && !originalRequest._retried) {
       originalRequest._retried = true
 
       if (isRefreshing) {
@@ -260,12 +260,12 @@ export function isApiError(
 ): error is { response: { data: ApiError } } {
   return (
     axios.isAxiosError(error) &&
-    typeof error.response?.data?.errorCode === 'string'
+    typeof error.response?.data?.code === 'string'
   )
 }
 
 export function getApiErrorCode(error: unknown): string | null {
-  return isApiError(error) ? error.response.data.errorCode : null
+  return isApiError(error) ? error.response.data.code : null
 }
 
 export function getValidationErrors(error: unknown): ValidationFieldError[] {

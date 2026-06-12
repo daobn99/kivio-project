@@ -7,7 +7,7 @@ import org.springframework.http.HttpStatus;
  */
 public abstract class UnauthorizedException extends KivioException {
 
-    protected UnauthorizedException(String errorCode, String message) {
-        super(errorCode, message, HttpStatus.UNAUTHORIZED);
+    protected UnauthorizedException(String code, String message) {
+        super(code, message, HttpStatus.UNAUTHORIZED);
     }
 }

@@ -175,8 +175,9 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   })
   if (res.status === 401) redirect('/auth/login')
   if (!res.ok) {
-    const error = await res.json()
-    throw new ApiError(error.title, error.status, error.detail, error.errorCode)
+    const problem: ProblemDetail = await res.json()
+    // ProblemDetail のエラーコードフィールドは `code`（`errorCode` ではない）
+    throw new ApiError(problem.title, problem.status, problem.detail, problem.code)
   }
   return res.json()
 }
@@ -791,7 +792,7 @@ export function useAddToCartMutation() {
       queryClient.invalidateQueries({ queryKey: queryKeys.cart.detail })
     },
     onError: (error: ApiError) => {
-      toast.error(getErrorMessage(error.errorCode))
+      toast.error(getErrorMessage(error.code))
     },
   })
 }
@@ -834,11 +835,13 @@ src/types/
 │   ├── product.ts
 │   ├── order.ts
 │   ├── auth.ts
-│   └── common.ts     # PageResponse<T>, ProblemDetail, ApiErrorCode
+│   ├── problem-detail.ts # ProblemDetail, ValidationError
+│   ├── page-response.ts  # PageResponse<T>
+│   ├── error-codes.ts    # ApiErrorCode
+│   └── index.ts          # api/ の re-export（バレル）
 ├── domain/           # フロントエンドのドメインモデル（API 型を加工したもの）
 │   └── cart.ts
-├── enums.ts          # バックエンド Enum と対応する const + type 定義
-└── index.ts          # re-export
+└── enums.ts          # バックエンド Enum と対応する const + type 定義
 ```
 
 ### 9.2 命名規則
@@ -855,26 +858,36 @@ src/types/
 バックエンドの API 設計書（`docs/design/API_DESIGN.md`）の JSON フィールドに厳密に対応させる。
 
 ```ts
-// src/types/api/common.ts
+// src/types/api/page-response.ts
 export interface PageResponse<T> {
   content: T[]
+  page: number
+  size: number
   totalElements: number
   totalPages: number
-  size: number
-  number: number
-  first: boolean
   last: boolean
+}
+
+// src/types/api/problem-detail.ts
+export interface ValidationError {
+  field: string
+  message: string
+  rejectedValue?: unknown
 }
 
 export interface ProblemDetail {
   type: string
   title: string
   status: number
+  /** UPPER_SNAKE_CASE エラーコード（フィールド名は `code`。`errorCode` ではない） */
+  code: string
   detail: string
   instance: string
-  errorCode: ApiErrorCode
+  /** バリデーションエラー時のフィールド別詳細 */
+  errors?: ValidationError[]
 }
 
+// src/types/api/error-codes.ts
 export type ApiErrorCode =
   | 'PRODUCT_NOT_FOUND'
   | 'PRODUCT_OUT_OF_STOCK'
@@ -960,12 +973,14 @@ export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
 
 Zod スキーマは `src/lib/validations/` 配下に集約し、フォームコンポーネントと分離する。
 
+> **Zod v4:** メール検証はトップレベルの `z.email()` を使う。`z.string().email()` は v4 で **deprecated**。
+
 ```ts
 // src/lib/validations/auth.ts
 import { z } from 'zod'
 
 export const loginSchema = z.object({
-  email: z.string().email('有効なメールアドレスを入力してください'),
+  email: z.email('有効なメールアドレスを入力してください'),
   password: z.string().min(8, 'パスワードは8文字以上です'),
 })
 

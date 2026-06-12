@@ -7,7 +7,7 @@ import org.springframework.http.HttpStatus;
  */
 public abstract class ForbiddenException extends KivioException {
 
-    protected ForbiddenException(String errorCode, String message) {
-        super(errorCode, message, HttpStatus.FORBIDDEN);
+    protected ForbiddenException(String code, String message) {
+        super(code, message, HttpStatus.FORBIDDEN);
     }
 }

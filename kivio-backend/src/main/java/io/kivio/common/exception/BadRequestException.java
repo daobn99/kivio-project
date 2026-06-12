@@ -7,7 +7,7 @@ import org.springframework.http.HttpStatus;
  */
 public abstract class BadRequestException extends KivioException {
 
-    protected BadRequestException(String errorCode, String message) {
-        super(errorCode, message, HttpStatus.BAD_REQUEST);
+    protected BadRequestException(String code, String message) {
+        super(code, message, HttpStatus.BAD_REQUEST);
     }
 }

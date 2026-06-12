@@ -7,7 +7,7 @@ import org.springframework.http.HttpStatus;
  */
 public class ConflictException extends KivioException {
 
-    protected ConflictException(String errorCode, String message) {
-        super(errorCode, message, HttpStatus.CONFLICT);
+    protected ConflictException(String code, String message) {
+        super(code, message, HttpStatus.CONFLICT);
     }
 }

@@ -131,7 +131,7 @@ class AuthControllerIntegrationTest extends IntegrationTestBase {
                                 {"email":"%s"}
                                 """.formatted(email)))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.errorCode").value("EMAIL_ALREADY_REGISTERED"));
+                .andExpect(jsonPath("$.code").value("EMAIL_ALREADY_REGISTERED"));
     }
 
     @Test
@@ -142,7 +142,7 @@ class AuthControllerIntegrationTest extends IntegrationTestBase {
                                 {"email":"not-valid"}
                                 """))
                 .andExpect(status().is(422))
-                .andExpect(jsonPath("$.errorCode").value("VALIDATION_FAILED"));
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
     }
 
     @Test
@@ -163,7 +163,7 @@ class AuthControllerIntegrationTest extends IntegrationTestBase {
                                 {"email":"%s","otp":"%s"}
                                 """.formatted(email, wrongOtp)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.errorCode").value("OTP_INVALID"));
+                .andExpect(jsonPath("$.code").value("OTP_INVALID"));
     }
 
     @Test
@@ -174,7 +174,7 @@ class AuthControllerIntegrationTest extends IntegrationTestBase {
                                 {"registrationToken":"%s","password":"Password123!","passwordConfirm":"Password123!","displayName":"Bob"}
                                 """.formatted(UUID.randomUUID())))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.errorCode").value("REGISTRATION_SESSION_INVALID"));
+                .andExpect(jsonPath("$.code").value("REGISTRATION_SESSION_INVALID"));
     }
 
     // ============================================================
@@ -209,7 +209,7 @@ class AuthControllerIntegrationTest extends IntegrationTestBase {
                                 {"email":"%s","password":"WrongPassword!"}
                                 """.formatted(email)))
                 .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.errorCode").value("INVALID_CREDENTIALS"));
+                .andExpect(jsonPath("$.code").value("INVALID_CREDENTIALS"));
     }
 
     // ============================================================
@@ -243,7 +243,7 @@ class AuthControllerIntegrationTest extends IntegrationTestBase {
                                 {"idToken":"invalid-token"}
                                 """))
                 .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.errorCode").value("GOOGLE_TOKEN_INVALID"));
+                .andExpect(jsonPath("$.code").value("GOOGLE_TOKEN_INVALID"));
     }
 
     // ============================================================
@@ -274,7 +274,7 @@ class AuthControllerIntegrationTest extends IntegrationTestBase {
                                 {"refreshToken":"completely-invalid-token"}
                                 """))
                 .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.errorCode").value("REFRESH_TOKEN_INVALID"));
+                .andExpect(jsonPath("$.code").value("REFRESH_TOKEN_INVALID"));
     }
 
     // ============================================================
