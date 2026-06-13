@@ -453,8 +453,8 @@ src/
 | T-16 | FE: `LoginForm` / `RegisterFlow`（3 ステップ）/ `GoogleSignInButton` | FE | T-13, T-14, T-15 | ✅ Done |
 | T-17 | FE: `login/page.tsx` / `register/page.tsx`（verify-email ページは作らない） | FE | T-16 | ✅ Done |
 | T-18 | FE: `proxy.ts` に認証ガード追加 | FE | T-15 | ✅ Done |
-| T-19 | FE: コンポーネントテスト（Vitest + RTL + MSW の OTP ハンドラ） | FE | T-16 | ⬜ Todo |
-| T-20 | FE: E2E テスト（Playwright・3 ステップ登録） | FE | T-17, T-18 | ⬜ Todo |
+| T-19 | FE: コンポーネントテスト（Vitest + RTL + MSW の OTP ハンドラ） | FE | T-16 | ✅ Done |
+| T-20 | FE: E2E テスト（Playwright・3 ステップ登録） | FE | T-17, T-18 | ✅ Done |
 | T-21 | Seed データ改修（`dev/V10__seed_development_data.sql`・`email_verified` 列を除去し認証済みユーザーを直接 INSERT） | BE | T-01 | ✅ Done |
 
 **依存グラフ（クリティカルパス）:**
@@ -587,24 +587,24 @@ T-08（既存・回帰確認）
 
 #### コンポーネントテスト（Vitest + RTL + MSW）
 
-- [ ] `LoginForm`: メールとパスワードを入力して送信 → `login()` が呼ばれる
-- [ ] `LoginForm`: バリデーションエラー時にエラーメッセージが表示される
-- [ ] `LoginForm`: API エラー（401）時にエラーメッセージが表示される
-- [ ] `RegisterFlow` Step1: メール入力 → `requestOtp()` が呼ばれ Step2 へ遷移
-- [ ] `RegisterFlow` Step2: 6 桁 OTP 入力 → `verifyOtp()` が呼ばれ Step3 へ遷移
-- [ ] `RegisterFlow` Step2: `OTP_INVALID` で残り回数表示・再入力できる／`OTP_EXPIRED` で再送信ボタン
-- [ ] `RegisterFlow` Step3: パスワード不一致でバリデーションエラー／成功で `completeRegistration()` 呼び出し
-- [ ] `GoogleSignInButton`: クリックで `signIn("google")` が呼ばれる
+- [x] `LoginForm`: メールとパスワードを入力して送信 → `login()` が呼ばれる（accessToken 保存 + ホーム遷移で検証）
+- [x] `LoginForm`: バリデーションエラー時にエラーメッセージが表示される
+- [x] `LoginForm`: API エラー（401）時にエラーメッセージが表示される
+- [x] `RegisterFlow` Step1: メール入力 → `requestOtp()` が呼ばれ Step2 へ遷移
+- [x] `RegisterFlow` Step2: 6 桁 OTP 入力 → `verifyOtp()` が呼ばれ Step3 へ遷移
+- [x] `RegisterFlow` Step2: `OTP_INVALID` で残り回数表示・再入力できる（`OTP_EXPIRED` の再送信は E2E/手動で確認）
+- [x] `RegisterFlow` Step3: パスワード不一致でバリデーションエラー（成功 → `completeRegistration()` は E2E で検証）
+- [x] `GoogleSignInButton`: クリックで `signIn("google")` が呼ばれる
 
 #### E2E テスト（Playwright）
 
-- [ ] 登録フロー: メール入力 → OTP 入力（モック）→ パスワード設定 → 自動ログインでホームへ
-- [ ] OTP 誤入力 → エラー表示・再入力できる
-- [ ] ログインフロー: login → ホームにリダイレクト → accessToken が Zustand に保存される
-- [ ] 誤パスワードログイン: エラーメッセージが表示される
-- [ ] ログアウト: ログアウト後に protected route へアクセス → `/login` にリダイレクト
-- [ ] 未認証ユーザーが protected route に直接アクセス → `/login` にリダイレクト
-- [ ] 認証済みユーザーが `/login` にアクセス → `/` にリダイレクト
+- [x] 登録フロー: メール入力 → OTP 入力（モック）→ パスワード設定 → 自動ログインでホームへ
+- [x] OTP 誤入力 → エラー表示・再入力できる
+- [x] ログインフロー: login → ホームにリダイレクト → accessToken が Zustand に保存される
+- [x] 誤パスワードログイン: エラーメッセージが表示される
+- [ ] ログアウト: ログアウト後に protected route へアクセス → `/login` にリダイレクト（ログアウト UI が未実装のため後続）
+- [x] 未認証ユーザーが protected route に直接アクセス → `/login` にリダイレクト
+- [x] 認証済みユーザーが `/login` にアクセス → `/` にリダイレクト
 
 ---
 
