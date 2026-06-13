@@ -10,11 +10,13 @@
 ./gradlew clean build    # clean build
 ```
 
-### Frontend (kivio-frontend/) — ディレクトリ初期化済み・実装未着手
+### Frontend (kivio-frontend/) 
 ```bash
 pnpm dev                 # dev server → localhost:3000
 pnpm build
 pnpm lint
+pnpm typecheck
+pnpm test                
 ```
 
 ### Docker (project root)

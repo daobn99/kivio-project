@@ -164,6 +164,7 @@ pnpm dev          # 開発サーバー起動
 pnpm build        # プロダクションビルド
 pnpm lint         # ESLint
 pnpm typecheck    # TypeScript 型チェック
+pnpm test         # Jest + React Testing Library
 ```
 
 ## CI / CD
