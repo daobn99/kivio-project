@@ -3,6 +3,17 @@
 # =============================================================================
 
 spring:
+  # メール送信は devcontainer の Mailpit（SMTP）へ。Web UI: http://localhost:8025
+  # 認証・TLS は不要（ローカル開発用ダミー SMTP）
+  mail:
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:1025}
+    properties:
+      mail:
+        smtp:
+          auth: false
+          starttls:
+            enable: false
   jpa:
     show-sql: true
     properties:

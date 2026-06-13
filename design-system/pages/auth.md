@@ -517,7 +517,6 @@ xxx@example.com に送信した6桁のコードを入力してください
 
 パスワード
 [__________________] 👁        （type=password, autoComplete=new-password, 表示切替）
-  └ 8文字以上                  （ヘルプテキスト）
 
 パスワード（確認）
 [__________________]          （autoComplete=new-password）

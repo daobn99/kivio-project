@@ -24,7 +24,6 @@ import io.kivio.domain.identity.exception.RefreshTokenInvalidException;
 import io.kivio.domain.identity.exception.UserDeactivatedException;
 import io.kivio.domain.identity.repository.RefreshTokenRepository;
 import io.kivio.domain.identity.repository.UserRepository;
-import io.kivio.infra.email.EmailSender;
 import io.kivio.infra.google.GoogleTokenVerifier;
 import io.kivio.infra.google.GoogleUserInfo;
 import lombok.RequiredArgsConstructor;
@@ -54,7 +53,7 @@ public class AuthService {
     private final RefreshTokenRepository refreshTokenRepository;
     private final OtpService otpService;
     private final RegistrationSessionService registrationSessionService;
-    private final EmailSender emailSender;
+    private final AuthEmailService authEmailService;
     private final GoogleTokenVerifier googleTokenVerifier;
     private final JwtProvider jwtProvider;
     private final JwtProperties jwtProperties;
@@ -84,7 +83,7 @@ public class AuthService {
         }
 
         String otp = otpService.issue(request.email());
-        emailSender.sendRegistrationOtp(request.email(), otp);
+        authEmailService.sendRegistrationOtp(request.email(), otp);
         log.info("registration_otp_requested");
 
         return RequestOtpResponse.of(authProperties.otp().ttl().toSeconds());

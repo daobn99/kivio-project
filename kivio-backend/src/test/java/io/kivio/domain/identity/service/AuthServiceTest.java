@@ -29,7 +29,6 @@ import io.kivio.domain.identity.exception.RegistrationSessionInvalidException;
 import io.kivio.domain.identity.exception.UserDeactivatedException;
 import io.kivio.domain.identity.repository.RefreshTokenRepository;
 import io.kivio.domain.identity.repository.UserRepository;
-import io.kivio.infra.email.EmailSender;
 import io.kivio.infra.google.GoogleTokenVerifier;
 import io.kivio.infra.google.GoogleUserInfo;
 import org.junit.jupiter.api.BeforeEach;
@@ -61,7 +60,7 @@ class AuthServiceTest {
     @Mock private RefreshTokenRepository refreshTokenRepository;
     @Mock private OtpService otpService;
     @Mock private RegistrationSessionService registrationSessionService;
-    @Mock private EmailSender emailSender;
+    @Mock private AuthEmailService authEmailService;
     @Mock private GoogleTokenVerifier googleTokenVerifier;
     @Mock private JwtProvider jwtProvider;
     @Mock private PasswordEncoder passwordEncoder;
@@ -79,7 +78,7 @@ class AuthServiceTest {
     void setUp() {
         authService = new AuthService(
                 userRepository, refreshTokenRepository, otpService, registrationSessionService,
-                emailSender, googleTokenVerifier, jwtProvider, JWT_PROPERTIES, AUTH_PROPERTIES,
+                authEmailService, googleTokenVerifier, jwtProvider, JWT_PROPERTIES, AUTH_PROPERTIES,
                 passwordEncoder);
     }
 
@@ -121,7 +120,7 @@ class AuthServiceTest {
 
         assertThat(response.expiresInSeconds()).isEqualTo(600);
         then(otpService).should().issue("new@example.com");
-        then(emailSender).should().sendRegistrationOtp("new@example.com", "428170");
+        then(authEmailService).should().sendRegistrationOtp("new@example.com", "428170");
     }
 
     @Test
@@ -132,7 +131,7 @@ class AuthServiceTest {
                 .isInstanceOf(EmailAlreadyRegisteredException.class);
 
         then(otpService).should(never()).issue(anyString());
-        then(emailSender).should(never()).sendRegistrationOtp(anyString(), anyString());
+        then(authEmailService).should(never()).sendRegistrationOtp(anyString(), anyString());
     }
 
     // ============================================================

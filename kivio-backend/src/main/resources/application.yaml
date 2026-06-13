@@ -108,6 +108,10 @@ app:
       max-per-hour: ${AUTH_OTP_MAX_PER_HOUR:5}         # メール単位の 1 時間あたり送信上限
     registration-session:
       ttl: ${AUTH_REGISTRATION_SESSION_TTL:PT30M}      # registrationToken 有効期限
+  # 送信メールの差出人（EMAIL_DESIGN.md §1 送信設定）。dev/prod の EmailSender が共有する
+  email:
+    from-address: ${MAIL_FROM_ADDRESS:noreply@kivio.example.com}
+    from-name: ${MAIL_FROM_NAME:Kivio}
   cors:
     allowed-origins: ${ALLOWED_ORIGINS:http://localhost:3000}
   rate-limit:
@@ -143,6 +147,10 @@ management:
       # Kubernetes liveness/readiness probe サポート
       probes:
         enabled: true
+  # メール送信は副作用であり、SMTP/Mailpit の死活をアプリの readiness に連動させない
+  health:
+    mail:
+      enabled: false
   info:
     env:
       enabled: false

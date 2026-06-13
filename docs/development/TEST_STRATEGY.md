@@ -51,6 +51,7 @@
 | Web Layer | `@WebMvcTest` | 部分起動 | なし | < 500ms/件 |
 | Repository | `@DataJpaTest` + Testcontainers | JPA のみ | PostgreSQL | 数秒（初回のみ起動）|
 | 統合テスト | `@SpringBootTest` + Testcontainers | フル起動 | PostgreSQL | 数秒〜十数秒 |
+| 設定・プロファイル | `ApplicationContextRunner` | 部分起動 | なし | < 500ms/件 |
 
 ---
 
@@ -283,6 +284,50 @@ class AuthIntegrationTest {
 
 **用途:** 認証フロー全体、Stripe Webhook 受信→注文ステータス更新フロー、クロスドメインのオーケストレーション
 
+#### メール送信のモック境界
+
+メール送信を伴う統合テストでは、トランスポート（`EmailSender`）ではなく**ユースケースサービス（`{Context}EmailService`）を `@MockitoBean` で差し替える**。件名・本文の組み立てを跨がずに送信入力（OTP 等）を直接捕捉でき、SMTP/Resend への依存も排除できる。
+
+```java
+// OTP メール送信をモックし、生成された OTP を捕捉してフローを進める
+@MockitoBean private AuthEmailService authEmailService;
+
+private String captureSentOtp(String email) {
+    ArgumentCaptor<String> otpCaptor = ArgumentCaptor.forClass(String.class);
+    verify(authEmailService).sendRegistrationOtp(eq(email), otpCaptor.capture());
+    return otpCaptor.getValue();
+}
+```
+
+### 3.6 設定・プロファイル解決テスト（Testcontainers 不要）
+
+Bean のプロファイル別解決など、フル起動せずに検証できる設定面は `ApplicationContextRunner` で軽量にテストする。Docker 不要で常に実行されるため、フル統合テストが Docker 不在でスキップされる環境でも回帰を捕捉できる。
+
+例として、環境ごとに `EmailSender` 実体が一意に解決され、`test` プロファイルにフォールバックが存在すること（これが無いとフルコンテキスト起動の `@SpringBootTest` が壊れる）を検証する。
+
+```java
+class EmailSenderProfileTest {
+    private final ApplicationContextRunner runner =
+        new ApplicationContextRunner().withUserConfiguration(LogEmailSender.class);
+
+    @Test
+    void fallback_is_active_under_test_profile() {
+        runner.withPropertyValues("spring.profiles.active=test").run(context -> {
+            assertThat(context).hasSingleBean(EmailSender.class);
+            assertThat(context).getBean(EmailSender.class).isInstanceOf(LogEmailSender.class);
+        });
+    }
+
+    @Test
+    void fallback_is_excluded_under_prod_profile() {
+        runner.withPropertyValues("spring.profiles.active=prod")
+            .run(context -> assertThat(context).doesNotHaveBean(EmailSender.class));
+    }
+}
+```
+
+> プロファイルは `withPropertyValues` で明示指定する（実行環境の `SPRING_PROFILES_ACTIVE` に依存させない）。
+
 ---
 
 ## 4. Testcontainers セットアップ
@@ -365,6 +410,8 @@ resend:
   api-key: re_dummy
 ```
 
+> **`EmailSender` のフォールバックに注意。** プロファイル別 Bean（dev=`SmtpEmailSender` / prod=`ResendEmailSender`）はダミー設定だけでは解決されない。`test` プロファイルではフォールバック `LogEmailSender`（`@Profile("!dev & !prod")`）が `EmailSender` を提供するため、`@SpringBootTest` のフルコンテキストが起動できる。これが欠けると `EmailSender` の Bean 不在でコンテキスト起動が失敗する（→ 3.6 で回帰を防ぐ）。
+
 ---
 
 ## 5. 命名規則
@@ -404,6 +451,7 @@ void should_exclude_soft_deleted_users_from_search_results() { ... }
 | ドメインモデル（Entity・Value Object） | **モック禁止** | 直接インスタンス化してテスト |
 | Repository | Service テストは `@Mock`、Repository テスト自体は Testcontainers | DB 依存の動作は実 PostgreSQL で検証 |
 | 外部サービス（Stripe・Cloudinary・Resend） | `@MockBean` または WireMock | ネットワーク依存を排除 |
+| メール送信 | ユースケースサービス（`{Context}EmailService`）を `@MockitoBean` | 送信入力（OTP 等）を直接捕捉でき、テンプレート描画やトランスポート（SMTP/Resend）に依存しない（→ 3.5 メール送信のモック境界） |
 | ApplicationEventPublisher | `@Mock` + `verify()` | イベント発行の副作用を検証 |
 | Spring Security | `@WithMockUser` / `@WithAnonymousUser` | 認証状態を差し替えてテスト |
 

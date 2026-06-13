@@ -3,7 +3,7 @@ package io.kivio.domain.identity.controller;
 import io.kivio.domain.identity.domain.User;
 import io.kivio.domain.identity.exception.GoogleTokenInvalidException;
 import io.kivio.domain.identity.repository.UserRepository;
-import io.kivio.infra.email.EmailSender;
+import io.kivio.domain.identity.service.AuthEmailService;
 import io.kivio.infra.google.GoogleTokenVerifier;
 import io.kivio.infra.google.GoogleUserInfo;
 import io.kivio.support.IntegrationTestBase;
@@ -37,7 +37,7 @@ class AuthControllerIntegrationTest extends IntegrationTestBase {
     // 外部 HTTP 呼び出しを防ぐためモックに差し替える
     @MockitoBean private GoogleTokenVerifier googleTokenVerifier;
     // OTP メール送信をモックし、生成された OTP を捕捉してフローを進める
-    @MockitoBean private EmailSender emailSender;
+    @MockitoBean private AuthEmailService authEmailService;
 
     // ============================================================
     // POST /api/v1/auth/check-email
@@ -331,7 +331,7 @@ class AuthControllerIntegrationTest extends IntegrationTestBase {
     /** request-otp 呼び出しで emailSender に渡された OTP を捕捉する。 */
     private String captureSentOtp(String email) {
         ArgumentCaptor<String> otpCaptor = ArgumentCaptor.forClass(String.class);
-        verify(emailSender).sendRegistrationOtp(eq(email), otpCaptor.capture());
+        verify(authEmailService).sendRegistrationOtp(eq(email), otpCaptor.capture());
         return otpCaptor.getValue();
     }
 

@@ -113,7 +113,7 @@ Redis インフラ導入（build.gradle / docker-compose / application.yml / Red
 | `POST /auth/logout` | 必須 | `refreshToken` | 204 No Content | — |
 
 **補足事項:**
-- `POST /auth/register/request-otp`: メール重複チェック後に 6 桁 OTP を生成し `reg:otp:{email}`（Redis, TTL 10 分）へ SHA-256 ハッシュ + 試行回数で保存、Resend 経由で送信する。**この時点では `users` を作成しない。**
+- `POST /auth/register/request-otp`: メール重複チェック後に 6 桁 OTP を生成し `reg:otp:{email}`（Redis, TTL 10 分）へ SHA-256 ハッシュ + 試行回数で保存、`EmailSender` 経由で送信する（dev: Mailpit / prod: Resend）。**この時点では `users` を作成しない。**
 - `POST /auth/register/verify-otp`: OTP 一致で `reg:otp:{email}` を削除し、不透明な `registrationToken`（UUID v4）を発行して `reg:session:{registrationToken}` → `{email}`（Redis, TTL 30 分）へ保存する。検証失敗ごとに試行回数を加算し 5 回で OTP を失効させる。
 - `POST /auth/register/complete`: `registrationToken` から認証済みメールを取得して `users` を新規作成（`ROLE_BUYER`）、`registrationToken` を削除し Access + Refresh Token を返して自動ログインさせる。完了は冪等でない（トークンはワンタイム消費）。
 - `POST /auth/login`: メール認証はすでに完了済みのユーザーのみが `users` に存在するため、**メール確認状態のチェックは行わない**（`EMAIL_NOT_VERIFIED` は廃止）。
@@ -241,9 +241,19 @@ io.kivio/
 │           # ❌ RegisterResponse.java を削除
 ├── infra/google/
 │   └── GoogleTokenVerifier.java             # 既存（Google ID Token 検証）
-└── infra/resend/
-    └── （EmailService.sendRegistrationOtp に改修。EMAIL_DESIGN.md AUTH-01 参照）
+└── infra/email/
+    ├── EmailSender.java                     # インターフェース（sendRegistrationOtp）
+    ├── SmtpEmailSender.java                 # ★ dev 実装（@Profile("dev")・SMTP→Mailpit）
+    ├── template/
+    │   └── EmailTemplateFormatter.java      # ★ HTML テンプレートの {{変数}} 置換
+    └── （ResendEmailSender.java は prod 実装として後続フェーズで追加。@Profile("prod")・EMAIL_DESIGN.md §5）
 ```
+
+> **メール送信の方針（環境別トランスポート）:** `EmailSender` インターフェースを差し替え点（seam）とし、プロファイルで実装を選択する。
+> **dev:** `SmtpEmailSender` が devcontainer の Mailpit（`MAIL_HOST:MAIL_PORT`）へ HTML メールを送信し、Web UI（http://localhost:8025）で本番同等のメールを目視確認する。
+> **test:** `@MockitoBean EmailSender` でモックし、`ArgumentCaptor` で OTP を捕捉してフローを進める（実送信なし）。
+> **prod:** Resend HTTP API 実装（`ResendEmailSender @Profile("prod")`）へ差し替える（後続タスク・OQ-4）。
+> テンプレートは classpath の `emails/ja/registration-otp.html`（EMAIL_DESIGN.md AUTH-01）を `EmailTemplateFormatter` が読み込み、`{{otpCode}}` / `{{expiresIn}}` を置換する。差出人は `app.email`（`MAIL_FROM_ADDRESS` / `MAIL_FROM_NAME`）で外部化。
 
 **削除する例外クラス:** `EmailNotVerifiedException` / `EmailVerificationTokenInvalidException` / `EmailVerificationTokenExpiredException`  
 **追加する例外クラス:** `OtpInvalidException`（400 `OTP_INVALID`）/ `OtpExpiredException`（400 `OTP_EXPIRED`）/ `OtpMaxAttemptsExceededException`（429 `OTP_MAX_ATTEMPTS_EXCEEDED`）/ `RegistrationSessionInvalidException`（400 `REGISTRATION_SESSION_INVALID`）
@@ -271,9 +281,15 @@ io.kivio/
 - DTO: `RegisterRequest` / `VerifyEmailRequest` / `RegisterResponse` を削除し、`RequestOtpRequest` / `VerifyOtpRequest` / `CompleteRegistrationRequest` / `RequestOtpResponse` / `VerifyOtpResponse` を追加
 - `CompleteRegistrationRequest`: `passwordConfirm` 一致チェック（クラスレベル `@AssertTrue` or custom constraint）、`displayName` は `@Size(max=100)` で任意
 
-#### ステップ 4: EmailService（Resend）の改修
+#### ステップ 4: EmailSender の実装（dev: SMTP→Mailpit / prod: Resend）
 
-- `sendEmailVerification(...)` を削除し `sendRegistrationOtp(String toEmail, String otpCode)` を実装（`EMAIL_DESIGN.md` AUTH-01・テンプレート `emails/ja/registration-otp.html`・件名 `【Kivio】認証コード: {otp}`）
+- **トランスポートとユースケースを分離する**（「どう送るか」と「何を送るか」を別レイヤーに）:
+  - **トランスポート層** `EmailSender#send(EmailMessage)`: 描画済みの `EmailMessage`（`to` / `subject` / `htmlBody`）をそのまま送るだけの薄い契約。profile で実装を差し替える。テンプレート・件名・変数を関知しない
+  - **ユースケース層** `AuthEmailService#sendRegistrationOtp(String toEmail, String otpCode)`（`@Service`・profile 非依存・実装1つ）: テンプレート `emails/ja/registration-otp.html` を `EmailTemplateFormatter` で描画し、件名 `【Kivio】認証コード: {otpCode}` を組み立てて `EmailSender#send` へ委譲。`AuthService` はこれに依存する。メール種別が増えても増えるのはユースケース層のみで、dev/prod の各トランスポートにテンプレート処理が重複しない
+- **dev 実装 `SmtpEmailSender`（`@Profile("dev")`）:** `spring-boot-starter-mail` の `JavaMailSender` で Mailpit（`spring.mail.host/port` = `MAIL_HOST:MAIL_PORT`、認証・TLS なし）へ HTML メールを送信する。差出人は `app.email`（`MAIL_FROM_ADDRESS` / `MAIL_FROM_NAME`）。**件名・本文に OTP を含むため、ログ出力は `to=` のみ（件名・本文は出さない）。**
+- **prod 実装 `ResendEmailSender`（`@Profile("prod")`）:** 後続タスク（OQ-4）。`@Async` + `@Retryable` でメール失敗をビジネスロジックに伝播させない（EMAIL_DESIGN.md §5）
+- **フォールバック `LogEmailSender`（`@Profile("!dev & !prod")`）:** dev/prod 以外（統合テストの `test` プロファイル・プロファイル未指定の `bootRun`）で有効化し、実送信せずログ出力のみで代替する。これが無いと `test` プロファイルに `EmailSender` 実体が存在せず、フルコンテキスト起動テスト（`KivioBackendApplicationTests`）が失敗する。`prod` は除外しているため Resend 実装（T-26）が入るまで意図的に起動失敗させ、メールの無言ドロップを防ぐ。プロファイル解決は `EmailSenderProfileTest`（Testcontainers 不要）で検証する
+- メールの死活はアプリ readiness に連動させない（`management.health.mail.enabled=false`）
 
 #### ステップ 5: AuthService の改修
 
@@ -282,7 +298,7 @@ io.kivio/
 | メソッド | 責務 |
 |---|---|
 | `checkEmail(CheckEmailRequest req)` | email の存在チェック → `available` フラグ返却（変更なし） |
-| `requestOtp(RequestOtpRequest req)` | email 重複チェック → `OtpService.issue(email)` → `EmailService.sendRegistrationOtp` → `RequestOtpResponse`（202） |
+| `requestOtp(RequestOtpRequest req)` | email 重複チェック → `OtpService.issue(email)` → `EmailSender.sendRegistrationOtp` → `RequestOtpResponse`（202） |
 | `verifyOtp(VerifyOtpRequest req)` | `OtpService.verify(email, otp)` → 成功で `RegistrationSessionService.create(email)` → `VerifyOtpResponse`（registrationToken） |
 | `completeRegistration(CompleteRegistrationRequest req)` | `RegistrationSessionService.consume(token)` で email 取得 → BCrypt ハッシュ化 → INSERT users（`ROLE_BUYER`）→ RefreshToken 生成 → `AuthTokenResponse`（201・自動ログイン）。INSERT で UNIQUE 違反時は `EMAIL_ALREADY_REGISTERED` |
 | `login(LoginRequest req)` | email 検索 → BCrypt 検証 → `USER_DEACTIVATED` チェック → RefreshToken 生成 → `AuthTokenResponse`（**`email_verified` チェックは削除**） |
@@ -422,7 +438,8 @@ src/
 | T-03 | Repository 改修：`EmailVerificationTokenRepository` 削除 | BE | T-02 | ✅ Done |
 | T-04 | DTO 改修：OTP 系 Request/Response 追加、`Register*`/`VerifyEmail*` 削除、例外クラス入替 | BE | なし | ✅ Done |
 | T-05 | `GoogleTokenVerifier` 実装（infra 層） | BE | なし | ✅ Done |
-| T-25 | `EmailSender.sendRegistrationOtp` 改修（OTP メール・`LogEmailSender` 差し替え） | BE | なし | ✅ Done |
+| T-25 | トランスポート `EmailSender#send(EmailMessage)` + ユースケース `AuthEmailService`（テンプレート描画・件名生成を集約）+ dev 実装 `SmtpEmailSender`（SMTP→Mailpit）+ `EmailTemplateFormatter` + テンプレート `emails/ja/registration-otp.html` + フォールバック `LogEmailSender`（`@Profile("!dev & !prod")`、test/未指定プロファイルの起動用）+ `EmailSenderProfileTest` | BE | なし | ✅ Done |
+| T-26 | prod 実装 `ResendEmailSender`（`@Profile("prod")`・`@Async`+`@Retryable`）+ Resend API Key 設定（EMAIL_DESIGN.md §5） | BE | T-25 | ⬜ Todo（後続フェーズ・OQ-4） |
 | T-06 | `AuthService` 改修：`requestOtp` / `verifyOtp` / `completeRegistration`（旧 register/verifyEmail を置換） | BE | T-03, T-04, T-23, T-24, T-25 | ✅ Done |
 | T-07 | `AuthService` 改修：`login` / `googleLogin`（`email_verified` チェック・`verifyEmail()` 呼び出しを削除） | BE | T-05, T-06 | ✅ Done |
 | T-08 | `AuthService`：`refresh` / `logout`（変更なし・回帰確認のみ） | BE | T-06 | ✅ Done |
@@ -598,7 +615,7 @@ PR をマージするには以下を全て満たすこと。
 ### 機能要件
 
 - [ ] 全 8 エンドポイント（check-email / register×3 / login / google / refresh / logout）が実装されている
-- [ ] `POST /auth/register/request-otp` で OTP メールが Resend 経由で送信される
+- [ ] `POST /auth/register/request-otp` で OTP メールが実送信される（dev: Mailpit SMTP → Web UI `http://localhost:8025` で目視確認 / prod: Resend は T-26 で対応）
 - [ ] 3 ステップ（request-otp → verify-otp → complete）で登録が完了し、`complete` 成功でそのままログイン状態になる
 - [ ] `users` レコードが OTP 検証 + パスワード設定の完了後にのみ作成される（未認証レコードが残らない）
 - [ ] `POST /auth/google` で既存メールアカウントとの統合が動作する
@@ -644,7 +661,7 @@ PR をマージするには以下を全て満たすこと。
 | ~~OQ-1~~ | ✅ 解決：開発初期のため Migration を直接編集する方針で合意。`V2__create_identity_tables.sql` から `email_verified` 列を除去し、`V12__create_email_verification_tokens.sql` を削除した（新規 V13 は追加しない） | T-01 | — |
 | OQ-2 | `POST /auth/refresh` のレスポンスに新しい `refreshToken` を含める仕様か？ API_DESIGN.md §2.4 のレスポンスに `refreshToken` フィールドがない → Token Rotation の結果をどう返すか確認 | T-08, T-14 | 着手前 |
 | OQ-3 | Google OAuth の Client ID / Secret は誰が払い出すか？ ローカル開発用の `.env` をシニアが用意するか？ | T-05, T-07 | 着手前 |
-| OQ-4 | OTP メール（Resend）は Phase 2 スコープ内か？ Resend API Key の共有・`infra/resend/` のスキャフォールドは完了しているか？ | T-25, T-06 | 着手前 |
+| OQ-4 | OTP メール送信の実装範囲 | T-25, T-26 | **一部解決**：dev は `SmtpEmailSender`→Mailpit で実送信・目視確認まで完了（T-25）。トランスポート（`EmailSender#send`）とユースケース（`AuthEmailService`）を分離済み。test/未指定プロファイルはフォールバック `LogEmailSender` で起動可能。prod の Resend 連携（API Key 共有・`ResendEmailSender`＝`@Profile("prod")`）は後続タスク T-26 として分離（未実装のため現状 prod は起動不可） |
 | OQ-5 | Redis は main の `docker-compose.yml` に追加するか（devcontainer には既存）。本番（Neon/Supabase 構成）の Redis ホスティング先は？ | T-22 | 着手前 |
 
 ### Risks（既知のリスク）
@@ -652,7 +669,7 @@ PR をマージするには以下を全て満たすこと。
 | # | リスク | 影響度 | 対策 |
 |---|---|---|---|
 | R-1 | Google OAuth のローカル環境設定が完了していない場合、`POST /auth/google` の E2E テストが実施できない | 中 | Google OAuth は単体テストで GoogleTokenVerifier をモックして検証し、E2E は skip フラグを立てて後回しにする |
-| R-2 | Resend がローカル環境で使えない場合、OTP メール送信部分のテストができない | 中 | 開発環境向けのダミー送信（OTP をコンソールログ出力）実装を `spring.profiles.active=dev` で切り替え可能にする |
+| R-2 | Resend がローカル環境で使えない場合、OTP メール送信部分のテストができない | 中 | **解決済み**：dev は `SmtpEmailSender`（`@Profile("dev")`）で devcontainer の Mailpit へ実送信し、Web UI（`http://localhost:8025`）で本番同等のメールを目視確認する。test は `@MockitoBean EmailSender` でモックし `ArgumentCaptor` で OTP を捕捉する（コンソールログ出力のダミー送信は廃止） |
 | R-3 | `SecurityConfig` の公開設定が `/auth/register/**`（ワイルドカード）に更新されていない場合、登録系が 401 になる | 高 | 実装開始前に `SecurityConfig` の `permitAll()` 設定を確認する |
 | R-4 | Refresh Token Reuse Detection（全セッション無効化）が実装されない場合、トークン盗難時に全端末ログアウトができない | 高 | Security Checklist に明記し、コードレビューで必ず確認する |
 | R-5 | Next.js 16 の `proxy.ts`（旧 `middleware.ts`）の動作が未確認の場合、認証ガードが機能しない | 高 | シニアがスキャフォールド段階でサンプル実装を提供しているか確認する |

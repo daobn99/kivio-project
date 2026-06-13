@@ -28,7 +28,8 @@
 13. [テスト規約（JUnit 5 + AssertJ + JaCoCo）](#13-テスト規約junit-5--assertj)
 14. [コーディング規約](#14-コーディング規約)
    - 14.7 [コメント規約](#147-コメント規約)
-15. [実装チェックリスト](#15-実装チェックリスト)
+15. [メール送信規約](#15-メール送信規約)
+16. [実装チェックリスト](#16-実装チェックリスト)
 
 ---
 
@@ -1885,7 +1886,74 @@ public Optional<Product> findById(UUID id) { ... }
 
 ---
 
-## 15. 実装チェックリスト
+## 15. メール送信規約
+
+メールテンプレートの定義（件名・本文・変数）は `docs/design/EMAIL_DESIGN.md` を唯一の正とする。本章はその実装規約を定める。
+
+### 15.1 トランスポートとユースケースの分離
+
+「**どう送るか**（トランスポート）」と「**何を送るか**（ユースケース）」を別レイヤーに分離する。テンプレート処理を各トランスポート実装に重複させないための絶対ルール。
+
+| レイヤー | 役割 | 実装 |
+|---|---|---|
+| トランスポート | 描画済みメールを送るだけ。テンプレート・件名・変数を関知しない | `EmailSender#send(EmailMessage)` インターフェース + profile 別実装 |
+| ユースケース | テンプレート選択・変数組み立て・件名生成を集約し `EmailSender#send` へ委譲 | `{Context}EmailService`（`@Service`・profile 非依存・実装1つ） |
+
+- `EmailMessage` は描画済みの `to` / `subject` / `htmlBody` のみを持つ record。トランスポートはこれをそのまま送信する。
+- アプリケーションサービス（例: `AuthService`）は `EmailSender` を直接 inject せず、**ユースケースサービス（例: `AuthEmailService`）に依存する**。
+- 新しいメール種別の追加で増えるのはユースケースサービスのみ。トランスポート実装には手を入れない。
+
+```java
+// ✅ 正: ユースケース層がテンプレート描画・件名生成を集約
+@Service
+@RequiredArgsConstructor
+public class AuthEmailService {
+    private static final String OTP_TEMPLATE = "emails/ja/registration-otp.html";
+    private final EmailTemplateFormatter templateFormatter;
+    private final EmailSender emailSender;
+
+    public void sendRegistrationOtp(String to, String otpCode) {
+        String html = templateFormatter.render(OTP_TEMPLATE, Map.of("otpCode", otpCode, ...));
+        emailSender.send(new EmailMessage(to, "【Kivio】認証コード: " + otpCode, html));
+    }
+}
+
+// ❌ 誤: EmailSender インターフェースにメール種別ごとのメソッドを生やす
+//        → dev/prod の各トランスポート実装にテンプレート処理が重複する
+public interface EmailSender {
+    void sendRegistrationOtp(String to, String otpCode);
+    void sendSellerApproved(...);   // 種別が増えるたびに全実装へ追加が必要
+}
+```
+
+### 15.2 プロファイル別トランスポートとフォールバック
+
+| プロファイル | 実装 | 送信先 |
+|---|---|---|
+| `dev` | `SmtpEmailSender`（`@Profile("dev")`） | Mailpit（SMTP）。Web UI で目視確認 |
+| `prod` | `ResendEmailSender`（`@Profile("prod")`） | Resend HTTP API |
+| 上記以外 | `LogEmailSender`（`@Profile("!dev & !prod")`） | 実送信せずログ出力のみ |
+
+- フォールバック `LogEmailSender` は、`test` プロファイルやプロファイル未指定の起動で `EmailSender` 実体が存在せずコンテキスト起動が失敗するのを防ぐためのもの。**`prod` は除外する**——実トランスポート未設定なら起動を失敗させ、メールの無言ドロップを防ぐ。
+- 各環境で `EmailSender` 実体が一意に解決されることを `ApplicationContextRunner`（Testcontainers 不要）で検証する。
+- メールの死活はアプリ readiness に連動させない（`management.health.mail.enabled=false`）。
+- prod のトランスポートは `@Async` + `@Retryable` で送信失敗をビジネスロジックに伝播させない。
+
+### 15.3 テンプレート
+
+- HTML テンプレートは classpath（`emails/{lang}/*.html`）に配置し、**本文 HTML をコードに埋め込まない**。
+- 変数置換は `EmailTemplateFormatter`（`{{変数名}}` プレースホルダ）に統一する。
+- テンプレートキー（パス）はユースケースサービスの定数として持つ。
+
+### 15.4 機微情報の扱い（必須）
+
+- OTP・トークン等の機微情報を **ログ・DB に保存しない**（メール本文に記載するのみ）。
+- 件名・本文には機微情報（OTP 等）が含まれ得るため、**トランスポートのログ出力は `to=` のみ**とし、件名・本文を出力しない。
+- 差出人は `app.email`（`EmailProperties` / `MAIL_FROM_ADDRESS`・`MAIL_FROM_NAME`）で外部化し、コードにハードコードしない。
+
+---
+
+## 16. 実装チェックリスト
 
 ### 新規エンドポイント追加時
 
@@ -1920,6 +1988,16 @@ public Optional<Product> findById(UUID id) { ... }
 - [ ] 429 レスポンスに `Retry-After: 60` ヘッダーが付いている
 - [ ] IP 特定が `request.getRemoteAddr()` を使っている（`X-Forwarded-For` を直接読んでいない）
 - [ ] `./gradlew test` でセキュリティ関連テストがすべて通ることを確認した
+
+### メール送信追加・変更時
+
+- [ ] テンプレート描画・件名生成をユースケースサービス（`{Context}EmailService`）に集約し、`EmailSender` インターフェースにメール種別ごとのメソッドを生やしていない
+- [ ] アプリケーションサービスが `EmailSender` を直接 inject せず、ユースケースサービスに依存している
+- [ ] 本文 HTML をコードに埋め込まず、テンプレートを classpath（`emails/{lang}/*.html`）に配置している
+- [ ] トランスポートのログ出力が `to=` のみで、件名・本文（OTP 等の機微情報を含み得る）を出力していない
+- [ ] OTP・トークン等の機微情報をログ・DB に保存していない
+- [ ] 差出人を `EmailProperties`（`app.email`）で外部化し、ハードコードしていない
+- [ ] 新規トランスポートを `@Profile` で限定し、各環境で `EmailSender` 実体が一意に解決されることをテストで確認した
 
 ### コメント規約の確認
 
