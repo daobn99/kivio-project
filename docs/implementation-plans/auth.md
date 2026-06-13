@@ -435,7 +435,7 @@ src/
 | T-15 | FE: Zustand ストア（`src/stores/useAuthStore.ts`・規約 §5.1 命名に準拠） | FE | T-12 | ✅ Done |
 | T-16 | FE: `LoginForm` / `RegisterFlow`（3 ステップ）/ `GoogleSignInButton` | FE | T-13, T-14, T-15 | ✅ Done |
 | T-17 | FE: `login/page.tsx` / `register/page.tsx`（verify-email ページは作らない） | FE | T-16 | ✅ Done |
-| T-18 | FE: `proxy.ts` に認証ガード追加 | FE | T-15 | ⬜ Todo |
+| T-18 | FE: `proxy.ts` に認証ガード追加 | FE | T-15 | ✅ Done |
 | T-19 | FE: コンポーネントテスト（Vitest + RTL + MSW の OTP ハンドラ） | FE | T-16 | ⬜ Todo |
 | T-20 | FE: E2E テスト（Playwright・3 ステップ登録） | FE | T-17, T-18 | ⬜ Todo |
 | T-21 | Seed データ改修（`dev/V10__seed_development_data.sql`・`email_verified` 列を除去し認証済みユーザーを直接 INSERT） | BE | T-01 | ✅ Done |

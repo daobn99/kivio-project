@@ -1,24 +1,38 @@
 import { NextResponse, type NextRequest } from 'next/server'
 
+// 認証必須ルート（未認証 → /auth/login へ）。トップレベルのパスプレフィックスで判定する。
+// 一覧の正は docs/design/frontend/FRONTEND_IA.md §1.2 / §1.2b / §1.3。
 const PROTECTED_PATHS = [
   '/cart',
   '/checkout',
   '/orders',
-  '/seller',
-  '/admin',
+  '/profile',
   '/wishlist',
   '/messages',
+  '/seller',
+  '/admin',
 ]
+
+// 未認証専用ルート（認証済み → / へ）。ログイン・会員登録は既ログインなら見せない。
+const GUEST_ONLY_PATHS = ['/auth/login', '/auth/register']
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
-  const token = request.cookies.get('access_token')
+  // access_token は HTTP-only Cookie に保持される（server/base.ts も同名を Bearer に付与）。
+  // ミドルウェアはメモリ上の Zustand を参照できないため、この Cookie の有無で認証状態を判定する。
+  const isAuthenticated = Boolean(request.cookies.get('access_token'))
 
-  if (PROTECTED_PATHS.some((p) => pathname.startsWith(p)) && !token) {
+  if (!isAuthenticated && PROTECTED_PATHS.some((p) => pathname.startsWith(p))) {
+    // 復帰先を from に載せ、ログイン後に元の画面へ戻せるようにする
     return NextResponse.redirect(
       new URL(`/auth/login?from=${encodeURIComponent(pathname)}`, request.url),
     )
   }
+
+  if (isAuthenticated && GUEST_ONLY_PATHS.some((p) => pathname.startsWith(p))) {
+    return NextResponse.redirect(new URL('/', request.url))
+  }
+
   return NextResponse.next()
 }
 
