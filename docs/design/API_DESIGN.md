@@ -258,7 +258,7 @@ Content-Type: application/problem+json
 | フィールド | 型 | 必須 | 制約 |
 |---|---|---|---|
 | `registrationToken` | string | ◯ | verify-otp で発行された UUID |
-| `password` | string | ◯ | 8文字以上 |
+| `password` | string | ◯ | 8〜72文字（複雑性要件なし。詳細は [VALIDATION_RULES.md](./VALIDATION_RULES.md)） |
 | `passwordConfirm` | string | ◯ | `password` と一致すること |
 | `displayName` | string | | 100文字以内（省略時は空文字。後でプロフィールで設定可） |
 
@@ -479,7 +479,7 @@ Content-Type: application/problem+json
 | フィールド | 型 | 必須 | 制約 |
 |---|---|---|---|
 | `currentPassword` | string | ◯ | 現在のパスワード |
-| `newPassword` | string | ◯ | 8文字以上 |
+| `newPassword` | string | ◯ | 8〜72文字 |
 
 #### レスポンス（204 No Content）
 

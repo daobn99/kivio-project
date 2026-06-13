@@ -126,5 +126,6 @@ domain/{context}/
 | `docs/design/SEQUENCE_FLOW.md` | シーケンス図（認証・注文・決済フロー） |
 | `docs/design/EMAIL_DESIGN.md` | メールテンプレート設計 |
 | `docs/design/ERROR_CODES.md` | エラーコード一覧（UPPER_SNAKE_CASE） |
+| `docs/design/VALIDATION_RULES.md` | バリデーションルール & 入力エラーメッセージ定義（フィールド制約・UXライティング・Bean Validation↔zod 対応） |
 | `design-system/MASTER.md` | フロントエンドデザインシステム（カラー・タイポグラフィ・コンポーネント仕様） |
 | `adr/` | 設計判断の記録（ADR-001〜005） |
