@@ -158,3 +158,35 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans);
 }
+
+/* 認証フォームの初回スタガー登場（design-system/pages/auth.md §6.4）。
+   transform/opacity のみで layout を起こさない。reduced-motion 時は motion-safe で無効化する */
+@keyframes auth-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* RegisterFlow の画面切替フィードバック（auth.md §8.5・duration-150）。opacity のみで軽く */
+@keyframes auth-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* フローティングラベルの浮上位置を保つため、オートフィルの黄色背景を抑制する（auth.md §6.3.2） */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px var(--background) inset;
+  -webkit-text-fill-color: var(--foreground);
+  caret-color: var(--foreground);
+}

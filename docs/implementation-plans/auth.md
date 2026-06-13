@@ -330,7 +330,7 @@ src/
 ├── components/
 │   └── auth/
 │       ├── LoginForm.tsx                     # CC（"use client"）
-│       ├── RegisterWizard.tsx                # CC：3 ステップの状態管理（email / registrationToken を保持）
+│       ├── RegisterFlow.tsx                # CC：3 ステップの状態管理（email / registrationToken を保持）
 │       ├── RegisterEmailStep.tsx             # CC：Step1 メール入力 → request-otp
 │       ├── RegisterOtpStep.tsx               # CC：Step2 OTP 入力 → verify-otp（再送信ボタン）
 │       ├── RegisterPasswordStep.tsx          # CC：Step3 パスワード設定 → complete
@@ -384,7 +384,7 @@ src/
 #### ステップ 5: コンポーネント
 
 - `LoginForm.tsx`: `react-hook-form` + `loginSchema` + `useMutation`（TanStack Query）
-- `RegisterWizard.tsx`: 現在ステップ（email / otp / password）・`email`・`registrationToken` を内部状態で保持し、各ステップコンポーネントを切り替える
+- `RegisterFlow.tsx`: 現在ステップ（email / otp / password）・`email`・`registrationToken` を内部状態で保持し、各ステップコンポーネントを切り替える
   - Step1（`RegisterEmailStep`）: `requestOtp`。`EMAIL_ALREADY_REGISTERED` でログイン誘導。成功で Step2 へ
   - Step2（`RegisterOtpStep`）: `verifyOtp`。`OTP_INVALID` は残り回数表示で再入力、`OTP_EXPIRED` / `OTP_MAX_ATTEMPTS_EXCEEDED` は「コードを再送信」ボタン（Step1 の `requestOtp` を再実行）。成功で `registrationToken` を保持し Step3 へ
   - Step3（`RegisterPasswordStep`）: `completeRegistration`。`REGISTRATION_SESSION_INVALID` で Step1 へ戻す。成功で `AuthTokens` を Zustand に保存 → `router.replace('/')`（自動ログイン）
@@ -393,7 +393,7 @@ src/
 #### ステップ 6: ページ
 
 - `login/page.tsx`: `LoginForm` を配置する Server Component（"use client" 不要）
-- `register/page.tsx`: `RegisterWizard` を配置する Server Component
+- `register/page.tsx`: `RegisterFlow` を配置する Server Component
 
 #### ステップ 7: 認証ガード
 
@@ -429,12 +429,12 @@ src/
 | T-09 | `AuthController` 改修：登録 3 エンドポイント差し替え + `@Auditable` 見直し | BE | T-06, T-07, T-08 | ✅ Done |
 | T-10 | Backend 単体テスト改修（OTP / 登録セッション / login から email_verified 削除） | BE | T-06, T-07, T-08 | ✅ Done |
 | T-11 | Backend 統合テスト改修（登録 3 ステップ・Testcontainers + Redis） | BE | T-09 | ✅ Done |
-| T-12 | FE: 型定義（`src/types/auth.ts`） | FE | なし | ⬜ Todo [並列可] |
-| T-13 | FE: Zod スキーマ（`src/lib/validations/auth.ts`） | FE | なし | ⬜ Todo [並列可] |
-| T-14 | FE: API クライアント関数（`src/lib/api/auth.ts`） | FE | T-12 | ⬜ Todo |
-| T-15 | FE: Zustand ストア（`src/stores/authStore.ts`） | FE | T-12 | ⬜ Todo [並列可 with T-14] |
-| T-16 | FE: `LoginForm` / `RegisterWizard`（3 ステップ）/ `GoogleSignInButton` | FE | T-13, T-14, T-15 | ⬜ Todo |
-| T-17 | FE: `login/page.tsx` / `register/page.tsx`（verify-email ページは作らない） | FE | T-16 | ⬜ Todo |
+| T-12 | FE: 型定義（`src/types/api/auth.ts` + `src/types/enums.ts`・既存スキャフォールド構成に合わせて配置） | FE | なし | ✅ Done |
+| T-13 | FE: Zod スキーマ（`src/lib/validations/auth.ts`） | FE | なし | ✅ Done |
+| T-14 | FE: API クライアント関数（`src/lib/api/client/auth.ts`・`lib/api/client/` 構成に合わせて配置） | FE | T-12 | ✅ Done |
+| T-15 | FE: Zustand ストア（`src/stores/useAuthStore.ts`・規約 §5.1 命名に準拠） | FE | T-12 | ✅ Done |
+| T-16 | FE: `LoginForm` / `RegisterFlow`（3 ステップ）/ `GoogleSignInButton` | FE | T-13, T-14, T-15 | ✅ Done |
+| T-17 | FE: `login/page.tsx` / `register/page.tsx`（verify-email ページは作らない） | FE | T-16 | ✅ Done |
 | T-18 | FE: `proxy.ts` に認証ガード追加 | FE | T-15 | ⬜ Todo |
 | T-19 | FE: コンポーネントテスト（Vitest + RTL + MSW の OTP ハンドラ） | FE | T-16 | ⬜ Todo |
 | T-20 | FE: E2E テスト（Playwright・3 ステップ登録） | FE | T-17, T-18 | ⬜ Todo |
@@ -573,10 +573,10 @@ T-08（既存・回帰確認）
 - [ ] `LoginForm`: メールとパスワードを入力して送信 → `login()` が呼ばれる
 - [ ] `LoginForm`: バリデーションエラー時にエラーメッセージが表示される
 - [ ] `LoginForm`: API エラー（401）時にエラーメッセージが表示される
-- [ ] `RegisterWizard` Step1: メール入力 → `requestOtp()` が呼ばれ Step2 へ遷移
-- [ ] `RegisterWizard` Step2: 6 桁 OTP 入力 → `verifyOtp()` が呼ばれ Step3 へ遷移
-- [ ] `RegisterWizard` Step2: `OTP_INVALID` で残り回数表示・再入力できる／`OTP_EXPIRED` で再送信ボタン
-- [ ] `RegisterWizard` Step3: パスワード不一致でバリデーションエラー／成功で `completeRegistration()` 呼び出し
+- [ ] `RegisterFlow` Step1: メール入力 → `requestOtp()` が呼ばれ Step2 へ遷移
+- [ ] `RegisterFlow` Step2: 6 桁 OTP 入力 → `verifyOtp()` が呼ばれ Step3 へ遷移
+- [ ] `RegisterFlow` Step2: `OTP_INVALID` で残り回数表示・再入力できる／`OTP_EXPIRED` で再送信ボタン
+- [ ] `RegisterFlow` Step3: パスワード不一致でバリデーションエラー／成功で `completeRegistration()` 呼び出し
 - [ ] `GoogleSignInButton`: クリックで `signIn("google")` が呼ばれる
 
 #### E2E テスト（Playwright）
