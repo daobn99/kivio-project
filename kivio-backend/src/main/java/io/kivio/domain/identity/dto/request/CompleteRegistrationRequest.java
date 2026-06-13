@@ -14,7 +14,7 @@ public record CompleteRegistrationRequest(
 
         /** パスワード */
         @NotBlank(message = "パスワードは必須です")
-        @Size(min = 8, max = 100, message = "パスワードは8文字以上100文字以内で入力してください")
+        @Size(min = 8, max = 72, message = "パスワードは8文字以上72文字以内で入力してください")
         String password,
 
         /** 確認用パスワード */
