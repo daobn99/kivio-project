@@ -10,6 +10,8 @@ import { AuthSubmitButton } from '@/components/auth/AuthSubmitButton'
 
 const RESEND_COOLDOWN_SECONDS = 60
 const MAX_ATTEMPTS = 5
+/** OTP の有効期限（EMAIL_DESIGN AUTH-01 / Redis TTL と一致させる） */
+const OTP_EXPIRY_LABEL = '10分'
 
 interface RegisterOtpStepProps {
   email: string
@@ -17,12 +19,6 @@ interface RegisterOtpStepProps {
   onSuccess: (registrationToken: string) => void
   /** 「メールアドレスを変更」で Step1 へ戻る（OTP 状態は破棄） */
   onChangeEmail: () => void
-}
-
-function formatCooldown(seconds: number): string {
-  const m = Math.floor(seconds / 60)
-  const s = seconds % 60
-  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
 }
 
 export function RegisterOtpStep({ email, onSuccess, onChangeEmail }: RegisterOtpStepProps) {
@@ -102,6 +98,9 @@ export function RegisterOtpStep({ email, onSuccess, onChangeEmail }: RegisterOtp
           <span className="text-foreground font-medium break-all">{email}</span>{' '}
           に送信した6桁のコードを入力してください
         </p>
+        <p className="text-muted-foreground mt-1 text-sm">
+          コードの有効期限は{OTP_EXPIRY_LABEL}です。
+        </p>
       </header>
 
       <div className="space-y-3">
@@ -134,9 +133,10 @@ export function RegisterOtpStep({ email, onSuccess, onChangeEmail }: RegisterOtp
             disabled={!canResend}
             className="text-accent disabled:text-muted-foreground font-medium hover:underline disabled:no-underline"
           >
-            {canResend ? '再送信' : `再送信（${formatCooldown(cooldown)}）`}
+            再送信
           </button>
         </p>
+        {cooldown > 0 && <p>あと{cooldown}秒で再送信できます</p>}
         <button
           type="button"
           onClick={onChangeEmail}

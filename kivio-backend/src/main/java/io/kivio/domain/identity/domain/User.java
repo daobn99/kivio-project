@@ -51,8 +51,7 @@ public class User extends SoftDeletableEntity {
 
     /** 表示名 */
     @Column(name = "display_name", nullable = false, length = 100)
-    @Builder.Default
-    private String displayName = "";
+    private String displayName;
 
     /** アバター画像URL */
     @Column(name = "avatar_url", columnDefinition = "TEXT")

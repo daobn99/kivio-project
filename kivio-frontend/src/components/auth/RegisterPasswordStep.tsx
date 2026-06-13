@@ -54,7 +54,7 @@ export function RegisterPasswordStep({
         registrationToken,
         password: values.password,
         passwordConfirm: values.passwordConfirm,
-        displayName: values.displayName?.trim() ? values.displayName.trim() : undefined,
+        displayName: values.displayName,
       }),
     onSuccess: (tokens) => {
       setAccessToken(tokens.accessToken)
@@ -86,7 +86,6 @@ export function RegisterPasswordStep({
     >
       <header className="mb-8">
         <h1 className="text-foreground font-serif text-2xl font-bold">パスワードを設定</h1>
-        <p className="text-muted-foreground mt-2 text-sm">あと少しで完了です</p>
       </header>
 
       {serverError && (
@@ -97,7 +96,7 @@ export function RegisterPasswordStep({
 
       <div className="space-y-1.5">
         <FloatingLabelInput
-          label="表示名（任意）"
+          label="表示名"
           type="text"
           autoComplete="nickname"
           aria-describedby={errors.displayName ? 'register-displayname-error' : undefined}
@@ -118,7 +117,6 @@ export function RegisterPasswordStep({
         <FieldError
           id={errors.password ? 'register-password-error' : 'register-password-help'}
           message={errors.password?.message}
-          help="8文字以上"
         />
       </div>
 

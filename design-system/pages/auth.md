@@ -460,7 +460,6 @@ frontend-design の「**1 回の、よく振り付けられたページロード
 |---|---|---|
 | 1 email | メールアドレスを入力 | 「認証コードをお送りします」 |
 | 2 otp | 認証コードを入力 | 「{email} に送信した6桁のコードを入力してください」 |
-| 3 password | パスワードを設定 | 「あと少しで完了です」（＝唯一の "まもなく完了" シグナル） |
 
 ### 8.2 Step1 — `RegisterEmailStep`（メール → request-otp）
 
@@ -512,7 +511,7 @@ xxx@example.com に送信した6桁のコードを入力してください
 パスワードを設定
 あと少しで完了です
 
-表示名（任意）
+表示名
 [______________________]      （autoComplete=nickname, 100字以内）
 
 パスワード
@@ -526,7 +525,7 @@ xxx@example.com に送信した6桁のコードを入力してください
 登録すると 利用規約 と プライバシーポリシー に同意したものとみなされます。  ← 同意文（text-xs muted）
 ```
 
-- `completeRegistrationSchema`（password 8 文字以上・passwordConfirm 一致・displayName 任意 100 字）→ `completeRegistration(registrationToken, ...)`。
+- `completeRegistrationSchema`（password 8 文字以上・passwordConfirm 一致・displayName 必須 1〜100 字）→ `completeRegistration(registrationToken, ...)`。
 - 成功（201）で `AuthTokens` を Zustand（`useAuthStore`）に保存 → `router.replace('/')`（自動ログイン）。
 - `REGISTRATION_SESSION_INVALID`（セッション 30 分 TTL 切れ等）: alert で通知し **Step1 へ戻す**（「セッションの有効期限が切れました。最初からやり直してください」）。
 - `EMAIL_ALREADY_REGISTERED`（complete 時の競合）: 同上、ログイン誘導。

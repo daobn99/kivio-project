@@ -49,7 +49,9 @@ public class GoogleTokenVerifier {
             if (subject == null || email == null) {
                 throw new GoogleTokenInvalidException();
             }
-            return new GoogleUserInfo(subject, email);
+            // name は profile スコープ未付与時に欠落しうる。必須ではないため null 許容で取得する
+            String name = jwt.getClaimAsString("name");
+            return new GoogleUserInfo(subject, email, name);
         } catch (GoogleTokenInvalidException e) {
             throw e;
         } catch (JwtException e) {

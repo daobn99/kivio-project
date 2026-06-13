@@ -57,8 +57,10 @@ export function RegisterEmailStep({ defaultEmail, onSuccess, notice }: RegisterE
       className="motion-safe:*:animate-[auth-rise_200ms_ease-out_both] motion-safe:[&>*:nth-child(2)]:[animation-delay:60ms] motion-safe:[&>*:nth-child(3)]:[animation-delay:120ms] motion-safe:[&>*:nth-child(4)]:[animation-delay:180ms] motion-safe:[&>*:nth-child(5)]:[animation-delay:240ms]"
     >
       <header className="mb-8">
-        <h1 className="text-foreground font-serif text-2xl font-bold">メールアドレスを入力</h1>
-        <p className="text-muted-foreground mt-2 text-sm">認証コードをお送りします</p>
+        <h1 className="text-foreground font-serif text-2xl font-bold">Kivioをはじめよう</h1>
+        <p className="text-muted-foreground mt-2 text-sm">
+          メールアドレスを入力して認証コードを送信します。
+        </p>
       </header>
 
       {notice && (
@@ -69,7 +71,7 @@ export function RegisterEmailStep({ defaultEmail, onSuccess, notice }: RegisterE
       {isAlreadyRegistered && (
         <div className="mb-6">
           <FormAlert>
-            <p>このメールアドレスは登録済みです。</p>
+            <p>このメールアドレスは既に使用されています。</p>
             <Link
               href={`${ROUTES.auth.login}?email=${encodeURIComponent(getValues('email'))}`}
               className="text-destructive font-medium underline"

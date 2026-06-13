@@ -32,7 +32,11 @@ export const completeRegistrationSchema = z
   .object({
     password: passwordField,
     passwordConfirm: z.string(),
-    displayName: z.string().max(100, '表示名は100文字以内で入力してください').optional(),
+    displayName: z
+      .string()
+      .trim()
+      .min(1, '表示名を入力してください')
+      .max(100, '表示名は100文字以内で入力してください'),
   })
   .refine((data) => data.password === data.passwordConfirm, {
     message: 'パスワードと確認用パスワードが一致しません',

@@ -70,7 +70,7 @@ UI 表記は必ず左列に統一する。表記揺れを禁止する。
 | `password`<br>（新規登録 / `newPassword`） | ◯ | **8〜72文字**（複雑性要件なし） | 下限8: REQUIREMENTS AUTH-01-C / 上限72: BCrypt cost 12 の入力上限（72バイト超は切り詰められる） | `@NotBlank @Size(min=8, max=72)` | `z.string().min(8).max(72)` | 下限:「パスワードは8文字以上で入力してください」 / 上限:「パスワードは72文字以内で入力してください」 |
 | `password`<br>（ログイン） | ◯ | **必須のみ**（長さ検証しない） | ログインは強度ポリシーを課す場ではない。不一致は `INVALID_CREDENTIALS`（401）で返す。`currentPassword`（§2.3）と同思想 | `@NotBlank` | `z.string().min(1)` | 「パスワードを入力してください」 |
 | `passwordConfirm` | ◯ | `password` と一致 | 入力ミス防止 | （サーバ検証は任意・主にフロント責務） | `.refine(p === pc, path:['passwordConfirm'])` | 「パスワードと確認用パスワードが一致しません」 |
-| `displayName` | 任意 | 100文字以内 | DATA_DICTIONARY `users.display_name`（VARCHAR 100・省略時は空文字） | `@Size(max=100)` | `z.string().max(100).optional()` | 「表示名は100文字以内で入力してください」 |
+| `displayName` | ◯ | 1〜100文字 | DATA_DICTIONARY `users.display_name`（VARCHAR 100・必須）。空表示名による画面崩れ防止のため登録時必須 | `@NotBlank @Size(max=100)` | `z.string().trim().min(1).max(100)` | 未入力:「表示名を入力してください」 / 上限:「表示名は100文字以内で入力してください」 |
 | `avatarUrl` | 任意 | URL形式 | PATCH /users/me（Cloudinary URL） | `@URL` | `z.url().optional()` | 「URLの形式が正しくありません」 |
 
 ### 2.2 OTP 登録フロー
@@ -119,7 +119,8 @@ UI 表記は必ず左列に統一する。表記揺れを禁止する。
 | DTO | フィールド | 状態 |
 |---|---|---|
 | `CompleteRegistrationRequest` | `password` | ✅ `@Size(min=8, max=72)` に修正済み（旧 `max=100`） |
-| `CompleteRegistrationRequest` | `email` / `displayName` / `passwordConfirm` | ✅ 既に整合（255 / 100 / `@AssertTrue` 一致チェック） |
+| `CompleteRegistrationRequest` | `email` / `passwordConfirm` | ✅ 既に整合（255 / `@AssertTrue` 一致チェック） |
+| `CompleteRegistrationRequest` | `displayName` | ✅ `@NotBlank @Size(max=100)` に変更済み（任意→必須） |
 | `RequestOtpRequest` / `CheckEmailRequest` / `LoginRequest` | `email` | ✅ `@Email @Size(max=255)` で整合済み |
 | `VerifyOtpRequest` | `otp` | ✅ `@Pattern("\\d{6}")` で整合済み |
 | （未実装）`PATCH /users/me/password` | `currentPassword` / `newPassword` | ⏳ DTO 未作成。実装時に `newPassword` へ `@Size(min=8, max=72)` を付与 |

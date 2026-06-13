@@ -3,7 +3,7 @@ CREATE TABLE users (
   email            VARCHAR(255) NOT NULL,
   password_hash    VARCHAR(255),
   google_id        VARCHAR(255),
-  display_name     VARCHAR(100) NOT NULL DEFAULT '',
+  display_name     VARCHAR(100) NOT NULL,
   avatar_url       TEXT,
   role             VARCHAR(20)  NOT NULL DEFAULT 'ROLE_BUYER',
   status           VARCHAR(20)  NOT NULL DEFAULT 'ACTIVE',

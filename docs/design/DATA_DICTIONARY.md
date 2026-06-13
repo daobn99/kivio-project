@@ -81,7 +81,7 @@
 | メールアドレス | email | `String` | | | ◯ | ◯ | 255 | - | ログインID。退会後は`deleted_{id}@kivio.invalid`に匿名化 | - |
 | パスワードハッシュ | password_hash | `String` | | | | | 255 | null | BCrypt cost 12。Google OAuthユーザーはnull | - |
 | Google ID | google_id | `String` | | | ◯ | | 255 | null | Google OAuthのsub値。メール登録ユーザーはnull。匿名化時にnull化 | - |
-| 表示名 | display_name | `String` | | | | ◯ | 100 | `""` | プロフィール表示名 | - |
+| 表示名 | display_name | `String` | | | | ◯ | 100 | - | プロフィール表示名。登録時必須（1〜100文字） | - |
 | アバター画像URL | avatar_url | `String` | | | | | - | null | Cloudinaryの画像URL | - |
 | ロール | role | `String` | | | | ◯ | 20 | `ROLE_BUYER` | `ROLE_BUYER`（バイヤー）/ `ROLE_SELLER`（セラー）/ `ROLE_ADMIN`（管理者） | - |
 | ステータス | status | `String` | | | | ◯ | 20 | `ACTIVE` | `ACTIVE`（有効）/ `INACTIVE`（無効・停止中） | - |

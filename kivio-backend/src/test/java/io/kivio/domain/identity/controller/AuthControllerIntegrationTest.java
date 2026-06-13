@@ -220,7 +220,7 @@ class AuthControllerIntegrationTest extends IntegrationTestBase {
     void should_return_200_with_tokens_when_google_login_succeeds() throws Exception {
         String email = uniqueEmail("google");
         given(googleTokenVerifier.verify(anyString()))
-                .willReturn(new GoogleUserInfo("google-sub-" + UUID.randomUUID(), email));
+                .willReturn(new GoogleUserInfo("google-sub-" + UUID.randomUUID(), email, "Google User"));
 
         mockMvc.perform(post("/api/v1/auth/google")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -325,6 +325,7 @@ class AuthControllerIntegrationTest extends IntegrationTestBase {
         return userRepository.save(User.builder()
                 .email(email)
                 .passwordHash(passwordEncoder.encode(password))
+                .displayName("Test User")
                 .build());
     }
 

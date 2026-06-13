@@ -34,6 +34,7 @@ import io.kivio.infra.google.GoogleUserInfo;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -280,7 +281,7 @@ class AuthServiceTest {
 
     @Test
     void should_create_new_user_and_return_tokens_when_google_user_has_no_existing_account() {
-        GoogleUserInfo info = new GoogleUserInfo("google-sub-001", "newgoogle@example.com");
+        GoogleUserInfo info = new GoogleUserInfo("google-sub-001", "newgoogle@example.com", "New Google User");
         UUID newUserId = UUID.randomUUID();
         User created = buildUser(newUserId, "newgoogle@example.com", null, UserStatus.ACTIVE);
         given(googleTokenVerifier.verify("id-token")).willReturn(info);
@@ -293,12 +294,33 @@ class AuthServiceTest {
                 new GoogleLoginRequest("id-token"));
 
         assertThat(response.accessToken()).isEqualTo("test-access-token");
+        ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
+        then(userRepository).should().save(userCaptor.capture());
+        assertThat(userCaptor.getValue().getDisplayName()).isEqualTo("New Google User");
+    }
+
+    @Test
+    void should_fall_back_to_email_local_part_when_google_user_has_no_name() {
+        GoogleUserInfo info = new GoogleUserInfo("google-sub-004", "noname@example.com", null);
+        UUID newUserId = UUID.randomUUID();
+        User created = buildUser(newUserId, "noname@example.com", null, UserStatus.ACTIVE);
+        given(googleTokenVerifier.verify("id-token")).willReturn(info);
+        given(userRepository.findByGoogleId("google-sub-004")).willReturn(Optional.empty());
+        given(userRepository.findByEmail("noname@example.com")).willReturn(Optional.empty());
+        given(userRepository.save(any(User.class))).willReturn(created);
+        stubJwtPair();
+
+        authService.googleLogin(new GoogleLoginRequest("id-token"));
+
+        ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
+        then(userRepository).should().save(userCaptor.capture());
+        assertThat(userCaptor.getValue().getDisplayName()).isEqualTo("noname");
     }
 
     @Test
     void should_link_google_id_to_existing_account_when_same_email_already_exists() {
         UUID userId = UUID.randomUUID();
-        GoogleUserInfo info = new GoogleUserInfo("google-sub-002", "existing@example.com");
+        GoogleUserInfo info = new GoogleUserInfo("google-sub-002", "existing@example.com", "Existing User");
         User existing = buildUser(userId, "existing@example.com", "hashed", UserStatus.ACTIVE);
         given(googleTokenVerifier.verify("id-token")).willReturn(info);
         given(userRepository.findByGoogleId("google-sub-002")).willReturn(Optional.empty());
@@ -323,7 +345,7 @@ class AuthServiceTest {
     @Test
     void should_throw_UserDeactivatedException_when_google_user_account_is_deactivated() {
         UUID userId = UUID.randomUUID();
-        GoogleUserInfo info = new GoogleUserInfo("google-sub-003", "deactivated@example.com");
+        GoogleUserInfo info = new GoogleUserInfo("google-sub-003", "deactivated@example.com", "Deactivated User");
         User deactivated = buildUser(userId, "deactivated@example.com", null, UserStatus.INACTIVE);
         given(googleTokenVerifier.verify("id-token")).willReturn(info);
         given(userRepository.findByGoogleId("google-sub-003")).willReturn(Optional.of(deactivated));

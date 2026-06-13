@@ -118,7 +118,7 @@ public class AuthService {
         User user = User.builder()
                 .email(email)
                 .passwordHash(passwordEncoder.encode(request.password()))
-                .displayName(request.displayName() == null ? "" : request.displayName())
+                .displayName(request.displayName())
                 .build();
         try {
             // saveAndFlush で即時フラッシュし、並行リクエストの一意制約違反をここで捕捉する
@@ -252,8 +252,24 @@ public class AuthService {
         User newUser = User.builder()
                 .email(googleInfo.email())
                 .googleId(googleInfo.subject())
+                .displayName(resolveGoogleDisplayName(googleInfo))
                 .build();
         return userRepository.save(newUser);
+    }
+
+    /**
+     * Google プロフィールから表示名を決定します。
+     *
+     * <p>{@code name} クレームが無い（profile スコープ未付与）場合はメールアドレスの
+     * ローカル部をフォールバックに用い、空の表示名を作らないようにします。
+     * 表示名は {@code VARCHAR(100)} のため 100 文字に切り詰めます。
+     */
+    private String resolveGoogleDisplayName(GoogleUserInfo googleInfo) {
+        String name = googleInfo.name();
+        String resolved = (name != null && !name.isBlank())
+                ? name.trim()
+                : googleInfo.email().split("@", 2)[0];
+        return resolved.length() > 100 ? resolved.substring(0, 100) : resolved;
     }
 
     /**

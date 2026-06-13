@@ -127,7 +127,7 @@ CREATE TABLE users (
   email            VARCHAR(255) NOT NULL,
   password_hash    VARCHAR(255),                          -- NULL: Google OAuth ユーザー
   google_id        VARCHAR(255),                          -- NULL: メール登録ユーザー
-  display_name     VARCHAR(100) NOT NULL DEFAULT '',
+  display_name     VARCHAR(100) NOT NULL,                 -- 登録時必須（空文字許容しない）
   avatar_url       TEXT,
   role             VARCHAR(20)  NOT NULL DEFAULT 'ROLE_BUYER',
                                                           -- ROLE_BUYER | ROLE_SELLER | ROLE_ADMIN
