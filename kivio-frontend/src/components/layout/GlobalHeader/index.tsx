@@ -7,6 +7,7 @@ import { SearchBar } from './SearchBar'
 import { SearchOverlay } from './SearchOverlay'
 import { CategoryNav } from './CategoryNav'
 import { MobileMenuSheet } from './MobileMenuSheet'
+import { MobileMessageButton } from './MobileMessageButton'
 import { MobileSearchButton } from './MobileSearchButton'
 import { HeaderActions } from './HeaderActions'
 
@@ -45,7 +46,10 @@ export function GlobalHeader() {
           <div className="relative flex h-14 items-center justify-between px-4 md:hidden">
             <MobileMenuSheet />
             <Logo className="absolute left-1/2 -translate-x-1/2" />
-            <MobileSearchButton onClick={() => setSearchOpen(true)} />
+            <div className="flex items-center gap-0.5">
+              <MobileMessageButton />
+              <MobileSearchButton onClick={() => setSearchOpen(true)} />
+            </div>
           </div>
         </div>
 

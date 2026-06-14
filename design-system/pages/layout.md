@@ -187,7 +187,10 @@ export function GlobalHeader() {
           <div className="flex md:hidden items-center justify-between px-4 h-14">
             <MobileMenuButton />
             <Logo className="absolute left-1/2 -translate-x-1/2" />
-            <MobileSearchButton />
+            <div className="flex items-center gap-0.5">
+              <MobileMessageButton /> {/* ログイン時のみ表示（ゲストは null） */}
+              <MobileSearchButton />
+            </div>
           </div>
         </div>
 
@@ -220,14 +223,17 @@ export function GlobalHeader() {
 ```
 ┌──────────────────────────────────────────────────────┐
 │  px-4  h-14                                          │
-│  [☰]        [Logo + "Kivio"]        [🔍]             │
+│  [☰]        [Logo + "Kivio"]     [💬(認証時)] [🔍]   │
 └──────────────────────────────────────────────────────┘
 ```
 
 - 左端: ハンバーガーアイコン → `MobileMenuSheet`（Sheet コンポーネント）を開く
 - 中央: ロゴ（絶対中央配置 `absolute left-1/2 -translate-x-1/2`）
-- 右端: 検索アイコン → 検索オーバーレイを表示（クリックで SearchOverlay を `z-50` に展開）
-- 認証ボタン（ログイン/会員登録）はモバイルヘッダーには**表示しない** → BottomNav の「マイページ」タブで代替
+- 右端: 右側アクション群（`flex items-center gap-0.5`）。ロゴは絶対中央配置のためアイコン数が変わっても中央位置はズレない
+  - メッセージアイコン `MobileMessageButton` → `/messages`。**ログイン時のみ表示**（ゲストは `null`）。デスクトップ `GuestActions` にメッセージが無いのと整合。`size="icon"`（32px）で `MobileSearchButton` と視覚統一。未読バッジは Phase 3 で API 連携時に追加
+  - 検索アイコン `MobileSearchButton` → 検索オーバーレイを表示（クリックで SearchOverlay を `z-50` に展開）
+- 認証ボタン（ログイン/会員登録）はモバイルヘッダーには**表示しない** → `MobileMenuSheet`（ログイン済みはアカウント導線、ゲストはログイン/会員登録）および BottomNav の「マイページ」タブで代替
+- カートはヘッダーには置かず **BottomNav** に常設（§8）。通知（お知らせ）も BottomNav に集約し、ヘッダーには重複追加しない
 
 ---
 
@@ -494,17 +500,19 @@ GlobalHeader/index.tsx の `data-scrolled={scrolled}` 属性切り替えで shad
 | タブ | アイコン | ラベル | リンク |
 |---|---|---|---|
 | ホーム | `Home` | ホーム | `/` |
-| 検索 | `Search` | 検索 | `/search`（UI のみ） |
+| カート | `ShoppingCart` | カート | `/cart`（ゲストも閲覧可） |
 | 出品 | `PlusCircle`（FAB） | 出品 | `/auth/login`（未認証時はログイン誘導） |
 | お知らせ | `Bell` | お知らせ | `/auth/login`（未認証時） |
 | マイページ | `User` | マイページ | `/auth/login` または `/profile/settings`（認証時） |
+
+> **検索タブは置かない:** 検索はヘッダー右端の `MobileSearchButton`（SearchOverlay）に集約済みのため、BottomNav の枠はカートに充てる（Amazon 型のカート常設）。カートはゲストでも閲覧できるため認証不要で常設する。
 
 ### 8.2 ナビ構成（認証済み BUYER/SELLER）
 
 | タブ | バッジ |
 |---|---|
 | ホーム | なし |
-| 検索 | なし |
+| カート | 投入点数（Phase 3） |
 | 出品（FAB） | なし（BUYER: `/seller/applications/new` / SELLER: `/seller/products/new`） |
 | お知らせ | 未読数 |
 | マイページ | なし |
@@ -729,8 +737,10 @@ src/
         │   ├── SearchOverlay.tsx            # モバイル: 全画面検索オーバーレイ（fixed inset-0 z-50）
         │   ├── MobileMenuButton.tsx         # ☰ ハンバーガーボタン
         │   ├── MobileSearchButton.tsx       # 🔍 モバイル検索アイコンボタン
-        │   ├── MobileMenuSheet.tsx          # ☰ タップで開くモバイルメニュー（Sheet）
-        │   │                               # 内容: ログイン/会員登録リンク + カテゴリリスト
+        │   ├── MobileMessageButton.tsx      # 💬 モバイルメッセージボタン（ログイン時のみ表示・"use client"）
+        │   ├── MobileMenuSheet.tsx          # ☰ タップで開くモバイルメニュー（Sheet・"use client"）
+        │   │                               # ゲスト: ログイン/会員登録 + カテゴリ
+        │   │                               # 認証時: プロフィールヘッダー + アカウント導線（役割別）+ カテゴリ + ログアウト
         │   └── HeaderActions/
         │       ├── index.tsx                # 認証状態（useAuthStore）に応じて分岐するアクション領域（"use client"）
         │       ├── GuestActions.tsx         # 未認証: 地球 + カート + ログイン + 会員登録
@@ -755,7 +765,8 @@ src/
 | `GlobalHeader/index.tsx` | **CC** | `useScrolled` フックを使用 |
 | `SearchBar.tsx` | **CC** | 入力状態を管理 |
 | `SearchOverlay.tsx` | **CC** | open/close 状態を管理 |
-| `MobileMenuSheet.tsx` | **CC** | Sheet open/close 状態 |
+| `MobileMenuSheet.tsx` | **CC** | Sheet open/close 状態 + `useAuthStore`/`useAuthHydrated` で認証出し分け |
+| `MobileMessageButton.tsx` | **CC** | `useAuthStore`/`useAuthHydrated` でログイン時のみ表示 |
 | `MobileBottomNav/index.tsx` | **CC** | `usePathname` でアクティブ判定 |
 | `CategoryNav.tsx` | SC | 静的リンクのみ（Phase 2） |
 | `Logo.tsx` | SC | 静的 |

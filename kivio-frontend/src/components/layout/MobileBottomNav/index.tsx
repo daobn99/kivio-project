@@ -1,7 +1,7 @@
 'use client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Home, Search, PlusCircle, Bell, User } from 'lucide-react'
+import { Home, ShoppingCart, PlusCircle, Bell, User } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -16,7 +16,7 @@ interface NavItem {
 // Phase 2: 未認証状態のみ。出品・お知らせ・マイページはログイン誘導。
 const navItems: NavItem[] = [
   { label: 'ホーム', href: '/', icon: Home },
-  { label: '検索', href: '/search', icon: Search },
+  { label: 'カート', href: '/cart', icon: ShoppingCart },
   { label: '出品', href: '/auth/login', icon: PlusCircle, isFab: true },
   { label: 'お知らせ', href: '/auth/login', icon: Bell },
   { label: 'マイページ', href: '/auth/login', icon: User },
