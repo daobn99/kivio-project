@@ -1,5 +1,6 @@
 import Link from 'next/link'
-import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
+import { buttonVariants } from '@/components/ui/button'
 import type { LucideIcon } from 'lucide-react'
 
 interface IconButtonProps {
@@ -10,21 +11,21 @@ interface IconButtonProps {
   label: string
 }
 
+// リンクとして振る舞うアイコンボタン。Base UI Button の nativeButton 警告を避けるため、
+// Button プリミティブではなく buttonVariants + Link を直接利用する（GuestActions のリンクと同方針）。
 export function IconButton({ href, icon: Icon, badge, label }: IconButtonProps) {
   return (
-    <Button
-      variant="ghost"
-      size="icon"
+    <Link
+      href={href}
       aria-label={label}
-      render={<Link href={href} />}
-      className="relative"
+      className={cn(buttonVariants({ variant: 'ghost', size: 'icon-lg' }), 'relative')}
     >
-      <Icon className="h-5 w-5" />
+      <Icon className="size-5" />
       {badge != null && badge > 0 && (
         <span className="bg-destructive text-destructive-foreground absolute -top-1 -right-1 flex h-4.5 min-w-4.5 items-center justify-center rounded-full px-1 text-[10px] font-bold">
           {badge > 99 ? '99+' : badge}
         </span>
       )}
-    </Button>
+    </Link>
   )
 }

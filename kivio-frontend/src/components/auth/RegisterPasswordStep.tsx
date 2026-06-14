@@ -5,6 +5,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation } from '@tanstack/react-query'
 import { completeRegistration } from '@/lib/api/client/auth'
+import { getCurrentUser } from '@/lib/api/client/users'
 import {
   completeRegistrationSchema,
   type CompleteRegistrationFormValues,
@@ -36,7 +37,7 @@ export function RegisterPasswordStep({
   onSessionInvalid,
 }: RegisterPasswordStepProps) {
   const router = useRouter()
-  const setAccessToken = useAuthStore((state) => state.setAccessToken)
+  const setAuth = useAuthStore((state) => state.setAuth)
 
   const form = useForm<CompleteRegistrationFormValues>({
     resolver: zodResolver(completeRegistrationSchema),
@@ -49,15 +50,19 @@ export function RegisterPasswordStep({
   } = form
 
   const mutation = useMutation({
-    mutationFn: (values: CompleteRegistrationFormValues) =>
-      completeRegistration({
+    mutationFn: async (values: CompleteRegistrationFormValues) => {
+      const tokens = await completeRegistration({
         registrationToken,
         password: values.password,
         passwordConfirm: values.passwordConfirm,
         displayName: values.displayName,
-      }),
-    onSuccess: (tokens) => {
-      setAccessToken(tokens.accessToken)
+      })
+      // 自動ログインのため、発行された Access Token で GET /users/me まで取得して認証状態を確定する
+      const user = await getCurrentUser(tokens.accessToken)
+      return { tokens, user }
+    },
+    onSuccess: ({ tokens, user }) => {
+      setAuth({ accessToken: tokens.accessToken, user })
       router.replace(ROUTES.home)
     },
     onError: (err) => {

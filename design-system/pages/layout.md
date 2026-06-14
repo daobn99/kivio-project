@@ -233,14 +233,22 @@ export function GlobalHeader() {
 
 ## 4. 認証状態別ヘッダーアクション仕様
 
+> **認証状態の解決方法（実装メモ）:** `HeaderActions` は Client Component で `useAuthStore`（Zustand）の `isAuthenticated` / `user.role` を読み、Guest / BUYER / SELLER を出し分ける。`user` はログイン・登録完了後に `GET /api/v1/users/me` で取得して store に保持する。Zustand persist の復元はクライアントのみで起きるため、初回 SSR / ハイドレーション時は Guest を描画し、マウント後に実状態へ切り替える（hydration mismatch 回避）。`role` の値はバックエンド enum と同形（`ROLE_BUYER` / `ROLE_SELLER` / `ROLE_ADMIN`）。`ROLE_ADMIN` は専用 `AdminHeader` を使うため、グローバルヘッダーでは BUYER 表示で足りる。地球アイコンは 3 状態共通のため `LanguageButton` に切り出す。
+>
+> **レイアウト指針（共通）:** Alibaba 等の EC ヘッダーに倣い、アイコンが密集しないようゾーン分けする。①アイコンボタンは `size="icon-lg"`（36px、グリフ `size-5`）でタップ領域に余白を持たせる、②行間は `gap-1.5`（6px）、③**ユーティリティ群（言語・カート・メッセージ・通知）とアカウント群（アバター／セラーはダッシュボード+アバター・Guest は認証 CTA）の境界に縦罫線 `<span aria-hidden className="bg-border mx-1 h-6 w-px" />` を入れる**。これにより「操作系」と「アカウント/CTA 系」が視覚的に分離され、密集感を解消する。
+
 ### 4.1 未認証（Guest）
 
+地球アイコンの右にカートアイコンを追加する（未ログインでも閲覧導線を見せる）。ユーティリティ群（言語・カート）と認証 CTA の間を縦罫線で分ける。
+
 ```tsx
-<div className="flex items-center gap-2">
-  {/* 地球アイコン: 多言語対応準備中 */}
-  <Button variant="ghost" size="icon" aria-label="言語設定（準備中）" disabled className="text-muted-foreground">
-    <Globe className="w-5 h-5" />
-  </Button>
+<div className="flex items-center gap-1.5">
+  {/* ユーティリティ群: 言語（準備中）・カート */}
+  <LanguageButton />
+  <IconButton href="/cart" icon={ShoppingCart} label="カート" />
+
+  {/* ゾーン区切り */}
+  <span aria-hidden className="bg-border mx-1 h-6 w-px" />
 
   {/* ログインボタン: ghost */}
   <Button variant="ghost" size="sm" asChild className="font-medium">
@@ -256,26 +264,27 @@ export function GlobalHeader() {
 
 ### 4.2 BUYER（認証済み）
 
+アイコン行は **地球 → カート → メッセージ → 通知 →〔縦罫線〕→ アバター** の順。ウィッシュリスト（お気に入り）はアイコン行から外し、UserMenu ドロップダウン内の項目へ移設する。ユーティリティ群とアバターの間に縦罫線を入れて密集を避ける。
+
 ```tsx
-<div className="flex items-center gap-1">
-  {/* ウィッシュリスト */}
-  <IconButton href="/wishlist" icon={Heart} badge={wishlistCount} label="お気に入り" />
-
-  {/* カート */}
+<div className="flex items-center gap-1.5">
+  {/* ユーティリティ群 */}
+  <LanguageButton />
   <IconButton href="/cart" icon={ShoppingCart} badge={cartCount} label="カート" />
-
-  {/* メッセージ */}
-  <IconButton href="/messages" icon={MessageCircle} badge={unreadMessages} label="メッセージ" />
-
-  {/* 通知（ドロップダウン） */}
+  <IconButton href="/messages" icon={MessageCircleMore} badge={unreadMessages} label="メッセージ" />
   <NotificationBell unreadCount={unreadNotifications} />
 
-  {/* アバターメニュー */}
-  <UserMenu role="BUYER" user={user} />
+  {/* ゾーン区切り */}
+  <span aria-hidden className="bg-border mx-1 h-6 w-px" />
+
+  {/* アカウント群: アバターメニュー */}
+  <UserMenu user={user} />
 </div>
 ```
 
 **UserMenu ドロップダウン（BUYER）:**
+
+`Heart`（お気に入り）はアイコン行から本ドロップダウンへ移設する。
 
 ```
 ┌─────────────────────┐
@@ -284,35 +293,44 @@ export function GlobalHeader() {
 ├─────────────────────┤
 │  プロフィール設定     │  → /profile/settings
 │  注文履歴            │  → /orders
+│  お気に入り          │  → /wishlist  ← アイコン行から移設
 │  セラー申請          │  → /seller/applications/new  ← 申請未済かつ PENDING なしの場合のみ
 ├─────────────────────┤
-│  ログアウト          │  ← text-destructive
+│  ログアウト          │  ← text-destructive。logout() API → clearAuth() → / へ遷移
 └─────────────────────┘
 ```
 
+**開閉挙動:** クリック / キーボードに加えて**マウスオーバーでも開く**。Base UI の `Menu.Root` は `openOnHover` を持たないため、`open` / `onOpenChange` で制御コンポーネント化し、トリガーとパネルの `mouseenter` / `mouseleave`（閉じる側は 120ms の猶予）で開閉を制御する。`modal={false}` でパネル外の操作も許可する。新規ライブラリは導入せず既存の `dropdown-menu`（Base UI）を流用する。
+
 ### 4.3 SELLER（認証済み）
 
-BUYER のアイコン群に加えて、セラーダッシュボードへのショートカットを追加。
+BUYER のアイコン群（地球・カート・メッセージ・通知）に加えて、セラーダッシュボードへのショートカットを追加。アイコン行の構成は 4.2 と揃える（Heart はアイコン行から除外済み）。ユーティリティ群とアカウント群（ダッシュボード + アバター）の間に縦罫線を入れる。
 
 ```tsx
-<div className="flex items-center gap-1">
-  {/* BUYER と同じアイコン群（ウィッシュリスト・カート・メッセージ・通知） */}
-  ...
+<div className="flex items-center gap-1.5">
+  {/* ユーティリティ群（BUYER と同じ: 地球・カート・メッセージ・通知） */}
+  <LanguageButton />
+  <IconButton href="/cart" icon={ShoppingCart} label="カート" />
+  <IconButton href="/messages" icon={MessageCircleMore} label="メッセージ" />
+  <NotificationBell />
 
-  {/* セラーダッシュボードボタン: アウトライン */}
+  {/* ゾーン区切り */}
+  <span aria-hidden className="bg-border mx-1 h-6 w-px" />
+
+  {/* アカウント群: セラーダッシュボードボタン（アウトライン）+ アバターメニュー */}
   <Button variant="outline" size="sm" asChild className="border-primary text-primary hover:bg-secondary font-medium hidden xl:flex">
     <Link href="/seller/dashboard">
       <Store className="w-4 h-4 mr-1.5" />
       ダッシュボード
     </Link>
   </Button>
-
-  {/* アバターメニュー */}
-  <UserMenu role="SELLER" user={user} />
+  <UserMenu user={user} />
 </div>
 ```
 
 **UserMenu ドロップダウン（SELLER）:**
+
+セラーも購入者として買い物するため「お気に入り」を含める。セラー申請は表示しない。
 
 ```
 ┌─────────────────────┐
@@ -321,6 +339,7 @@ BUYER のアイコン群に加えて、セラーダッシュボードへのシ�
 ├─────────────────────┤
 │  プロフィール設定     │  → /profile/settings
 │  注文履歴（バイヤーとして） → /orders
+│  お気に入り          │  → /wishlist
 ├─────────────────────┤
 │  ログアウト          │  ← text-destructive
 └─────────────────────┘
@@ -713,13 +732,14 @@ src/
         │   ├── MobileMenuSheet.tsx          # ☰ タップで開くモバイルメニュー（Sheet）
         │   │                               # 内容: ログイン/会員登録リンク + カテゴリリスト
         │   └── HeaderActions/
-        │       ├── index.tsx                # 認証状態に応じて分岐するアクション領域
-        │       ├── GuestActions.tsx         # 未認証: 地球 + ログイン + 会員登録
-        │       ├── BuyerActions.tsx         # BUYER: アイコン群 + UserMenu
-        │       ├── SellerActions.tsx        # SELLER: アイコン群 + Dashboard btn + UserMenu
+        │       ├── index.tsx                # 認証状態（useAuthStore）に応じて分岐するアクション領域（"use client"）
+        │       ├── GuestActions.tsx         # 未認証: 地球 + カート + ログイン + 会員登録
+        │       ├── BuyerActions.tsx         # BUYER: 地球 + カート + メッセージ + 通知 + UserMenu
+        │       ├── SellerActions.tsx        # SELLER: BUYER 群 + Dashboard btn + UserMenu
+        │       ├── LanguageButton.tsx       # 地球アイコン（多言語準備中・3 状態共通）
         │       ├── IconButton.tsx           # バッジ付きアイコンボタン（共通）
         │       ├── NotificationBell.tsx     # 通知ドロップダウン
-        │       └── UserMenu.tsx             # アバター + DropdownMenu
+        │       └── UserMenu.tsx             # アバター + DropdownMenu（ホバー開閉・お気に入り・ログアウト）
         │
         ├── GlobalFooter/
         │   └── index.tsx                    # フッター（Server Component 可）

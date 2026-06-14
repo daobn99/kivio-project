@@ -15,6 +15,24 @@ const TOKENS = {
   expiresIn: 900,
 }
 
+/** GET /users/me（ログイン・登録完了後に認証状態を確定するため呼ばれる）のモックユーザー */
+const ME = {
+  id: '00000000-0000-0000-0000-000000000001',
+  email: 'user@example.com',
+  displayName: 'テスト太郎',
+  avatarUrl: null,
+  role: 'ROLE_BUYER',
+  status: 'ACTIVE',
+  createdAt: '2026-05-24T10:00:00Z',
+}
+
+/** GET /users/me を ME で応答する route インターセプトを仕込む */
+async function mockCurrentUser(page: Page) {
+  await page.route('**/api/v1/users/me', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(ME) }),
+  )
+}
+
 /** ProblemDetail（RFC 9457）形式のエラーを返す */
 function problem(status: number, code: string, title: string) {
   return {
@@ -56,6 +74,7 @@ test.describe('ログイン', () => {
     await page.route('**/api/v1/auth/login', (route) =>
       route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(TOKENS) }),
     )
+    await mockCurrentUser(page)
 
     await page.goto('/auth/login')
     await page.getByLabel('メールアドレス').fill('user@example.com')
@@ -99,6 +118,7 @@ test.describe('会員登録（3ステップ）', () => {
     await page.route('**/api/v1/auth/register/complete', (route) =>
       route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify(TOKENS) }),
     )
+    await mockCurrentUser(page)
 
     await page.goto('/auth/register')
 

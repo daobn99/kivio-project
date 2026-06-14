@@ -456,6 +456,11 @@ src/
 | T-19 | FE: コンポーネントテスト（Vitest + RTL + MSW の OTP ハンドラ） | FE | T-16 | ✅ Done |
 | T-20 | FE: E2E テスト（Playwright・3 ステップ登録） | FE | T-17, T-18 | ✅ Done |
 | T-21 | Seed データ改修（`dev/V10__seed_development_data.sql`・`email_verified` 列を除去し認証済みユーザーを直接 INSERT） | BE | T-01 | ✅ Done |
+| T-27 | BE: `GET /api/v1/users/me`（`UserController` + `UserService` + `UserResponse`）。`@AuthenticationPrincipal` の user_id からプロフィールを返す（API_DESIGN.md §3）。`SecurityConfig` は `anyRequest().authenticated()` で自動的に認証必須 | BE | なし | ✅ Done |
+| T-28 | FE: `getCurrentUser`（`lib/api/client/users.ts`・store の accessToken を Bearer 付与）+ `LoginForm` / `RegisterPasswordStep` の成功時に `login`/`complete` → `getCurrentUser` → `setAuth` 配線 + MSW `users` ハンドラ + E2E に `/users/me` モック追加 | FE | T-27, T-15 | ✅ Done |
+| T-29 | FE: 認証後ヘッダー（`HeaderActions` を `useAuthStore` に配線・hydration guard）+ `§4` 仕様反映（Guest にカート、BUYER/SELLER のアイコン行に地球追加・Heart を UserMenu へ移設）+ `UserMenu` のホバー開閉（制御化）・お気に入り・**ログアウト UI**（`logout()` → `clearAuth()` → `/`）。`design-system/pages/layout.md §4` を更新 | FE | T-28 | ✅ Done |
+
+> **T-27〜T-29 の追加経緯（2026-06-14）:** §4「認証状態別ヘッダーアクション」が未実装で、画面上のログイン/ログアウトを目視確認できなかった。確認経路として認証状態を画面に反映させる必要があり、`GET /users/me` 連携（User ドメイン）と認証後ヘッダー・ログアウト UI（T-613 の「後続」分）をまとめて実装した。
 
 **依存グラフ（クリティカルパス）:**
 
@@ -610,7 +615,7 @@ T-08（既存・回帰確認）
 - [x] OTP 誤入力 → エラー表示・再入力できる
 - [x] ログインフロー: login → ホームにリダイレクト → accessToken が Zustand に保存される
 - [x] 誤パスワードログイン: エラーメッセージが表示される
-- [ ] ログアウト: ログアウト後に protected route へアクセス → `/login` にリダイレクト（ログアウト UI が未実装のため後続）
+- [x] ログアウト UI 実装（T-29）：`UserMenu` のログアウトで `logout()` → `clearAuth()` → `/` 遷移。ログアウト後に protected route へアクセス → `/auth/login` リダイレクトの検証は E2E 追加候補（後続）
 - [x] 未認証ユーザーが protected route に直接アクセス → `/login` にリダイレクト
 - [x] 認証済みユーザーが `/login` にアクセス → `/` にリダイレクト
 
@@ -671,6 +676,7 @@ PR をマージするには以下を全て満たすこと。
 | OQ-3 | Google OAuth の Client ID / Secret は誰が払い出すか？ ローカル開発用の `.env` をシニアが用意するか？ | T-05, T-07 | 着手前 |
 | OQ-4 | OTP メール送信の実装範囲 | T-25, T-26 | **一部解決**：dev は `SmtpEmailSender`→Mailpit で実送信・目視確認まで完了（T-25）。トランスポート（`EmailSender#send`）とユースケース（`AuthEmailService`）を分離済み。test/未指定プロファイルはフォールバック `LogEmailSender` で起動可能。prod の Resend 連携（API Key 共有・`ResendEmailSender`＝`@Profile("prod")`）は後続タスク T-26 として分離（未実装のため現状 prod は起動不可） |
 | OQ-5 | Redis は main の `docker-compose.yml` に追加するか（devcontainer には既存）。本番（Neon/Supabase 構成）の Redis ホスティング先は？ | T-22 | 着手前 |
+| OQ-6 | **トークン Cookie ブリッジ層の未整備。** `proxy.ts` / `lib/api/server/base.ts` は `access_token` Cookie を前提とするが、現状この Cookie をセットする箇所（BFF Route Handler 等）が無く、バックエンドの login/refresh も Set-Cookie を返さない（`Authorization: Bearer` ヘッダー認証のみ）。クライアントの `apiFetch` も store の Bearer を付与しない（T-28 の `getCurrentUser` は個別に Bearer 付与で回避）。**影響:** ①ページリロード後は accessToken（メモリのみ・persist 対象外）が消えるため、persist された `isAuthenticated`/`user` でヘッダーは認証済み表示のままだが API 呼び出しは Bearer 無しになる。②`proxy.ts` の Cookie ベース認証ガードは Cookie 未発行のため実効しない。**要決定:** BFF Route Handler で login/refresh レスポンスから `access_token` を Cookie 化するか、`apiFetch` を store の Bearer 付与へ統一するか。リロード時の再ハイドレーション（refresh → `getCurrentUser`）も併せて設計する | 後続（認証配線の本格化） | 別タスク |
 
 ### Risks（既知のリスク）
 

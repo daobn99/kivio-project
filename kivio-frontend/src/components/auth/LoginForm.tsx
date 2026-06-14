@@ -5,6 +5,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation } from '@tanstack/react-query'
 import { login } from '@/lib/api/client/auth'
+import { getCurrentUser } from '@/lib/api/client/users'
 import { loginSchema, type LoginFormValues } from '@/lib/validations/auth'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { resolveAuthError } from '@/lib/authErrors'
@@ -31,7 +32,7 @@ interface LoginFormProps {
 
 export function LoginForm({ defaultEmail = '' }: LoginFormProps) {
   const router = useRouter()
-  const setAccessToken = useAuthStore((state) => state.setAccessToken)
+  const setAuth = useAuthStore((state) => state.setAuth)
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -44,10 +45,14 @@ export function LoginForm({ defaultEmail = '' }: LoginFormProps) {
   } = form
 
   const mutation = useMutation({
-    mutationFn: (values: LoginFormValues) => login(values.email, values.password),
-    onSuccess: (tokens) => {
-      // ユーザー情報は別途 GET /users/me で取得する設計のため、ここでは Access Token のみ保持する
-      setAccessToken(tokens.accessToken)
+    // ログイン後、Access Token で GET /users/me を呼びユーザー情報まで取得して認証状態を確定する
+    mutationFn: async (values: LoginFormValues) => {
+      const tokens = await login(values.email, values.password)
+      const user = await getCurrentUser(tokens.accessToken)
+      return { tokens, user }
+    },
+    onSuccess: ({ tokens, user }) => {
+      setAuth({ accessToken: tokens.accessToken, user })
       router.replace(ROUTES.home)
     },
   })
