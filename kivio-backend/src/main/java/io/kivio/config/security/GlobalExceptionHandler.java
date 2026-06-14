@@ -32,7 +32,9 @@ import java.util.Set;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    private static final Set<String> SENSITIVE_FIELDS = Set.of("password", "token", "secret", "credential");
+    // セキュリティ上の理由から、パスワードやトークンなどの機微情報を含む可能性のあるフィールドは、エラーレスポンスに rejectedValue
+    // を含めないようにする
+    private static final Set<String> SENSITIVE_FIELDS = Set.of("password", "token", "secret", "credential", "otp");
 
     @Value("${app.problem-base-url:https://kivio.example.com}")
     private String problemBaseUrl;
@@ -61,7 +63,7 @@ public class GlobalExceptionHandler {
         problem.setType(URI.create(problemBaseUrl + "/problems/invalid-request-body"));
         problem.setTitle("Invalid Request Body");
         problem.setInstance(URI.create(request.getRequestURI()));
-        problem.setProperty("code","INVALID_REQUEST_BODY");
+        problem.setProperty("code", "INVALID_REQUEST_BODY");
         return problem;
     }
 
@@ -72,7 +74,7 @@ public class GlobalExceptionHandler {
         problem.setType(URI.create(problemBaseUrl + "/problems/validation-failed"));
         problem.setTitle("Validation Failed");
         problem.setInstance(URI.create(request.getRequestURI()));
-        problem.setProperty("code","VALIDATION_FAILED");
+        problem.setProperty("code", "VALIDATION_FAILED");
         problem.setProperty("errors", buildFieldErrors(ex.getBindingResult().getFieldErrors()));
         return problem;
     }
@@ -83,7 +85,7 @@ public class GlobalExceptionHandler {
         problem.setType(URI.create(problemBaseUrl + "/problems/unauthorized"));
         problem.setTitle("Unauthorized");
         problem.setInstance(URI.create(request.getRequestURI()));
-        problem.setProperty("code","UNAUTHORIZED");
+        problem.setProperty("code", "UNAUTHORIZED");
         return problem;
     }
 
@@ -93,7 +95,7 @@ public class GlobalExceptionHandler {
         problem.setType(URI.create(problemBaseUrl + "/problems/access-denied"));
         problem.setTitle("Access Denied");
         problem.setInstance(URI.create(request.getRequestURI()));
-        problem.setProperty("code","ACCESS_DENIED");
+        problem.setProperty("code", "ACCESS_DENIED");
         return problem;
     }
 
@@ -105,7 +107,7 @@ public class GlobalExceptionHandler {
         problem.setType(URI.create(problemBaseUrl + "/problems/internal-server-error"));
         problem.setTitle("Internal Server Error");
         problem.setInstance(URI.create(request.getRequestURI()));
-        problem.setProperty("code","INTERNAL_SERVER_ERROR");
+        problem.setProperty("code", "INTERNAL_SERVER_ERROR");
         return problem;
     }
 

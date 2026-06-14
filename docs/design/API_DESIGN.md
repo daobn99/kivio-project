@@ -128,9 +128,19 @@ Content-Type: application/problem+json
 
 #### レスポンス（200 OK）
 
+利用可否は常に `200 OK` の `available` フラグで返す。**登録済みは「正常な照会結果」であり 200 + `available: false` で表現する**（エラーとして 409 を返さない）。重複の権威的な拒否は状態変更ステップ（`request-otp` / `complete`）が担う。
+
 ```json
+// 利用可能なメールアドレス
 {
   "available": true
+}
+```
+
+```json
+// 既に登録済みのメールアドレス
+{
+  "available": false
 }
 ```
 
@@ -138,7 +148,6 @@ Content-Type: application/problem+json
 
 | エラーコード | HTTP | 条件 |
 |---|---|---|
-| `EMAIL_ALREADY_REGISTERED` | 409 | そのメールアドレスが既に登録済み |
 | `VALIDATION_FAILED` | 422 | メール形式が不正 |
 
 ---

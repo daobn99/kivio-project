@@ -103,7 +103,7 @@ Redis インフラ導入（build.gradle / docker-compose / application.yml / Red
 
 | エンドポイント | 認証 | 主なリクエストフィールド | レスポンス | 主なエラーコード |
 |---|---|---|---|---|
-| `POST /auth/check-email` | 不要 | `email` | 200 `{ available }` | `EMAIL_ALREADY_REGISTERED`, `VALIDATION_FAILED` |
+| `POST /auth/check-email` | 不要 | `email` | 200 `{ available }`（登録済みは `available: false`） | `VALIDATION_FAILED` |
 | `POST /auth/register/request-otp` | 不要 | `email` | 202 `{ message, expiresInSeconds }` | `EMAIL_ALREADY_REGISTERED`, `RATE_LIMIT_EXCEEDED`, `VALIDATION_FAILED` |
 | `POST /auth/register/verify-otp` | 不要 | `email`, `otp`（6 桁） | 200 `{ registrationToken, expiresInSeconds }` | `OTP_INVALID`, `OTP_EXPIRED`, `OTP_MAX_ATTEMPTS_EXCEEDED`, `VALIDATION_FAILED` |
 | `POST /auth/register/complete` | 不要 | `registrationToken`, `password`, `passwordConfirm`, `displayName?` | 201 Access + Refresh Token（自動ログイン） | `REGISTRATION_SESSION_INVALID`, `EMAIL_ALREADY_REGISTERED`, `VALIDATION_FAILED` |
@@ -476,58 +476,58 @@ T-08（既存・回帰確認）
 
 ### パスワード・ハッシュ
 
-- [ ] BCrypt cost factor = **12** を使用している（11 以下・13 以上は不可）
-- [ ] パスワード平文を一切ログ・DB・**Redis**・レスポンスに出力していない
-- [ ] `passwordConfirm` フィールドの値をログに記録していない
+- [x] BCrypt cost factor = **12** を使用している（11 以下・13 以上は不可）
+- [x] パスワード平文を一切ログ・DB・**Redis**・レスポンスに出力していない
+- [x] `passwordConfirm` フィールドの値をログに記録していない
 
 ### JWT
 
-- [ ] Access Token 有効期限 = **15 分**（`jwt.access-token-expiration=900`）
-- [ ] Refresh Token 有効期限 = **7 日**（`jwt.refresh-token-expiration=604800`）
-- [ ] JWT 署名アルゴリズム = **HS256**（Phase 2）
-- [ ] JWT ペイロードに含まれる情報が `sub`（user_id）と `role` のみである
-- [ ] JWT 秘密鍵が `application.yaml` にハードコードされていない（環境変数 `JWT_SECRET` 参照）
+- [x] Access Token 有効期限 = **15 分**（`jwt.access-token-expiration=900`）
+- [x] Refresh Token 有効期限 = **7 日**（`jwt.refresh-token-expiration=604800`）
+- [x] JWT 署名アルゴリズム = **HS256**（Phase 2）
+- [x] JWT ペイロードに含まれる情報が `sub`（user_id）と `role` のみである
+- [x] JWT 秘密鍵が `application.yaml` にハードコードされていない（環境変数 `JWT_SECRET` 参照）
 
 ### Refresh Token
 
-- [ ] DB には **SHA-256 ハッシュ**のみ保存し平文は保存していない
-- [ ] Token Rotation を実装している（リフレッシュのたびに旧トークンを削除・新トークンを発行）
-- [ ] Refresh Token Reuse Detection を実装している（`revoked = true` のトークン使用時に全セッション無効化）
-- [ ] ログアウト時に DB からトークンを削除している
+- [x] DB には **SHA-256 ハッシュ**のみ保存し平文は保存していない
+- [x] Token Rotation を実装している（リフレッシュのたびに旧トークンを削除・新トークンを発行）
+- [x] Refresh Token Reuse Detection を実装している（`revoked = true` のトークン使用時に全セッション無効化）
+- [x] ログアウト時に DB からトークンを削除している
 
 ### OTP / 登録セッション（Redis）
 
-- [ ] OTP は平文を保存せず **SHA-256 ハッシュ**のみ Redis に保存している
-- [ ] OTP 有効期限 = **10 分**（Redis TTL）。`registrationToken` 有効期限 = **30 分**
-- [ ] OTP 検証は **5 回**まで。超過で `reg:otp:{email}` を失効させ `OTP_MAX_ATTEMPTS_EXCEEDED` を返す
-- [ ] OTP は `SecureRandom` で生成した 6 桁数値である
-- [ ] `registrationToken` は不透明な **UUID v4**。`reg:session:*` はワンタイム消費（complete 時に `DEL`）
-- [ ] `request-otp` に **メールアドレス単位**のスロットリング（60 秒に 1 回・1 時間に 5 回）を適用している（IP 単位だけではクロス IP のメール爆撃を防げない）
-- [ ] `users` レコードは OTP 検証 + パスワード設定の完了後にのみ作成している（未認証レコードを作らない）
-- [ ] OTP メールに個人情報を含めず、「コードを共有しない」旨を記載している
+- [x] OTP は平文を保存せず **SHA-256 ハッシュ**のみ Redis に保存している
+- [x] OTP 有効期限 = **10 分**（Redis TTL）。`registrationToken` 有効期限 = **30 分**
+- [x] OTP 検証は **5 回**まで。超過で `reg:otp:{email}` を失効させ `OTP_MAX_ATTEMPTS_EXCEEDED` を返す
+- [x] OTP は `SecureRandom` で生成した 6 桁数値である
+- [x] `registrationToken` は不透明な **UUID v4**。`reg:session:*` はワンタイム消費（complete 時に `DEL`）
+- [x] `request-otp` に **メールアドレス単位**のスロットリング（60 秒に 1 回・1 時間に 5 回）を適用している（IP 単位だけではクロス IP のメール爆撃を防げない）
+- [x] `users` レコードは OTP 検証 + パスワード設定の完了後にのみ作成している（未認証レコードを作らない）
+- [x] OTP メールに個人情報を含めず、「コードを共有しない」旨を記載している
 
 ### Google OAuth
 
-- [ ] `audience`（Google Client ID）を検証している
-- [ ] `issuer`（`accounts.google.com`）を検証している
-- [ ] Google Client Secret を環境変数で管理している
+- [x] `audience`（Google Client ID）を検証している
+- [x] `issuer`（`accounts.google.com`）を検証している
+- [x] Google Client Secret を環境変数で管理している
 
 ### エラーレスポンス
 
-- [ ] ログイン失敗時にメールアドレス存在有無がわかる情報を返していない（`INVALID_CREDENTIALS` のみ返す）
-- [ ] スタックトレースを 500 エラーレスポンスに含めていない
-- [ ] `rejectedValue` にパスワード・OTP・トークン類を含めていない（`GlobalExceptionHandler` でマスキング済み）
+- [x] ログイン失敗時にメールアドレス存在有無がわかる情報を返していない（`INVALID_CREDENTIALS` のみ返す）
+- [x] スタックトレースを 500 エラーレスポンスに含めていない
+- [x] `rejectedValue` にパスワード・OTP・トークン類を含めていない（`GlobalExceptionHandler` でマスキング済み） <!-- NG: OTP が未マスキング。SENSITIVE_FIELDS に "otp" が含まれていない（password/token/secret/credential のみ） -->
 
 ### レート制限
 
-- [ ] 認証系エンドポイント（`/api/v1/auth/*`）に **10 req/min/IP** の制限が適用されている
-- [ ] `request-otp` のメール単位スロットリングが Redis で実装されている
-- [ ] 制限超過時に `429 Too Many Requests` + `Retry-After` を返している
+- [x] 認証系エンドポイント（`/api/v1/auth/*`）に **10 req/min/IP** の制限が適用されている
+- [x] `request-otp` のメール単位スロットリングが Redis で実装されている
+- [x] 制限超過時に `429 Too Many Requests` + `Retry-After` を返している
 
 ### CORS
 
-- [ ] 許可オリジンが環境変数 `ALLOWED_ORIGINS` で管理されており `*` を使用していない
-- [ ] `Access-Control-Allow-Credentials: true` が設定されている
+- [x] 許可オリジンが環境変数 `ALLOWED_ORIGINS` で管理されており `*` を使用していない
+- [x] `Access-Control-Allow-Credentials: true` が設定されている
 
 ---
 
@@ -536,6 +536,10 @@ T-08（既存・回帰確認）
 ### 9.1 Backend テスト（JUnit 5 + Mockito + Testcontainers）
 
 #### OtpService / RegistrationSessionService 単体テスト
+
+<!-- 未実施: 専用の単体テスト（OtpServiceTest / RegistrationSessionServiceTest）が存在しない。
+     これらの挙動は AuthControllerIntegrationTest（Testcontainers Redis）が間接的にカバーするが、
+     当該統合テストは Docker 未起動のため本環境ではスキップ（disabledWithoutDocker=true）。 -->
 
 - [ ] `OtpService.issue`: `reg:otp:{email}` に SHA-256 ハッシュ + `attempts=0` が TTL 付きで保存される
 - [ ] `OtpService.issue`: クールダウン中（`reg:otp:cooldown:{email}` 存在） → `RATE_LIMIT_EXCEEDED`
@@ -548,30 +552,34 @@ T-08（既存・回帰確認）
 
 #### AuthService 単体テスト
 
-- [ ] `checkEmail`: 利用可能なメール → `available: true` を返す
-- [ ] `checkEmail`: 登録済みメール → `KivioException(EMAIL_ALREADY_REGISTERED)` をスロー
-- [ ] `requestOtp`: 利用可能なメール → OTP 保存 + `sendRegistrationOtp` が呼ばれ 202
-- [ ] `requestOtp`: 重複メール → `EMAIL_ALREADY_REGISTERED`（`users` は作成されない）
-- [ ] `verifyOtp`: 正しい OTP → `registrationToken` を返す
-- [ ] `verifyOtp`: 誤り / 期限切れ / 上限超過 → `OTP_INVALID` / `OTP_EXPIRED` / `OTP_MAX_ATTEMPTS_EXCEEDED`
-- [ ] `completeRegistration`: 有効な `registrationToken` → users に INSERT・Access + Refresh Token が返る・セッション削除
-- [ ] `completeRegistration`: 無効・期限切れ・再利用トークン → `REGISTRATION_SESSION_INVALID`
-- [ ] `completeRegistration`: 検証〜完了の間に同一メール登録（UNIQUE 違反） → `EMAIL_ALREADY_REGISTERED`
-- [ ] `login`: 正常系 → Access Token + Refresh Token が返る
-- [ ] `login`: 誤パスワード → `INVALID_CREDENTIALS`
-- [ ] `login`: 存在しないメール → `INVALID_CREDENTIALS`（メール存在有無を漏らさない）
-- [ ] `login`: 無効化済みアカウント → `USER_DEACTIVATED`（**`EMAIL_NOT_VERIFIED` のテストは削除**）
-- [ ] `googleLogin`: 有効 ID Token → Refresh Token 生成・Access Token 返却
-- [ ] `googleLogin`: 既存メールと同一 → google_id が既存ユーザーに紐づく（統合）
-- [ ] `googleLogin`: 無効 ID Token → `GOOGLE_TOKEN_INVALID`
-- [ ] `refresh`: 有効トークン → Token Rotation で新トークン発行
-- [ ] `refresh`: 無効 / 期限切れ → `REFRESH_TOKEN_INVALID`
-- [ ] `refresh`: 既に revoked なトークン（Reuse） → 全セッション無効化 + `REFRESH_TOKEN_INVALID`
-- [ ] `logout`: 正常系 → DB からトークン削除
+- [x] `checkEmail`: 利用可能なメール → `available: true` を返す
+- [x] `checkEmail`: 登録済みメール → `available: false` を返す（エラーにせず 200。重複の権威的拒否は request-otp / complete が担う）
+- [x] `requestOtp`: 利用可能なメール → OTP 保存 + `sendRegistrationOtp` が呼ばれ 202
+- [x] `requestOtp`: 重複メール → `EMAIL_ALREADY_REGISTERED`（`users` は作成されない）
+- [x] `verifyOtp`: 正しい OTP → `registrationToken` を返す
+- [x] `verifyOtp`: 誤り / 期限切れ / 上限超過 → `OTP_INVALID` / `OTP_EXPIRED` / `OTP_MAX_ATTEMPTS_EXCEEDED`
+- [x] `completeRegistration`: 有効な `registrationToken` → users に INSERT・Access + Refresh Token が返る・セッション削除
+- [x] `completeRegistration`: 無効・期限切れ・再利用トークン → `REGISTRATION_SESSION_INVALID`
+- [x] `completeRegistration`: 検証〜完了の間に同一メール登録（UNIQUE 違反） → `EMAIL_ALREADY_REGISTERED`
+- [x] `login`: 正常系 → Access Token + Refresh Token が返る
+- [x] `login`: 誤パスワード → `INVALID_CREDENTIALS`
+- [x] `login`: 存在しないメール → `INVALID_CREDENTIALS`（メール存在有無を漏らさない）
+- [x] `login`: 無効化済みアカウント → `USER_DEACTIVATED`（**`EMAIL_NOT_VERIFIED` のテストは削除**）
+- [x] `googleLogin`: 有効 ID Token → Refresh Token 生成・Access Token 返却
+- [x] `googleLogin`: 既存メールと同一 → google_id が既存ユーザーに紐づく（統合）
+- [x] `googleLogin`: 無効 ID Token → `GOOGLE_TOKEN_INVALID`
+- [x] `refresh`: 有効トークン → Token Rotation で新トークン発行
+- [x] `refresh`: 無効 / 期限切れ → `REFRESH_TOKEN_INVALID`
+- [x] `refresh`: 既に revoked なトークン（Reuse） → 全セッション無効化 + `REFRESH_TOKEN_INVALID`
+- [x] `logout`: 正常系 → DB からトークン削除
 
 #### AuthController 統合テスト（MockMvc + Testcontainers + Redis）
 
-- [ ] `POST /auth/check-email` 200 / 409 レスポンス形式が API_DESIGN.md と一致する
+<!-- 本環境では Docker 未起動のため AuthControllerIntegrationTest（15 テスト）は全件スキップ
+     （@Testcontainers(disabledWithoutDocker=true)）。テスト自体は実装済みで、Docker のある
+     環境で要実行。最終行のレート制限（429）は対応する統合テストが未実装（テスト自体が無い）。 -->
+
+- [ ] `POST /auth/check-email` 200（利用可/登録済みとも `available` フラグ）レスポンス形式が API_DESIGN.md と一致する
 - [ ] `POST /auth/register/request-otp` 202 レスポンス形式が一致する
 - [ ] `POST /auth/register/verify-otp` 200 / 400 / 429 レスポンス形式が一致する
 - [ ] `POST /auth/register/complete` 201（Access + Refresh Token）/ 400 レスポンス形式が一致する
