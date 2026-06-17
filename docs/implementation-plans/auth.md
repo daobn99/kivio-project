@@ -459,8 +459,13 @@ src/
 | T-27 | BE: `GET /api/v1/users/me`（`UserController` + `UserService` + `UserResponse`）。`@AuthenticationPrincipal` の user_id からプロフィールを返す（API_DESIGN.md §3）。`SecurityConfig` は `anyRequest().authenticated()` で自動的に認証必須 | BE | なし | ✅ Done |
 | T-28 | FE: `getCurrentUser`（`lib/api/client/users.ts`・store の accessToken を Bearer 付与）+ `LoginForm` / `RegisterPasswordStep` の成功時に `login`/`complete` → `getCurrentUser` → `setAuth` 配線 + MSW `users` ハンドラ + E2E に `/users/me` モック追加 | FE | T-27, T-15 | ✅ Done |
 | T-29 | FE: 認証後ヘッダー（`HeaderActions` を `useAuthStore` に配線・hydration guard）+ `§4` 仕様反映（Guest にカート、BUYER/SELLER のアイコン行に地球追加・Heart を UserMenu へ移設）+ `UserMenu` のホバー開閉（制御化）・お気に入り・**ログアウト UI**（`logout()` → `clearAuth()` → `/`）。`design-system/pages/layout.md §4` を更新 | FE | T-28 | ✅ Done |
+| T-30 | FE: **Google OAuth フロントエンド配線**（NextAuth v5 ハンドラ `src/app/api/auth/[...nextauth]/route.ts` + 設定 `src/auth.ts`（Google Provider・`AUTH_SECRET`/`AUTH_GOOGLE_ID`/`AUTH_GOOGLE_SECRET`）+ Google `id_token` を取り出すコールバック + ブリッジ `GoogleAuthBridge`（バックエンド `POST /api/v1/auth/google` と交換 → `getCurrentUser` → `useAuthStore.setAuth` → ホーム遷移、交換後 NextAuth セッションは破棄）+ `AuthSessionProvider` を認証レイアウトにスコープ + 型拡張 `types/next-auth.d.ts`）。`GoogleSignInButton` の `signIn('google')` が 404（`/api/auth/error`）に落ちる不備を解消する。env 設定（FE: `AUTH_*` / BE: `GOOGLE_CLIENT_ID`＝FE の `AUTH_GOOGLE_ID` と同一値・`GOOGLE_CLIENT_SECRET`）+ 実機ブラウザ確認 + R-1 の E2E skip 解除候補 | FE | T-16, T-28 | ✅ Done |
 
 > **T-27〜T-29 の追加経緯（2026-06-14）:** §4「認証状態別ヘッダーアクション」が未実装で、画面上のログイン/ログアウトを目視確認できなかった。確認経路として認証状態を画面に反映させる必要があり、`GET /users/me` 連携（User ドメイン）と認証後ヘッダー・ログアウト UI（T-613 の「後続」分）をまとめて実装した。
+>
+> **T-30 の追加経緯（2026-06-17）:** Task Breakdown 全消化後、`/auth/login` の「Google で続行」押下が `/api/auth/error` で 404 になる事象を確認。バックエンド（T-05/T-07）と `GoogleSignInButton`（T-16）は実装済みだが、`signIn('google')` を受ける NextAuth ハンドラ・Provider 設定・`id_token`→`POST /auth/google` ブリッジが未実装で、当該配線タスクが Task Breakdown に欠落していた（OQ-3 の Client ID/Secret 未払い出しを理由に先送りされていた範囲）。OQ-3 が解決（クレデンシャル払い出し・env 設定完了）したため、フロント配線＋実機確認を T-30 として追加する。
+>
+> **T-30 実装メモ（2026-06-17）:** 方針＝NextAuth は **Google `id_token` 取得専用**とし、Kivio 認証の正はメモリ Zustand（既存のメール/パスワードログイン T-28 と同一経路で `setAuth`）。交換完了後に NextAuth セッションは `signOut({redirect:false})` で破棄する。`SessionProvider` は認証レイアウト（`auth/(auth-group)/layout.tsx`）配下にのみ適用しグローバル負荷を避ける。**自動検証済み:** `pnpm typecheck`/`lint`/`test`(23)/`build` グリーン、`/api/auth/[...nextauth]` がルート登録され `/api/auth/error` が 200（404 解消）、`signIn('google')` が `accounts.google.com` へ実 `client_id`＋`scope=openid` でリダイレクト、BE `/api/v1/auth/google` が稼働（不正トークンで 401＝`GOOGLE_TOKEN_INVALID`）。**実機確認済み（2026-06-17）:** ブラウザで実 Google アカウントの同意画面を通した E2E が成功（要件＝Google Cloud Console の「承認済みリダイレクト URI」に `http://localhost:3000/api/auth/callback/google` を登録）。なお BE の起動 env に注意：`./gradlew bootRun` は `.env` を自動ロードしないため、シェルの `GOOGLE_CLIENT_ID=dummy` が残っていると `id_token` の `aud` 照合に失敗し `GOOGLE_TOKEN_INVALID` になる（起動時に正しい `GOOGLE_CLIENT_ID`＝FE の `AUTH_GOOGLE_ID` を渡すこと）。**キャンセル/エラー時の遷移:** `src/auth.ts` に `pages.signIn`/`pages.error` = `/auth/login` を設定し、NextAuth 既定のエラーページ（`/api/auth/error?error=...`）ではなくログイン画面へ戻す。Google 同意画面で「キャンセル」した場合（`error=access_denied`）もログイン画面へ静かに復帰する（ログイン画面は `?error=` を表示しないため文言は出さない＝正常操作扱い）。トークン交換後の失敗（`GOOGLE_TOKEN_INVALID` 等）は経路が別で、従来どおり `GoogleAuthBridge` が `FormAlert` で文言表示する。**既知の制約:** リロード後の再ハイドレーション・Cookie ブリッジは OQ-6 の別タスク（accessToken はメモリのみ）。
 
 **依存グラフ（クリティカルパス）:**
 
@@ -673,7 +678,7 @@ PR をマージするには以下を全て満たすこと。
 |---|---|---|---|
 | ~~OQ-1~~ | ✅ 解決：開発初期のため Migration を直接編集する方針で合意。`V2__create_identity_tables.sql` から `email_verified` 列を除去し、`V12__create_email_verification_tokens.sql` を削除した（新規 V13 は追加しない） | T-01 | — |
 | OQ-2 | `POST /auth/refresh` のレスポンスに新しい `refreshToken` を含める仕様か？ API_DESIGN.md §2.4 のレスポンスに `refreshToken` フィールドがない → Token Rotation の結果をどう返すか確認 | T-08, T-14 | 着手前 |
-| OQ-3 | Google OAuth の Client ID / Secret は誰が払い出すか？ ローカル開発用の `.env` をシニアが用意するか？ | T-05, T-07 | 着手前 |
+| ~~OQ-3~~ | ✅ 解決（2026-06-17）：オーナーが Google Cloud Console で OAuth 2.0 クライアント（ウェブ）を払い出し、FE `.env.local`（`AUTH_SECRET`/`AUTH_GOOGLE_ID`/`AUTH_GOOGLE_SECRET`）・BE（`GOOGLE_CLIENT_ID`＝FE の `AUTH_GOOGLE_ID` と同一値・`GOOGLE_CLIENT_SECRET`）に設定済み。残作業はフロント配線（T-30） | T-05, T-07, T-30 | — |
 | OQ-4 | OTP メール送信の実装範囲 | T-25, T-26 | **一部解決**：dev は `SmtpEmailSender`→Mailpit で実送信・目視確認まで完了（T-25）。トランスポート（`EmailSender#send`）とユースケース（`AuthEmailService`）を分離済み。test/未指定プロファイルはフォールバック `LogEmailSender` で起動可能。prod の Resend 連携（API Key 共有・`ResendEmailSender`＝`@Profile("prod")`）は後続タスク T-26 として分離（未実装のため現状 prod は起動不可） |
 | OQ-5 | Redis は main の `docker-compose.yml` に追加するか（devcontainer には既存）。本番（Neon/Supabase 構成）の Redis ホスティング先は？ | T-22 | 着手前 |
 | OQ-6 | **トークン Cookie ブリッジ層の未整備。** `proxy.ts` / `lib/api/server/base.ts` は `access_token` Cookie を前提とするが、現状この Cookie をセットする箇所（BFF Route Handler 等）が無く、バックエンドの login/refresh も Set-Cookie を返さない（`Authorization: Bearer` ヘッダー認証のみ）。クライアントの `apiFetch` も store の Bearer を付与しない（T-28 の `getCurrentUser` は個別に Bearer 付与で回避）。**影響:** ①ページリロード後は accessToken（メモリのみ・persist 対象外）が消えるため、persist された `isAuthenticated`/`user` でヘッダーは認証済み表示のままだが API 呼び出しは Bearer 無しになる。②`proxy.ts` の Cookie ベース認証ガードは Cookie 未発行のため実効しない。**要決定:** BFF Route Handler で login/refresh レスポンスから `access_token` を Cookie 化するか、`apiFetch` を store の Bearer 付与へ統一するか。リロード時の再ハイドレーション（refresh → `getCurrentUser`）も併せて設計する | 後続（認証配線の本格化） | 別タスク |
@@ -682,7 +687,7 @@ PR をマージするには以下を全て満たすこと。
 
 | # | リスク | 影響度 | 対策 |
 |---|---|---|---|
-| R-1 | Google OAuth のローカル環境設定が完了していない場合、`POST /auth/google` の E2E テストが実施できない | 中 | Google OAuth は単体テストで GoogleTokenVerifier をモックして検証し、E2E は skip フラグを立てて後回しにする |
+| R-1 | Google OAuth のローカル環境設定が完了していない場合、`POST /auth/google` の E2E テストが実施できない | 中 | Google OAuth は単体テストで GoogleTokenVerifier をモックして検証し、E2E は skip フラグを立てて後回しにする。**2026-06-17 にクレデンシャル払い出し・env 設定が完了（OQ-3 解決）したため、T-30 でフロント配線＋実機確認を行い、skip 解除を検討する** |
 | R-2 | Resend がローカル環境で使えない場合、OTP メール送信部分のテストができない | 中 | **解決済み**：dev は `SmtpEmailSender`（`@Profile("dev")`）で devcontainer の Mailpit へ実送信し、Web UI（`http://localhost:8025`）で本番同等のメールを目視確認する。test は `@MockitoBean EmailSender` でモックし `ArgumentCaptor` で OTP を捕捉する（コンソールログ出力のダミー送信は廃止） |
 | R-3 | `SecurityConfig` の公開設定が `/auth/register/**`（ワイルドカード）に更新されていない場合、登録系が 401 になる | 高 | 実装開始前に `SecurityConfig` の `permitAll()` 設定を確認する |
 | R-4 | Refresh Token Reuse Detection（全セッション無効化）が実装されない場合、トークン盗難時に全端末ログアウトができない | 高 | Security Checklist に明記し、コードレビューで必ず確認する |
