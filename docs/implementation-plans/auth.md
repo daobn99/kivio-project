@@ -444,7 +444,7 @@ src/
 | T-07 | `AuthService` 改修：`login` / `googleLogin`（`email_verified` チェック・`verifyEmail()` 呼び出しを削除） | BE | T-05, T-06 | ✅ Done |
 | T-08 | `AuthService`：`refresh` / `logout`（変更なし・回帰確認のみ） | BE | T-06 | ✅ Done |
 | T-09 | `AuthController` 改修：登録 3 エンドポイント差し替え + `@Auditable` 見直し | BE | T-06, T-07, T-08 | ✅ Done |
-| T-10 | Backend 単体テスト改修（OTP / 登録セッション / login から email_verified 削除） | BE | T-06, T-07, T-08 | ✅ Done |
+| T-10 | Backend 単体テスト改修（OTP / 登録セッション / login から email_verified 削除）＋ `OtpServiceTest` / `RegistrationSessionServiceTest` 追加（実 Redis Testcontainers） | BE | T-06, T-07, T-08 | ✅ Done |
 | T-11 | Backend 統合テスト改修（登録 3 ステップ・Testcontainers + Redis） | BE | T-09 | ✅ Done |
 | T-12 | FE: 型定義（`src/types/api/auth.ts` + `src/types/enums.ts`・既存スキャフォールド構成に合わせて配置） | FE | なし | ✅ Done |
 | T-13 | FE: Zod スキーマ（`src/lib/validations/auth.ts`） | FE | なし | ✅ Done |
@@ -547,18 +547,19 @@ T-08（既存・回帰確認）
 
 #### OtpService / RegistrationSessionService 単体テスト
 
-<!-- 未実施: 専用の単体テスト（OtpServiceTest / RegistrationSessionServiceTest）が存在しない。
-     これらの挙動は AuthControllerIntegrationTest（Testcontainers Redis）が間接的にカバーするが、
-     当該統合テストは Docker 未起動のため本環境ではスキップ（disabledWithoutDocker=true）。 -->
+<!-- 実装済み: 専用の単体テスト `OtpServiceTest` / `RegistrationSessionServiceTest`
+     （`src/test/java/io/kivio/domain/identity/service/`）。実 Redis（Testcontainers・
+     `disabledWithoutDocker=true`）に対し TTL・SHA-256 保存・attempts 加算・キー失効・
+     スロットリングの実挙動を検証する。Docker 無し環境では自動スキップ。 -->
 
-- [ ] `OtpService.issue`: `reg:otp:{email}` に SHA-256 ハッシュ + `attempts=0` が TTL 付きで保存される
-- [ ] `OtpService.issue`: クールダウン中（`reg:otp:cooldown:{email}` 存在） → `RATE_LIMIT_EXCEEDED`
-- [ ] `OtpService.issue`: 1 時間の送信上限超過 → `RATE_LIMIT_EXCEEDED`
-- [ ] `OtpService.verify`: 正しい OTP → 成功し `reg:otp:{email}` が削除される
-- [ ] `OtpService.verify`: 誤った OTP → `attempts` が加算され `OTP_INVALID`
-- [ ] `OtpService.verify`: キーなし（期限切れ） → `OTP_EXPIRED`
-- [ ] `OtpService.verify`: 5 回超過 → `OTP_MAX_ATTEMPTS_EXCEEDED` + キー失効
-- [ ] `RegistrationSessionService.create/consume`: 発行 → 消費で email を返し再消費は `REGISTRATION_SESSION_INVALID`
+- [x] `OtpService.issue`: `reg:otp:{email}` に SHA-256 ハッシュ + `attempts=0` が TTL 付きで保存される
+- [x] `OtpService.issue`: クールダウン中（`reg:otp:cooldown:{email}` 存在） → `RATE_LIMIT_EXCEEDED`
+- [x] `OtpService.issue`: 1 時間の送信上限超過 → `RATE_LIMIT_EXCEEDED`
+- [x] `OtpService.verify`: 正しい OTP → 成功し `reg:otp:{email}` が削除される
+- [x] `OtpService.verify`: 誤った OTP → `attempts` が加算され `OTP_INVALID`
+- [x] `OtpService.verify`: キーなし（期限切れ） → `OTP_EXPIRED`
+- [x] `OtpService.verify`: 5 回超過 → `OTP_MAX_ATTEMPTS_EXCEEDED` + キー失効
+- [x] `RegistrationSessionService.create/consume`: 発行 → 消費で email を返し再消費は `REGISTRATION_SESSION_INVALID`
 
 #### AuthService 単体テスト
 
