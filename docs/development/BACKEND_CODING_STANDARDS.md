@@ -648,9 +648,12 @@ public class SecurityConfig {
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
                         .anyRequest().authenticated())
                 .headers(headers -> headers
+                        // XSS 対策は CSP に一本化する。X-XSS-Protection は非推奨（現代ブラウザは
+                        // 当該フィルタを廃止済み・誤検知の副作用あり）なため明示的に無効化（値 0）する
                         .contentSecurityPolicy(csp -> csp.policyDirectives("default-src 'self'"))
                         .frameOptions(HeadersConfigurer.FrameOptionsConfig::sameOrigin)
-                        .xssProtection(Customizer.withDefaults())
+                        .xssProtection(xss -> xss.headerValue(
+                                XXssProtectionHeaderWriter.HeaderValue.DISABLED))
                         .referrerPolicy(rp -> rp.policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.NO_REFERRER)))
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint(problemDetailAuthEntryPoint())
@@ -903,7 +906,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ResourceNotFoundException.class)
     public ProblemDetail handleNotFound(ResourceNotFoundException ex) {
         ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
-        detail.setProperty("code", ex.getErrorCode());
+        detail.setProperty("code", ex.getCode());
         return detail;
     }
 
@@ -912,7 +915,7 @@ public class GlobalExceptionHandler {
     public ProblemDetail handleBusinessRule(BusinessRuleException ex) {
         ProblemDetail detail = ProblemDetail.forStatusAndDetail(
                 HttpStatus.UNPROCESSABLE_CONTENT, ex.getMessage());
-        detail.setProperty("code", ex.getErrorCode());
+        detail.setProperty("code", ex.getCode());
         return detail;
     }
 

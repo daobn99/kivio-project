@@ -11,7 +11,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "prepare": "cd .. && ./kivio-frontend/node_modules/.bin/husky"
+    "prepare": "cd .. && [ -x ./kivio-frontend/node_modules/.bin/husky ] && ./kivio-frontend/node_modules/.bin/husky || true"
   },
   "lint-staged": {
     "*.{ts,tsx}": [

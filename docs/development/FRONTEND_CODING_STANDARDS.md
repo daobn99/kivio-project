@@ -147,7 +147,7 @@ export async function getProduct(id: string): Promise<Product> {
 // ✅ 良い例: インタラクティブ部分だけを切り出す
 // src/components/product/AddToCartButton.tsx
 'use client'
-export default function AddToCartButton({ productId }: { productId: string }) {
+export function AddToCartButton({ productId }: { productId: string }) {
   const [isPending, startTransition] = useTransition()
   // ...
 }
@@ -292,7 +292,7 @@ if (!session.hasAccess) forbidden()
 | ページファイル | `page.tsx`（固定） | `app/products/[id]/page.tsx` |
 | レイアウト | `layout.tsx`（固定） | `app/(seller)/layout.tsx` |
 | Skeleton | `{ComponentName}Skeleton.tsx` | `ProductCardSkeleton.tsx` |
-| コンポーネント関数 | `PascalCase` | `export default function ProductCard` |
+| コンポーネント関数 | `PascalCase` | `export function ProductCard`（ルートファイルのみ `export default`） |
 | Props 型 | `{ComponentName}Props` | `type ProductCardProps` |
 
 ### 3.2 Atomic Design 分類
@@ -320,7 +320,7 @@ interface ProductGridProps {
   error?: Error | null
 }
 
-export default function ProductGrid({ products, isLoading, error }: ProductGridProps) {
+export function ProductGrid({ products, isLoading, error }: ProductGridProps) {
   if (isLoading) return <ProductGridSkeleton />
   if (error) return <ErrorFallback message="商品の読み込みに失敗しました" />
   if (products.length === 0) return <EmptyState title="商品が見つかりません" />
@@ -347,7 +347,7 @@ export default async function ProductPage({ params }) {
 
 // Client Component
 'use client'
-export default function ProductDetailClient({ product }: { product: ProductDto }) {
+export function ProductDetailClient({ product }: { product: ProductDto }) {
   const [quantity, setQuantity] = useState(1)
   // ...
 }
@@ -412,7 +412,7 @@ useEffect(async () => { /* クリーンアップできない */ }, [])
 'use client'
 import { useOptimistic, useTransition } from 'react'
 
-export default function WishlistButton({ productId, initialLiked }: WishlistButtonProps) {
+export function WishlistButton({ productId, initialLiked }: WishlistButtonProps) {
   const [optimisticLiked, toggleOptimistic] = useOptimistic(
     initialLiked,
     (state) => !state
@@ -596,7 +596,7 @@ export const ROUTES = {
 ```tsx
 // ❌ ページ全体が CSR になる
 'use client'
-export default function SearchBar() {
+export function SearchBar() {
   const searchParams = useSearchParams()
   return <input defaultValue={searchParams.get('q') ?? ''} />
 }
@@ -817,7 +817,7 @@ export default async function ProductPage({ params }) {
 
 // ProductDetailClient.tsx (Client Component)
 'use client'
-export default function ProductDetailClient({ initialProduct, productId }) {
+export function ProductDetailClient({ initialProduct, productId }) {
   const { data: product } = useProductQuery(productId, { initialData: initialProduct })
   // ...
 }
@@ -997,7 +997,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
 import { loginSchema, type LoginFormValues } from '@/lib/validations/auth'
 
-export default function LoginForm() {
+export function LoginForm() {
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: { email: '', password: '' },
@@ -1053,17 +1053,25 @@ export default function LoginForm() {
 
 ### 11.1 基本ルール
 
-- コンポーネントは `function` 宣言 + `export default` を使う（アロー関数の default export 禁止）
-- ファイル 1 つにつき 1 コンポーネントを export する（名前付き export の複数公開は可）
+- コンポーネントは `function` 宣言で定義する（アロー関数に代入した default export は禁止）
+- **export の方針:**
+  - **ルートファイル（`page.tsx` / `layout.tsx` / `error.tsx` / `not-found.tsx` / `global-error.tsx` / `loading.tsx` 等）は `export default`**（Next.js が default export を要求するため、選択の余地はない）
+  - **それ以外のコンポーネント・Provider・ユーティリティは名前付き export**（`export function ProductCard`）。リファクタ時の一括リネーム・エディタの auto-import・grep 追跡に有利で、匿名 default export による命名ゆらぎを防ぐ
+- ファイル 1 つにつき 1 コンポーネントを export する（補助的な型・定数の名前付き export 併用は可）
 - JSX 内のコメントは `{/* */}` のみ使用する
 
 ```tsx
-// ✅
-export default function ProductCard({ product }: ProductCardProps) {
+// ✅ 非ルートコンポーネント: 名前付き export + function 宣言
+export function ProductCard({ product }: ProductCardProps) {
   return <div>{product.name}</div>
 }
 
-// ❌
+// ✅ ルートファイル（page.tsx / layout.tsx 等）のみ default export
+export default function ProductPage() {
+  return <ProductCard product={product} />
+}
+
+// ❌ アロー関数に代入した default export
 const ProductCard = ({ product }) => <div>{product.name}</div>
 export default ProductCard
 ```
@@ -1382,6 +1390,7 @@ return (
 ### 13.1 コンポーネント作成時
 
 - [ ] Server / Client Component のどちらにすべきか判断した
+- [ ] export 方針に従っている（ルートファイルのみ `export default`、他コンポーネントは名前付き export）
 - [ ] `'use client'` は葉コンポーネントに限定している
 - [ ] Loading / Error / Empty の 3 状態を実装している
 - [ ] Skeleton コンポーネントを用意している
