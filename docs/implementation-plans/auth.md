@@ -586,21 +586,24 @@ T-08（既存・回帰確認）
 
 #### AuthController 統合テスト（MockMvc + Testcontainers + Redis）
 
-<!-- 本環境では Docker 未起動のため AuthControllerIntegrationTest（15 テスト）は全件スキップ
-     （@Testcontainers(disabledWithoutDocker=true)）。テスト自体は実装済みで、Docker のある
-     環境で要実行。最終行のレート制限（429）は対応する統合テストが未実装（テスト自体が無い）。 -->
+<!-- 実装済み: `AuthControllerIntegrationTest`（16 テスト）＋レート制限専用の
+     `AuthRateLimitIntegrationTest`（1 テスト）。いずれも MockMvc + Testcontainers
+     （PostgreSQL + Redis・@ServiceConnection）で全エンドポイントのレスポンス形式・
+     ステータスコードを検証する。`@Testcontainers(disabledWithoutDocker=true)` のため
+     Docker 未起動環境では自動スキップ。レート制限テストは test プロファイル既定容量
+     （10000）を `@TestPropertySource` で本番既定値（10）に下げた専用コンテキストで実行。 -->
 
-- [ ] `POST /auth/check-email` 200（利用可/登録済みとも `available` フラグ）レスポンス形式が API_DESIGN.md と一致する
-- [ ] `POST /auth/register/request-otp` 202 レスポンス形式が一致する
-- [ ] `POST /auth/register/verify-otp` 200 / 400 / 429 レスポンス形式が一致する
-- [ ] `POST /auth/register/complete` 201（Access + Refresh Token）/ 400 レスポンス形式が一致する
-- [ ] 3 ステップを通した登録 → ログインが成功する（Testcontainers の Redis を使用）
-- [ ] `POST /auth/login` 200 / 401 / 403 レスポンス形式が一致する
-- [ ] `POST /auth/google` 200 / 401 レスポンス形式が一致する
-- [ ] `POST /auth/refresh` 200 / 401 レスポンス形式が一致する
-- [ ] `POST /auth/logout` 204 で Refresh Token が DB から削除される
-- [ ] 認証なしで `POST /auth/logout` → 401
-- [ ] レート制限（11 回目のリクエスト） → 429 + `Retry-After` ヘッダー
+- [x] `POST /auth/check-email` 200（利用可/登録済みとも `available` フラグ）レスポンス形式が API_DESIGN.md と一致する
+- [x] `POST /auth/register/request-otp` 202 レスポンス形式が一致する
+- [x] `POST /auth/register/verify-otp` 200 / 400 / 429 レスポンス形式が一致する
+- [x] `POST /auth/register/complete` 201（Access + Refresh Token）/ 400 レスポンス形式が一致する
+- [x] 3 ステップを通した登録 → ログインが成功する（Testcontainers の Redis を使用）
+- [x] `POST /auth/login` 200 / 401 / 403 レスポンス形式が一致する
+- [x] `POST /auth/google` 200 / 401 レスポンス形式が一致する
+- [x] `POST /auth/refresh` 200 / 401 レスポンス形式が一致する
+- [x] `POST /auth/logout` 204 で Refresh Token が DB から削除される
+- [x] 認証なしで `POST /auth/logout` → 401
+- [x] レート制限（11 回目のリクエスト） → 429 + `Retry-After` ヘッダー
 
 ### 9.2 Frontend テスト（Vitest + RTL + Playwright）
 

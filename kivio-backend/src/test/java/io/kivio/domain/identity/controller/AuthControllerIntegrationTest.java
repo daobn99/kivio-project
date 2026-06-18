@@ -1,6 +1,7 @@
 package io.kivio.domain.identity.controller;
 
 import io.kivio.domain.identity.domain.User;
+import io.kivio.domain.identity.domain.UserStatus;
 import io.kivio.domain.identity.exception.GoogleTokenInvalidException;
 import io.kivio.domain.identity.repository.UserRepository;
 import io.kivio.domain.identity.service.AuthEmailService;
@@ -167,6 +168,39 @@ class AuthControllerIntegrationTest extends IntegrationTestBase {
     }
 
     @Test
+    void should_return_429_when_otp_verification_exceeds_max_attempts() throws Exception {
+        String email = uniqueEmail("otpmax");
+        mockMvc.perform(post("/api/v1/auth/register/request-otp")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"%s"}
+                                """.formatted(email)))
+                .andExpect(status().isAccepted());
+        String otp = captureSentOtp(email);
+        String wrongOtp = otp.equals("000000") ? "111111" : "000000";
+
+        // 検証上限（5 回）までは OTP_INVALID（400）
+        for (int i = 0; i < 5; i++) {
+            mockMvc.perform(post("/api/v1/auth/register/verify-otp")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    {"email":"%s","otp":"%s"}
+                                    """.formatted(email, wrongOtp)))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("OTP_INVALID"));
+        }
+
+        // 上限超過（6 回目）で OTP は失効し OTP_MAX_ATTEMPTS_EXCEEDED（429）
+        mockMvc.perform(post("/api/v1/auth/register/verify-otp")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"%s","otp":"%s"}
+                                """.formatted(email, wrongOtp)))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.code").value("OTP_MAX_ATTEMPTS_EXCEEDED"));
+    }
+
+    @Test
     void should_return_400_when_registration_token_is_invalid() throws Exception {
         mockMvc.perform(post("/api/v1/auth/register/complete")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -210,6 +244,25 @@ class AuthControllerIntegrationTest extends IntegrationTestBase {
                                 """.formatted(email)))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("INVALID_CREDENTIALS"));
+    }
+
+    @Test
+    void should_return_403_when_login_with_deactivated_account() throws Exception {
+        String email = uniqueEmail("deactivated");
+        userRepository.save(User.builder()
+                .email(email)
+                .passwordHash(passwordEncoder.encode("Password123!"))
+                .displayName("Test User")
+                .status(UserStatus.INACTIVE)
+                .build());
+
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"%s","password":"Password123!"}
+                                """.formatted(email)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("USER_DEACTIVATED"));
     }
 
     // ============================================================
