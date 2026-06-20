@@ -1,8 +1,8 @@
 # 認証機能 実装計画 / 進捗管理
 **ブランチ:** `feature/auth`  
 **担当 Phase:** Phase 2  
-**最終更新:** 2026-06-11  
-**ステータス:** 🟡 実装中（**バックエンド完了**：OTP + Redis 方式（[ADR-006](../../adr/ADR-006-email-otp-redis.md)）への改修を実施し `./gradlew build` グリーン。残りはフロントエンド T-12〜T-20）
+**最終更新:** 2026-06-20  
+**ステータス:** 🟢 Phase 2 スコープ完了（バックエンド・フロントエンドとも実装/テスト/動作確認まで完了。`./gradlew test` 58 / `pnpm test` 23 グリーン、`docker compose up` 全サービス起動確認済み）。**dev/test 環境で完結する範囲は全て Done。本番（prod）リリースに向けた残作業のみが未消化** — 詳細は [§12 引き継ぎ事項](#12-引き継ぎ事項-handover) を参照
 
 > **⚠️ 設計変更の経緯（2026-06-11）:**  
 > メール確認方式を「登録時に `users` 作成 → マジックリンク（`/auth/verify-email`）」から、**「メール認証コード（OTP）+ Redis 一時ストレージ」**へ変更した（[ADR-006](../../adr/ADR-006-email-otp-redis.md)）。`users` レコードはメール認証完了後にのみ作成する。  
@@ -23,6 +23,7 @@
 9. [Test Checklist](#9-test-checklist)
 10. [Definition of Done](#10-definition-of-done)
 11. [Risks / Open Questions](#11-risks--open-questions)
+12. [引き継ぎ事項 (Handover)](#12-引き継ぎ事項-handover)
 
 ---
 
@@ -709,3 +710,47 @@ PR をマージするには以下を全て満たすこと。
 | R-5 | Next.js 16 の `proxy.ts`（旧 `middleware.ts`）の動作が未確認の場合、認証ガードが機能しない | 高 | シニアがスキャフォールド段階でサンプル実装を提供しているか確認する |
 | R-6 | 旧方式の実装（T-01〜T-11 Done）の改修漏れにより、`email_verified` / `verify-email` の残骸が残ると整合性が崩れる | 高 | DoD の「旧方式の残骸が完全に除去」をレビュー観点に追加し、grep で機械的に確認する |
 | R-7 | Testcontainers に Redis を追加しないと統合テストで OTP フローが検証できない | 中 | `@Container GenericContainer<>(redis:7-alpine)` を統合テスト基底クラスに追加する |
+
+---
+
+## 12. 引き継ぎ事項 (Handover)
+
+> **状況サマリー（2026-06-20）:** Phase 2 の認証スコープは **dev/test 環境で完結する範囲が全て完了**している（Task Breakdown T-01〜T-25・T-27〜T-31 が Done、テスト・`docker compose up` 動作確認済み）。
+> 残る未消化項目は **(a) 本番（prod）リリースに初めて必要になるもの**、**(b) UX を更に磨くための後続改善**、**(c) Phase 5+ で予定されている技術的移行**の 3 系統のみ。以下に「何が残っているか」「いつのタイミングで解決すべきか」を集約する。**この表が残課題の唯一の正（single source of truth）**であり、§7 Task Breakdown / §11 Open Questions / §11 Risks の該当項目へのインデックスを兼ねる。
+
+### 12.1 残課題一覧（解決タイミング順）
+
+| # | 残課題 | 種別 | 紐づく項目 | 解決タイミング（トリガー） | ブロッカー / 前提 |
+|---|---|---|---|---|---|
+| H-1 | **prod メール送信（Resend）未実装** — `ResendEmailSender`（`@Profile("prod")`・`@Async`+`@Retryable`）が無く、`prod` プロファイルは意図的に起動不可（メール無言ドロップ防止のフォールバックを `prod` で除外しているため）。OTP メールが本番で送れない | 🔴 本番ブロッカー | T-26 / OQ-4 | **本番デプロイ前まで（必須）**。prod 初回リリースの直前スプリント | Resend の API Key 払い出し・送信ドメイン（SPF/DKIM/DMARC）検証・`MAIL_FROM_ADDRESS` の本番値確定 |
+| H-2 | **本番 Redis ホスティング先 未決定** — main の `docker-compose.yml` には `redis:7-alpine` を追加済みだが、本番（Neon/Supabase 構成）でマネージド Redis をどこに置くか未確定。OTP/登録セッション/レート制限が本番で機能しない | 🔴 本番ブロッカー | OQ-5 | **本番インフラ確定時（H-1 と同スプリント）**。`REDIS_HOST`/`REDIS_PORT`/`REDIS_PASSWORD` の本番値が必要 | 本番インフラ選定（Upstash / ElastiCache / Render 等）。コスト・リージョン・TLS 接続方式の決定 |
+| H-3 | **RSC ハードロード時のサイレント refresh 未対応** — access_token 失効（>15分）かつ refresh 有効でも、Server Component の初回ハードロードで `apiFetchServer` が 401 → ログイン誘導になる（「Server 側でリフレッシュしない」既存方針の踏襲）。完全解消には `proxy.ts`/middleware でのサイレント refresh が必要 | 🟡 UX 改善（後続） | OQ-6 残課題 / T-31 残 | **Phase 2 終盤〜Phase 3 の UX 改善枠**。本番ブロッカーではない（毎ロードではなく 15 分超のアイドル後の RSC ナビ時のみ顕在化） | Token Rotation の同時実行レース（Reuse Detection 誤発火）を回避する single-flight 設計を middleware 側でも担保する検討 |
+
+### 12.2 本番リリース前チェックリスト（H-1 / H-2 集約）
+
+prod プロファイルを初めて立ち上げる前に、以下を順に解決すること（H-1・H-2 はセットで本番起動の前提）。
+
+- [ ] **H-1**: `ResendEmailSender`（`@Profile("prod")`）を実装（EMAIL_DESIGN.md §5・`@Async`+`@Retryable`でメール失敗をビジネスロジックに伝播させない）
+- [ ] **H-1**: Resend API Key を本番 secret に登録・送信ドメインの SPF/DKIM/DMARC 検証
+- [ ] **H-1**: prod で `EmailSender` 実体が解決され起動できることを確認（現状フォールバック `LogEmailSender` は `@Profile("!dev & !prod")` で prod では無効）
+- [ ] **H-2**: 本番マネージド Redis を確定し `REDIS_HOST`/`REDIS_PORT`/`REDIS_PASSWORD`（TLS 要否含む）を本番 env に設定
+- [ ] **H-2**: 本番 Redis に対し OTP 発行 → 検証 → 登録完了とレート制限の疎通確認
+- [ ] 本番 env の払い出し確認: `JWT_SECRET` / `ALLOWED_ORIGINS` / `GOOGLE_CLIENT_ID`(=FE `AUTH_GOOGLE_ID`)/`GOOGLE_CLIENT_SECRET` / `MAIL_FROM_ADDRESS`・`MAIL_FROM_NAME`
+- [ ] Cookie の `Secure` 属性が本番（HTTPS）で有効になることを確認（§8 BFF Cookie / CSRF 既実装）
+
+### 12.3 引き継ぎ時の前提・注意点
+
+次の担当者が踏みやすい落とし穴と、本ブランチの「正」を明文化しておく。
+
+- **Kivio 認証の正はメモリ Zustand**。NextAuth は Google `id_token` 取得専用で、交換後に NextAuth セッションは破棄する（T-30 メモ参照）。NextAuth セッションを認証状態の正と誤認しないこと。
+- **`./gradlew bootRun` は `.env` を自動ロードしない**。シェルに残った `GOOGLE_CLIENT_ID=dummy` 等があると `id_token` の `aud` 照合に失敗し `GOOGLE_TOKEN_INVALID` になる（起動時に正しい値を渡す）。
+- **dev のメールは Mailpit**（`http://localhost:8025`）で目視確認する。OTP は件名・本文に含むためログには `to=` のみ出力される（OTP はログに出ない）。
+- **本ブランチは origin より先行**（`feature/auth` が 32 commits ahead）。引き継ぎ時は push 状況とレビュー/マージ計画を確認すること。
+
+### 12.4 ステータス凡例
+
+| 種別 | 意味 | 対応の緊急度 |
+|---|---|---|
+| 🔴 本番ブロッカー | これが無いと prod を起動・運用できない | 本番リリース前に必須 |
+| 🟡 UX 改善（後続） | 機能は動くが体験に粗が残る | Phase 2 終盤〜Phase 3 |
+
