@@ -216,7 +216,7 @@ it('ログイン失敗時に 401 エラーを表示する', async () => {
 
 > **⚠️ エラーモックには必ず `code` を含める:** フロントの `ApiError` / `resolveAuthError`（`src/lib/authErrors.ts`）は `ProblemDetail.code`（`UPPER_SNAKE_CASE`）で表示文言を出し分ける。`code` が無いと未知コード扱いで `DEFAULT_AUTH_ERROR`（汎用文言）にフォールバックし、`INVALID_CREDENTIALS` / `OTP_INVALID` 等の個別 UI を検証できない。
 
-> **ℹ️ API は Next.js の rewrites 経由:** クライアントは `/api/v1/...`（相対パス）へ fetch し、`next.config.ts` の `rewrites()` がバックエンドへ転送する（BFF Route Handler は無い）。Vitest（jsdom）では MSW がこの相対パスを直接インターセプトするため、ハンドラも相対パス（`/api/v1/auth/login`）で定義する。
+> **ℹ️ API は BFF Route Handler 経由:** クライアントは `/api/v1/...`（相対パス）へ fetch し、Next.js の BFF Route Handler（`src/app/api/v1`）がトークンの Cookie 化・`access_token` の Bearer 詰め替えを行いつつバックエンドへ中継する。Vitest（jsdom）では BFF・バックエンドとも起動しないため、MSW がこの相対パスを直接インターセプトする（ハンドラも相対パス `/api/v1/auth/login` で定義する）。
 
 ---
 

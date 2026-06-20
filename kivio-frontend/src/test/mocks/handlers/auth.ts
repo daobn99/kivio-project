@@ -2,14 +2,15 @@ import { http, HttpResponse } from 'msw'
 
 /**
  * 認証 API の MSW ハンドラ。クライアントは相対パス（`/api/v1/auth/...`）へ fetch し、
- * 本番では next.config.ts の rewrites がバックエンドへ転送する（FRONTEND_TEST_STRATEGY.md §4）。
+ * 実環境では BFF Route Handler（src/app/api/v1）がトークンの Cookie 化を行いつつバックエンドへ中継する。MSW はその相対パスを直接モックする。
  * エラーケースは各テストで server.use() により上書きする。
  */
 export const authHandlers = [
+  // BFF（Route Handler）は Refresh Token を httpOnly Cookie へ退避し body から除去する。
+  // クライアントが実際に受け取る body は accessToken のみ（refreshToken は含まれない）。
   http.post('/api/v1/auth/login', () =>
     HttpResponse.json({
       accessToken: 'test-access-token',
-      refreshToken: 'test-refresh-token',
       tokenType: 'Bearer',
       expiresIn: 900,
     }),
@@ -30,7 +31,6 @@ export const authHandlers = [
     HttpResponse.json(
       {
         accessToken: 'test-access-token',
-        refreshToken: 'test-refresh-token',
         tokenType: 'Bearer',
         expiresIn: 900,
       },

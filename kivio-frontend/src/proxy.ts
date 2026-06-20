@@ -18,9 +18,11 @@ const GUEST_ONLY_PATHS = ['/auth/login', '/auth/register']
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
-  // access_token は HTTP-only Cookie に保持される（server/base.ts も同名を Bearer に付与）。
-  // ミドルウェアはメモリ上の Zustand を参照できないため、この Cookie の有無で認証状態を判定する。
-  const isAuthenticated = Boolean(request.cookies.get('access_token'))
+  // セッションの正は httpOnly Cookie の refresh_token（7日）。access_token（15分）は短命で
+  // ナビゲーション中に失効しうるため、ソフトな認証ガードは長命の refresh_token の有無で判定する。
+  // ミドルウェアはメモリ上の Zustand を参照できない。実際のアクセス制御はバックエンドが
+  // Bearer 検証で行い、ここは UX 上の振り分け（ログイン誘導）のみを担う。
+  const isAuthenticated = Boolean(request.cookies.get('refresh_token'))
 
   if (!isAuthenticated && PROTECTED_PATHS.some((p) => pathname.startsWith(p))) {
     // 復帰先を from に載せ、ログイン後に元の画面へ戻せるようにする

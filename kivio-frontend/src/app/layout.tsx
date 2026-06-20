@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { Noto_Serif_JP, Noto_Sans_JP } from 'next/font/google'
 import QueryProvider from '@/components/providers/QueryProvider'
+import { AuthHydrator } from '@/components/providers/AuthHydrator'
 import './globals.css'
 
 const notoSerif = Noto_Serif_JP({
@@ -32,7 +33,10 @@ export default function RootLayout({
   return (
     <html lang="ja" className={`${notoSerif.variable} ${notoSans.variable} h-full antialiased`}>
       <body className="flex min-h-full flex-col">
-        <QueryProvider>{children}</QueryProvider>
+        <QueryProvider>
+          <AuthHydrator />
+          {children}
+        </QueryProvider>
       </body>
     </html>
   )
