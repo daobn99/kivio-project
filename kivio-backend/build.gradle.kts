@@ -90,30 +90,37 @@ tasks.withType<Test> {
 	finalizedBy(tasks.jacocoTestReport)
 }
 
+// DTO・設定クラス・エントリポイントをカバレッジ対象から除外する単一の定義。
+// jacocoTestReport（表示）と jacocoTestCoverageVerification（ゲート）の母数を一致させる。
+val coverageExclusions = listOf(
+	"**/dto/**",
+	"**/config/**",
+	"**/KivioBackendApplication*"
+)
+
+// レポートと検証の双方に同じ除外を適用するヘルパ
+fun excludedClassDirs(dirs: FileCollection): FileCollection =
+	files(dirs.files.map { fileTree(it) { exclude(coverageExclusions) } })
+
 tasks.jacocoTestReport {
 	dependsOn(tasks.test)
 	reports {
 		xml.required.set(true)
 		html.required.set(true)
 	}
-	// DTO・設定クラス・エントリポイントをカバレッジ対象から除外
-	classDirectories.setFrom(files(classDirectories.files.map {
-		fileTree(it) {
-			exclude(
-				"**/dto/**",
-				"**/config/**",
-				"**/KivioBackendApplication*"
-			)
-		}
-	}))
+	classDirectories.setFrom(excludedClassDirs(classDirectories))
 }
 
-// Phase 2 実装中のため暫定 0.00。テスト拡充とともに段階的に引き上げる（最終目標 0.80）
+// テストカバレッジゲート。母数はレポートと同一（coverageExclusions を適用）。
 tasks.jacocoTestCoverageVerification {
+	dependsOn(tasks.test)
+	classDirectories.setFrom(excludedClassDirs(classDirectories))
 	violationRules {
 		rule {
 			limit {
-				minimum = "0.00".toBigDecimal()
+				counter = "INSTRUCTION"
+				value = "COVEREDRATIO"
+				minimum = "0.80".toBigDecimal()
 			}
 		}
 	}
