@@ -30,10 +30,16 @@ dependencies {
 	// Spring Boot Starters
 	implementation("org.springframework.boot:spring-boot-starter-actuator")
 	implementation("org.springframework.boot:spring-boot-starter-data-jpa")
+	// Redis（登録 OTP・登録セッションの TTL 一時ストレージ）
+	implementation("org.springframework.boot:spring-boot-starter-data-redis")
+	// Lettuce プーリング（application.yaml の lettuce.pool.enabled=true に必要。starter には推移的に含まれない）
+	implementation("org.apache.commons:commons-pool2")
 	implementation("org.springframework.boot:spring-boot-starter-security")
 	implementation("org.springframework.boot:spring-boot-starter-security-oauth2-client")
 	implementation("org.springframework.boot:spring-boot-starter-oauth2-resource-server")
 	implementation("org.springframework.boot:spring-boot-starter-validation")
+	// メール送信（dev: SMTP→Mailpit。prod は Resend HTTP 実装に差し替え予定）
+	implementation("org.springframework.boot:spring-boot-starter-mail")
 	implementation("org.springframework.boot:spring-boot-starter-webmvc")
 	implementation("org.springframework.boot:spring-boot-starter-websocket")
 
@@ -72,6 +78,8 @@ dependencies {
 	// Testcontainers 2.x ではモジュール名が "testcontainers-" プレフィックス付きに変更
 	testImplementation("org.testcontainers:testcontainers-junit-jupiter")
 	testImplementation("org.testcontainers:testcontainers-postgresql")
+	// Redis は core の GenericContainer を使用（image 名 "redis" は Spring Boot の @ServiceConnection が認識する）
+	testImplementation("org.testcontainers:testcontainers")
 	testCompileOnly("org.projectlombok:lombok")
 	testAnnotationProcessor("org.projectlombok:lombok")
 	testRuntimeOnly("org.junit.platform:junit-platform-launcher")
@@ -82,30 +90,37 @@ tasks.withType<Test> {
 	finalizedBy(tasks.jacocoTestReport)
 }
 
+// DTO・設定クラス・エントリポイントをカバレッジ対象から除外する単一の定義。
+// jacocoTestReport（表示）と jacocoTestCoverageVerification（ゲート）の母数を一致させる。
+val coverageExclusions = listOf(
+	"**/dto/**",
+	"**/config/**",
+	"**/KivioBackendApplication*"
+)
+
+// レポートと検証の双方に同じ除外を適用するヘルパ
+fun excludedClassDirs(dirs: FileCollection): FileCollection =
+	files(dirs.files.map { fileTree(it) { exclude(coverageExclusions) } })
+
 tasks.jacocoTestReport {
 	dependsOn(tasks.test)
 	reports {
 		xml.required.set(true)
 		html.required.set(true)
 	}
-	// DTO・設定クラス・エントリポイントをカバレッジ対象から除外
-	classDirectories.setFrom(files(classDirectories.files.map {
-		fileTree(it) {
-			exclude(
-				"**/dto/**",
-				"**/config/**",
-				"**/KivioBackendApplication*"
-			)
-		}
-	}))
+	classDirectories.setFrom(excludedClassDirs(classDirectories))
 }
 
-// Phase 2 実装中のため暫定 0.00。テスト拡充とともに段階的に引き上げる（最終目標 0.80）
+// テストカバレッジゲート。母数はレポートと同一（coverageExclusions を適用）。
 tasks.jacocoTestCoverageVerification {
+	dependsOn(tasks.test)
+	classDirectories.setFrom(excludedClassDirs(classDirectories))
 	violationRules {
 		rule {
 			limit {
-				minimum = "0.00".toBigDecimal()
+				counter = "INSTRUCTION"
+				value = "COVEREDRATIO"
+				minimum = "0.80".toBigDecimal()
 			}
 		}
 	}
@@ -116,5 +131,5 @@ tasks.named<org.springframework.boot.gradle.tasks.run.BootRun>("bootRun") {
 }
 
 tasks.withType<JavaCompile> {
-	options.compilerArgs.add("-Xlint:deprecation")
+	options.compilerArgs.addAll(listOf("-parameters", "-Xlint:deprecation"))
 }

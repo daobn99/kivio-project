@@ -30,6 +30,23 @@ services:
     networks:
       - kivio-net
 
+  # ── Redis ──────────────────────────────────────────────────────────────────
+  # 登録 OTP・登録セッション（registrationToken）の TTL 付き一時ストレージ（ADR-006）
+  # 永続化は不要なため save/appendonly を無効化（揮発データのみ）
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - kivio-net
+
   # ── Spring Boot Backend ────────────────────────────────────────────────────
   backend:
     build:
@@ -41,6 +58,8 @@ services:
       DB_URL: jdbc:postgresql://db:5432/kivio
       DB_USERNAME: kivio
       DB_PASSWORD: password
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
       # 開発用デフォルト。本番環境では必ず上書きすること
       JWT_SECRET: ${JWT_SECRET:-local-development-secret-at-least-32-bytes-long}
       JWT_ACCESS_TOKEN_EXPIRATION: "900"
@@ -53,6 +72,8 @@ services:
       - "8080:8080"
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:8080/api/v1/health || exit 1"]

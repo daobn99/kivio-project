@@ -28,7 +28,8 @@
 13. [テスト規約（JUnit 5 + AssertJ + JaCoCo）](#13-テスト規約junit-5--assertj)
 14. [コーディング規約](#14-コーディング規約)
    - 14.7 [コメント規約](#147-コメント規約)
-15. [実装チェックリスト](#15-実装チェックリスト)
+15. [メール送信規約](#15-メール送信規約)
+16. [実装チェックリスト](#16-実装チェックリスト)
 
 ---
 
@@ -129,9 +130,9 @@ domain/{context}/
 
 | アノテーション | 用途 | 対象 |
 |---|---|---|
-| `@Getter` | 全フィールドの getter を生成 | Entity, Request DTO |
+| `@Getter` | 全フィールドの getter を生成 | Entity |
 | `@RequiredArgsConstructor` | `final` フィールドを引数に取るコンストラクタ生成 | Service, Controller |
-| `@Builder` | Builder パターンを生成 | Entity, Request DTO |
+| `@Builder` | Builder パターンを生成 | Entity |
 | `@Slf4j` | `log` フィールドを生成（SLF4J Logger） | Service, Filter |
 | `@ToString` | `toString()` を生成（`exclude` で機密フィールドを除外） | Entity（任意） |
 | `@EqualsAndHashCode` | Entity の ID ベース equals/hashCode（`onlyExplicitlyIncluded = true`） | Entity |
@@ -176,22 +177,7 @@ public class Product extends BaseEntity {
 
 ### Request DTO への Lombok 適用パターン
 
-```java
-@Getter
-@Builder
-public class CreateProductRequest {
-
-    @NotBlank
-    @Size(max = 100)
-    private String name;
-
-    @Positive
-    private int price;
-
-    @NotNull
-    private UUID categoryId;
-}
-```
+Request DTO は `record` を使用するため、Lombok は不要。
 
 ---
 
@@ -258,31 +244,51 @@ public class ProductController {
 
 ### 4.2 Request DTO（Bean Validation）
 
-**形式:** `@Getter @Builder` の Lombok class を使用する。record は使わない（Bean Validation との相性上）。
+**形式:** `record` を使用する。Jackson は canonical constructor を自動使用するため `@JsonCreator` / `@JsonProperty` は不要。Lombok も不要。
 
 ```java
-@Getter
-@Builder
-public class CreateProductRequest {
+public record CreateProductRequest(
+        /** 商品名 */
+        @NotBlank(message = "商品名は必須です")
+        @Size(max = 100, message = "商品名は100文字以内です")
+        String name,
 
-    @NotBlank(message = "商品名は必須です")
-    @Size(max = 100, message = "商品名は100文字以内です")
-    private String name;
+        /** 説明 */
+        @NotBlank
+        @Size(max = 2000)
+        String description,
 
-    @NotBlank
-    @Size(max = 2000)
-    private String description;
+        /** 価格 */
+        @Positive(message = "価格は正の整数で入力してください")
+        int price,
 
-    @Positive(message = "価格は正の整数で入力してください")
-    private int price;
+        /** カテゴリID */
+        @NotNull
+        UUID categoryId,
 
-    @NotNull
-    private UUID categoryId;
+        /** 公開予定日時（日時フィールドは String ではなく Instant / OffsetDateTime を使う） */
+        @FutureOrPresent
+        Instant publishedAt
+) {}
+```
 
-    // 日時フィールドは String ではなく Instant / OffsetDateTime を使う
-    // Jackson の JavaTimeModule が自動で ISO 8601 形式を変換・検証する
-    @FutureOrPresent
-    private Instant publishedAt;
+**クロスフィールドバリデーション（`@AssertTrue`）:**
+
+```java
+public record RegisterRequest(
+        @NotBlank @Email @Size(max = 255)
+        String email,
+
+        @NotBlank @Size(min = 8, max = 100)
+        String password,
+
+        @NotBlank
+        String passwordConfirm
+) {
+    @AssertTrue(message = "パスワードと確認用パスワードが一致しません")
+    public boolean isPasswordsMatch() {
+        return password != null && password.equals(passwordConfirm);
+    }
 }
 ```
 
@@ -642,9 +648,12 @@ public class SecurityConfig {
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
                         .anyRequest().authenticated())
                 .headers(headers -> headers
+                        // XSS 対策は CSP に一本化する。X-XSS-Protection は非推奨（現代ブラウザは
+                        // 当該フィルタを廃止済み・誤検知の副作用あり）なため明示的に無効化（値 0）する
                         .contentSecurityPolicy(csp -> csp.policyDirectives("default-src 'self'"))
                         .frameOptions(HeadersConfigurer.FrameOptionsConfig::sameOrigin)
-                        .xssProtection(Customizer.withDefaults())
+                        .xssProtection(xss -> xss.headerValue(
+                                XXssProtectionHeaderWriter.HeaderValue.DISABLED))
                         .referrerPolicy(rp -> rp.policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.NO_REFERRER)))
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint(problemDetailAuthEntryPoint())
@@ -766,8 +775,10 @@ public class RateLimitingFilter extends OncePerRequestFilter {
     private Bucket createBucket(HttpServletRequest request) {
         boolean isAuthEndpoint = request.getRequestURI().startsWith("/api/v1/auth/");
         int capacity = isAuthEndpoint ? 10 : 100;
+        // Bucket4j 8.x: Bandwidth.classic / Refill は非推奨。builder API を使う
         return Bucket.builder()
-                .addLimit(Bandwidth.classic(capacity, Refill.intervally(capacity, Duration.ofMinutes(1))))
+                .addLimit(limit -> limit.capacity(capacity)
+                        .refillIntervally(capacity, Duration.ofMinutes(1)))
                 .build();
     }
 }
@@ -797,15 +808,15 @@ KivioException（abstract）
 // 基底例外クラス
 public abstract class KivioException extends RuntimeException {
 
-    private final String errorCode;
+    private final String code;
 
-    protected KivioException(String message, String errorCode) {
+    protected KivioException(String message, String code) {
         super(message);
-        this.errorCode = errorCode;
+        this.code = code;
     }
 
-    public String getErrorCode() {
-        return errorCode;
+    public String getCode() {
+        return code;
     }
 }
 
@@ -820,8 +831,8 @@ public class ResourceNotFoundException extends KivioException {
 // 422: ビジネスルール違反の基底（サブクラスで具体的な例外を定義）
 public abstract class BusinessRuleException extends KivioException {
 
-    protected BusinessRuleException(String message, String errorCode) {
-        super(message, errorCode);
+    protected BusinessRuleException(String message, String code) {
+        super(message, code);
     }
 }
 
@@ -845,8 +856,8 @@ public class OrderNotCancellableException extends BusinessRuleException {
 // 409: 競合
 public class ConflictException extends KivioException {
 
-    protected ConflictException(String message, String errorCode) {
-        super(message, errorCode);
+    protected ConflictException(String message, String code) {
+        super(message, code);
     }
 }
 
@@ -861,15 +872,41 @@ public class DuplicateEmailException extends ConflictException {
 ### 6.2 グローバル例外ハンドラー
 
 ```java
+// @Order(Ordered.HIGHEST_PRECEDENCE) が必須。
+// spring.mvc.problemdetails.enabled=true を有効にすると Spring Boot が
+// ProblemDetailsExceptionHandler を自動登録し、MethodArgumentNotValidException 等を
+// 横取りする。最高優先度を明示することでカスタムハンドラーを確実に先に適用する。
+@Order(Ordered.HIGHEST_PRECEDENCE)
 @RestControllerAdvice
 @Slf4j
 public class GlobalExceptionHandler {
+
+    // JSON パースエラー（Content-Type 未指定・不正な JSON 形式）
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ProblemDetail handleMessageNotReadable(HttpMessageNotReadableException ex,
+                                                   HttpServletRequest request) {
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(
+                HttpStatus.BAD_REQUEST, "リクエストボディの形式が正しくありません");
+        detail.setProperty("code", "INVALID_REQUEST_BODY");
+        return detail;
+    }
+
+    // Bean Validation エラー（422: フィールド別詳細を errors に含める）
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ProblemDetail handleValidation(MethodArgumentNotValidException ex) {
+        ProblemDetail detail = ProblemDetail.forStatus(HttpStatus.UNPROCESSABLE_CONTENT);
+        detail.setProperty("code", "VALIDATION_FAILED");
+        detail.setProperty("errors", ex.getBindingResult().getFieldErrors().stream()
+                .map(e -> Map.of("field", e.getField(), "message", e.getDefaultMessage()))
+                .toList());
+        return detail;
+    }
 
     // リソース未発見
     @ExceptionHandler(ResourceNotFoundException.class)
     public ProblemDetail handleNotFound(ResourceNotFoundException ex) {
         ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
-        detail.setProperty("errorCode", ex.getErrorCode());
+        detail.setProperty("code", ex.getCode());
         return detail;
     }
 
@@ -878,18 +915,7 @@ public class GlobalExceptionHandler {
     public ProblemDetail handleBusinessRule(BusinessRuleException ex) {
         ProblemDetail detail = ProblemDetail.forStatusAndDetail(
                 HttpStatus.UNPROCESSABLE_CONTENT, ex.getMessage());
-        detail.setProperty("errorCode", ex.getErrorCode());
-        return detail;
-    }
-
-    // Bean Validation エラー
-    @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ProblemDetail handleValidation(MethodArgumentNotValidException ex) {
-        ProblemDetail detail = ProblemDetail.forStatus(HttpStatus.UNPROCESSABLE_CONTENT);
-        detail.setProperty("errorCode", "VALIDATION_ERROR");
-        detail.setProperty("errors", ex.getBindingResult().getFieldErrors().stream()
-                .map(e -> Map.of("field", e.getField(), "message", e.getDefaultMessage()))
-                .toList());
+        detail.setProperty("code", ex.getCode());
         return detail;
     }
 
@@ -912,11 +938,13 @@ public class GlobalExceptionHandler {
   "title": "Unprocessable Entity",
   "status": 422,
   "detail": "在庫が不足しています",
-  "errorCode": "INSUFFICIENT_STOCK"
+  "code": "INSUFFICIENT_STOCK"
 }
 ```
 
-> **設定:** `application.yml` に `spring.mvc.problemdetails.enabled=true` を追加すると、Spring MVC のデフォルト例外（`HttpRequestMethodNotSupportedException`・`MethodNotAllowedException` 等）も自動的に ProblemDetail 形式で返される。カスタムハンドラーと共存可能。
+> **`@Order(Ordered.HIGHEST_PRECEDENCE)` について:** `spring.mvc.problemdetails.enabled=true` を設定すると、Spring Boot が `ProblemDetailsExceptionHandler`（`ResponseEntityExceptionHandler` のサブクラス）を自動登録する。この組み込みハンドラーは `MethodArgumentNotValidException` 等の標準例外を横取りし、カスタムハンドラーより先に実行される場合がある。`@Order(Ordered.HIGHEST_PRECEDENCE)` を付けることでカスタムハンドラーの優先度を明示的に最高にし、バリデーションエラー時の 422 レスポンスと `errors` フィールドが確実に返るようにする。
+
+> **レスポンスの文字コード:** `SecurityConfig` の `AuthenticationEntryPoint` / `AccessDeniedHandler` 内で `ObjectMapper` を使って直接レスポンスに書き込む場合は、`response.setCharacterEncoding("UTF-8")` を `getOutputStream()` の前に呼び出すこと。`getWriter()` を使うと日本語が文字化けする。
 
 ---
 
@@ -1379,13 +1407,14 @@ class ProductControllerTest {
 
     @Autowired MockMvc mockMvc;
     @Autowired ObjectMapper objectMapper;
-    @MockBean ProductService productService;
+    // @MockBean は Spring Boot 4 で削除された。@MockitoBean を使う
+    @MockitoBean ProductService productService;
 
     @Test
     @WithMockUser(roles = "SELLER")
     void should_return_201_when_product_is_created() throws Exception {
-        CreateProductRequest request = CreateProductRequest.builder()
-                .name("テスト商品").price(1000).build();
+        // Request DTO は record のため builder ではなく canonical constructor を使う
+        CreateProductRequest request = new CreateProductRequest("テスト商品", 1000);
         given(productService.create(any())).willReturn(sampleProductResponse());
 
         mockMvc.perform(post("/api/v1/products")
@@ -1405,8 +1434,7 @@ class ProductControllerTest {
     @Test
     @WithMockUser(roles = "SELLER")
     void should_return_422_when_price_is_negative() throws Exception {
-        CreateProductRequest invalid = CreateProductRequest.builder()
-                .name("商品").price(-1).build();
+        CreateProductRequest invalid = new CreateProductRequest("商品", -1);
 
         mockMvc.perform(post("/api/v1/products")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -1513,42 +1541,42 @@ class UserRepositoryTest {
 
 ### 13.8 カバレッジ（JaCoCo）
 
-`build.gradle` に JaCoCo を設定し、ライン カバレッジ 80% 以上を CI で強制する。
+`build.gradle.kts` に JaCoCo を設定し、ライン カバレッジ 80% 以上を CI で強制する。
 
-```groovy
-// build.gradle
+```kotlin
+// build.gradle.kts
 plugins {
-    id 'jacoco'
+    jacoco
 }
 
-jacocoTestReport {
+tasks.jacocoTestReport {
     reports {
-        xml.required = true
-        html.required = true
+        xml.required.set(true)
+        html.required.set(true)
     }
     // DTO・設定クラス・generated コードをカバレッジ対象から除外
-    afterEvaluate {
-        classDirectories.setFrom(files(classDirectories.files.collect {
-            fileTree(dir: it, exclude: [
-                '**/dto/**', '**/config/**', '**/KivioApplication*'
-            ])
-        }))
-    }
+    classDirectories.setFrom(
+        files(classDirectories.files.map {
+            fileTree(it) {
+                exclude("**/dto/**", "**/config/**", "**/KivioApplication*")
+            }
+        })
+    )
 }
 
-jacocoTestCoverageVerification {
+tasks.jacocoTestCoverageVerification {
     violationRules {
         rule {
             limit {
-                minimum = 0.80
+                minimum = "0.80".toBigDecimal()
             }
         }
     }
 }
 
 // test → jacocoTestReport → jacocoTestCoverageVerification の順で実行
-check.dependsOn jacocoTestCoverageVerification
-test.finalizedBy jacocoTestReport
+tasks.check { dependsOn(tasks.jacocoTestCoverageVerification) }
+tasks.test { finalizedBy(tasks.jacocoTestReport) }
 ```
 
 実行コマンド: `./gradlew test jacocoTestReport jacocoTestCoverageVerification`
@@ -1757,19 +1785,17 @@ public class Product extends BaseEntity {
     private ProductStatus status;
 }
 
-// Request DTO フィールド
-@Getter
-@Builder
-public class CreateProductRequest {
-    /** 商品名 */
-    @NotBlank
-    @Size(max = 100)
-    private String name;
+// Request DTO フィールド（record）
+public record CreateProductRequest(
+        /** 商品名 */
+        @NotBlank
+        @Size(max = 100)
+        String name,
 
-    /** 価格 */
-    @Positive
-    private int price;
-}
+        /** 価格 */
+        @Positive
+        int price
+) {}
 
 // Response DTO フィールド（record）
 public record ProductResponse(
@@ -1863,7 +1889,74 @@ public Optional<Product> findById(UUID id) { ... }
 
 ---
 
-## 15. 実装チェックリスト
+## 15. メール送信規約
+
+メールテンプレートの定義（件名・本文・変数）は `docs/design/EMAIL_DESIGN.md` を唯一の正とする。本章はその実装規約を定める。
+
+### 15.1 トランスポートとユースケースの分離
+
+「**どう送るか**（トランスポート）」と「**何を送るか**（ユースケース）」を別レイヤーに分離する。テンプレート処理を各トランスポート実装に重複させないための絶対ルール。
+
+| レイヤー | 役割 | 実装 |
+|---|---|---|
+| トランスポート | 描画済みメールを送るだけ。テンプレート・件名・変数を関知しない | `EmailSender#send(EmailMessage)` インターフェース + profile 別実装 |
+| ユースケース | テンプレート選択・変数組み立て・件名生成を集約し `EmailSender#send` へ委譲 | `{Context}EmailService`（`@Service`・profile 非依存・実装1つ） |
+
+- `EmailMessage` は描画済みの `to` / `subject` / `htmlBody` のみを持つ record。トランスポートはこれをそのまま送信する。
+- アプリケーションサービス（例: `AuthService`）は `EmailSender` を直接 inject せず、**ユースケースサービス（例: `AuthEmailService`）に依存する**。
+- 新しいメール種別の追加で増えるのはユースケースサービスのみ。トランスポート実装には手を入れない。
+
+```java
+// ✅ 正: ユースケース層がテンプレート描画・件名生成を集約
+@Service
+@RequiredArgsConstructor
+public class AuthEmailService {
+    private static final String OTP_TEMPLATE = "emails/ja/registration-otp.html";
+    private final EmailTemplateFormatter templateFormatter;
+    private final EmailSender emailSender;
+
+    public void sendRegistrationOtp(String to, String otpCode) {
+        String html = templateFormatter.render(OTP_TEMPLATE, Map.of("otpCode", otpCode, ...));
+        emailSender.send(new EmailMessage(to, "【Kivio】認証コード: " + otpCode, html));
+    }
+}
+
+// ❌ 誤: EmailSender インターフェースにメール種別ごとのメソッドを生やす
+//        → dev/prod の各トランスポート実装にテンプレート処理が重複する
+public interface EmailSender {
+    void sendRegistrationOtp(String to, String otpCode);
+    void sendSellerApproved(...);   // 種別が増えるたびに全実装へ追加が必要
+}
+```
+
+### 15.2 プロファイル別トランスポートとフォールバック
+
+| プロファイル | 実装 | 送信先 |
+|---|---|---|
+| `dev` | `SmtpEmailSender`（`@Profile("dev")`） | Mailpit（SMTP）。Web UI で目視確認 |
+| `prod` | `ResendEmailSender`（`@Profile("prod")`） | Resend HTTP API |
+| 上記以外 | `LogEmailSender`（`@Profile("!dev & !prod")`） | 実送信せずログ出力のみ |
+
+- フォールバック `LogEmailSender` は、`test` プロファイルやプロファイル未指定の起動で `EmailSender` 実体が存在せずコンテキスト起動が失敗するのを防ぐためのもの。**`prod` は除外する**——実トランスポート未設定なら起動を失敗させ、メールの無言ドロップを防ぐ。
+- 各環境で `EmailSender` 実体が一意に解決されることを `ApplicationContextRunner`（Testcontainers 不要）で検証する。
+- メールの死活はアプリ readiness に連動させない（`management.health.mail.enabled=false`）。
+- prod のトランスポートは `@Async` + `@Retryable` で送信失敗をビジネスロジックに伝播させない。
+
+### 15.3 テンプレート
+
+- HTML テンプレートは classpath（`emails/{lang}/*.html`）に配置し、**本文 HTML をコードに埋め込まない**。
+- 変数置換は `EmailTemplateFormatter`（`{{変数名}}` プレースホルダ）に統一する。
+- テンプレートキー（パス）はユースケースサービスの定数として持つ。
+
+### 15.4 機微情報の扱い（必須）
+
+- OTP・トークン等の機微情報を **ログ・DB に保存しない**（メール本文に記載するのみ）。
+- 件名・本文には機微情報（OTP 等）が含まれ得るため、**トランスポートのログ出力は `to=` のみ**とし、件名・本文を出力しない。
+- 差出人は `app.email`（`EmailProperties` / `MAIL_FROM_ADDRESS`・`MAIL_FROM_NAME`）で外部化し、コードにハードコードしない。
+
+---
+
+## 16. 実装チェックリスト
 
 ### 新規エンドポイント追加時
 
@@ -1898,6 +1991,16 @@ public Optional<Product> findById(UUID id) { ... }
 - [ ] 429 レスポンスに `Retry-After: 60` ヘッダーが付いている
 - [ ] IP 特定が `request.getRemoteAddr()` を使っている（`X-Forwarded-For` を直接読んでいない）
 - [ ] `./gradlew test` でセキュリティ関連テストがすべて通ることを確認した
+
+### メール送信追加・変更時
+
+- [ ] テンプレート描画・件名生成をユースケースサービス（`{Context}EmailService`）に集約し、`EmailSender` インターフェースにメール種別ごとのメソッドを生やしていない
+- [ ] アプリケーションサービスが `EmailSender` を直接 inject せず、ユースケースサービスに依存している
+- [ ] 本文 HTML をコードに埋め込まず、テンプレートを classpath（`emails/{lang}/*.html`）に配置している
+- [ ] トランスポートのログ出力が `to=` のみで、件名・本文（OTP 等の機微情報を含み得る）を出力していない
+- [ ] OTP・トークン等の機微情報をログ・DB に保存していない
+- [ ] 差出人を `EmailProperties`（`app.email`）で外部化し、ハードコードしていない
+- [ ] 新規トランスポートを `@Profile` で限定し、各環境で `EmailSender` 実体が一意に解決されることをテストで確認した
 
 ### コメント規約の確認
 

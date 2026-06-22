@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>メールアドレスの確認</title>
+</head>
+<body style="margin:0; padding:0; background-color:#f4f4f5; font-family:'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', Meiryo, sans-serif; color:#18181b;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f5; padding:32px 0;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background-color:#ffffff; border-radius:12px; overflow:hidden;">
+          <tr>
+            <td style="padding:32px 40px 8px 40px;">
+              <div style="font-size:20px; font-weight:700; color:#4f46e5;">Kivio</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:8px 40px 0 40px;">
+              <h1 style="margin:0; font-size:22px; font-weight:700;">メールアドレスの確認</h1>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:16px 40px 0 40px; font-size:15px; line-height:1.7;">
+              <p style="margin:0 0 16px 0;">Kivio をご利用の皆さま</p>
+              <p style="margin:0;">
+                Kivio のアカウント登録ありがとうございます。<br>
+                登録画面に以下の認証コードを入力して、メールアドレスの確認を完了してください。
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:24px 40px;">
+              <div style="background-color:#f4f4f5; border-radius:8px; text-align:center; padding:20px 0;">
+                <span style="font-size:34px; font-weight:700; letter-spacing:8px; color:#18181b;">{{otpCode}}</span>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:0 40px; font-size:14px; line-height:1.7; color:#52525b;">
+              <p style="margin:0;">
+                このコードは {{expiresIn}} 後に失効します。<br>
+                入力を 5 回間違えるとコードは無効になります（その場合はコードを再送信してください）。
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:24px 40px 36px 40px;">
+              <hr style="border:none; border-top:1px solid #e4e4e7; margin:0 0 16px 0;">
+              <p style="margin:0; font-size:12px; line-height:1.7; color:#a1a1aa;">
+                ※ このメールにお心当たりのない場合は、そのまま破棄してください。<br>
+                コードを第三者と共有しないでください。Kivio からコードをお尋ねすることはありません。
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

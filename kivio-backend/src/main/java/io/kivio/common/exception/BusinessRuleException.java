@@ -7,7 +7,7 @@ import org.springframework.http.HttpStatus;
  */
 public abstract class BusinessRuleException extends KivioException {
 
-    protected BusinessRuleException(String errorCode, String message) {
-        super(errorCode, message, HttpStatus.UNPROCESSABLE_CONTENT);
+    protected BusinessRuleException(String code, String message) {
+        super(code, message, HttpStatus.UNPROCESSABLE_CONTENT);
     }
 }

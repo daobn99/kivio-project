@@ -18,8 +18,7 @@
 | `/shops/[id]` | ショップ詳細 | 全ユーザー | 不要 | Phase 2 |
 | `/search` | 商品検索 | 全ユーザー | 不要 | Phase 3 |
 | `/auth/login` | ログイン | 未認証のみ | 不要 | Phase 2 |
-| `/auth/register` | 新規登録（2ステップ） | 未認証のみ | 不要 | Phase 2 |
-| `/auth/verify-email` | メール認証・自動ログイン処理 | 未認証のみ | 不要 | Phase 2 |
+| `/auth/register` | 新規登録（3ステップ・OTP / メール→コード→パスワード） | 未認証のみ | 不要 | Phase 2 |
 
 ### 1.2 バイヤー画面（BUYER 以上）
 
@@ -173,11 +172,11 @@ src/app/
 │   ├── (auth-group)/                  # AuthLayout 適用グループ（URLに影響しない）
 │   │   ├── layout.tsx                 # AuthLayout（Navbar なし・ロゴ + カード）
 │   │   ├── login/page.tsx             # ログイン /auth/login
-│   │   ├── register/page.tsx          # 新規登録 /auth/register
-│   │   └── verify-email/page.tsx      # メール認証 + 自動ログイン /auth/verify-email
-│   │       #   token を URL から取得 → Body に詰め替えて API コール
-│   │       #   成功: JWT 受け取り → router.replace('/') → ホームへ
-│   │       #   失敗: エラー表示 + 再送信ボタン
+│   │   └── register/page.tsx          # 新規登録 /auth/register（3ステップ・OTP）
+│   │       #   Step1: メール入力 → POST /auth/register/request-otp（OTPメール送信）
+│   │       #   Step2: 6桁OTP入力 → POST /auth/register/verify-otp → registrationToken
+│   │       #   Step3: パスワード設定 → POST /auth/register/complete
+│   │       #   成功: JWT 受け取り → router.replace('/') → ホームへ（自動ログイン）
 │
 ├── (authenticated)/                   # ルートグループ（URLに影響しない）                   # 全認証ユーザー共通グループ（BUYER・SELLER・ADMIN）
 │   ├── profile/

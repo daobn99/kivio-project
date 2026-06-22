@@ -3,7 +3,6 @@ package io.kivio.domain.audit.repository;
 import io.kivio.domain.audit.domain.AuditLog;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
-import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
 
@@ -13,7 +12,6 @@ import java.time.Instant;
  * <p>
  * audit_logs は追記専用です。DELETE / UPDATE 操作は禁止されています（AUDIT.md §3.1）。
  */
-@Repository
 public interface AuditLogRepository extends JpaRepository<AuditLog, AuditLog.AuditLogId> {
 
     /**

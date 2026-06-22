@@ -166,9 +166,11 @@ Request
                            ▼
 ┌────────────────────────────────────────────────────────┐
 │  5. ExceptionTranslationFilter                         │
-│     AuthenticationException → 401                      │
-│     AccessDeniedException → 403                        │
-│     ProblemDetail 形式でレスポンス                       │
+│     AuthenticationException → AuthenticationEntryPoint │
+│       ├─ Spring MVC に未登録のパス → 404 Not Found      │
+│       └─ 登録済みパスへの未認証アクセス → 401 Unauthorized│
+│     AccessDeniedException → 403 Forbidden              │
+│     ProblemDetail 形式（application/problem+json）      │
 └──────────────────────────┬─────────────────────────────┘
                            │
                            ▼
@@ -182,7 +184,7 @@ Request
 http.authorizeHttpRequests(auth -> auth
     // 認証不要（公開エンドポイント）
     .requestMatchers(POST, "/api/v1/auth/check-email").permitAll()
-    .requestMatchers(POST, "/api/v1/auth/register").permitAll()
+    .requestMatchers(POST, "/api/v1/auth/register/**").permitAll()  // request-otp / verify-otp / complete
     .requestMatchers(POST, "/api/v1/auth/login").permitAll()
     .requestMatchers(POST, "/api/v1/auth/google").permitAll()
     .requestMatchers(POST, "/api/v1/auth/refresh").permitAll()
@@ -209,9 +211,12 @@ http.authorizeHttpRequests(auth -> auth
 | エンドポイント区分 | 制限 | 制限単位 |
 |---|---|---|
 | 認証系（`/api/v1/auth/*`） | 10 リクエスト / 分 | IP アドレス |
+| OTP 送信（`/auth/register/request-otp`） | 同一メールへ 60 秒に 1 回・1 時間に 5 回まで | メールアドレス |
 | API 全般（認証済みユーザー） | 100 リクエスト / 分 | ユーザー ID |
 | 公開 API（未認証） | 30 リクエスト / 分 | IP アドレス |
 | Stripe Webhook | 制限なし | - |
+
+> **OTP のメール単位スロットリング:** IP 単位のレート制限だけではクロス IP でのメール爆撃を防げないため、`request-otp` は**メールアドレス単位**でも制限する。カウンタは Redis（`reg:otp:cooldown:{email}` 等）で TTL 管理する。OTP 検証側は試行回数 5 回で失効（`reg:otp:{email}` の `attempts`）。
 
 超過時のレスポンス:
 
@@ -266,11 +271,14 @@ public ResponseEntity<?> updateOrderStatus(@PathVariable UUID id, ...) {
 
 ### 5.3 認可エラー
 
-| 状況 | レスポンス |
-|---|---|
-| JWT なし / 無効 / 期限切れ | `401 Unauthorized` |
-| ロール不足 | `403 Forbidden` |
-| 他人のリソースへのアクセス | `403 Forbidden` |
+| 状況 | レスポンス | エラーコード |
+|---|---|---|
+| Spring MVC に未登録のパスへのアクセス（未認証） | `404 Not Found` | `NOT_FOUND` |
+| JWT なし / 無効 / 期限切れ | `401 Unauthorized` | `UNAUTHORIZED` |
+| ロール不足 | `403 Forbidden` | `ACCESS_DENIED` |
+| 他人のリソースへのアクセス | `403 Forbidden` | `ACCESS_DENIED` |
+
+> **404 vs 401 の判定:** `AuthenticationEntryPoint` が `RequestMappingHandlerMapping.getHandler()` を呼び出し、ハンドラーが登録されていないパスには 401 ではなく 404 を返す。これにより HTTP セマンティクスを維持し、クライアントがエンドポイントの存在有無を正確に判断できる。
 
 ---
 

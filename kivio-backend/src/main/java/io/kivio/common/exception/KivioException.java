@@ -7,17 +7,17 @@ import org.springframework.http.HttpStatusCode;
  */
 public abstract class KivioException extends RuntimeException {
 
-    private final String errorCode;
+    private final String code;
     private final HttpStatusCode status;
 
-    protected KivioException(String errorCode, String message, HttpStatusCode status) {
+    protected KivioException(String code, String message, HttpStatusCode status) {
         super(message);
-        this.errorCode = errorCode;
+        this.code = code;
         this.status = status;
     }
 
-    public String getErrorCode() {
-        return errorCode;
+    public String getCode() {
+        return code;
     }
 
     public HttpStatusCode getStatus() {

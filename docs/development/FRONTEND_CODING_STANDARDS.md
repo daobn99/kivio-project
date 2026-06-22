@@ -35,39 +35,41 @@
 kivio-frontend/
 ├── src/
 │   ├── app/                        # Next.js App Router（ルーティング専用）
-│   │   ├── (auth)/                 # 認証系レイアウトグループ
+│   │   ├── (public)/               # 公開画面レイアウトグループ
+│   │   │   ├── layout.tsx
+│   │   │   └── page.tsx            # ホームページ /
+│   │   ├── (authenticated)/        # 認証済みユーザー向けレイアウトグループ
+│   │   │   ├── layout.tsx
+│   │   │   ├── cart/page.tsx
+│   │   │   ├── orders/[id]/page.tsx
+│   │   │   └── wishlist/page.tsx
+│   │   ├── (seller)/               # セラーダッシュボードレイアウトグループ
+│   │   │   ├── layout.tsx          # SellerSidebar を含む、セグメントスコープダーク対応
+│   │   │   ├── dashboard/page.tsx
+│   │   │   └── products/
+│   │   │       ├── page.tsx
+│   │   │       ├── new/page.tsx
+│   │   │       └── [id]/edit/page.tsx
+│   │   ├── (admin)/                # 管理者ダッシュボードレイアウトグループ
+│   │   │   ├── layout.tsx          # AdminHeader + AdminSidebar、セグメントスコープダーク対応
+│   │   │   ├── dashboard/page.tsx
+│   │   │   └── users/page.tsx
+│   │   ├── (auth)/                 # 認証系レイアウトグループ（ヘッダー・フッター非表示）
 │   │   │   ├── layout.tsx
 │   │   │   ├── login/page.tsx
 │   │   │   └── register/page.tsx
-│   │   ├── (buyer)/                # バイヤー系レイアウトグループ
-│   │   │   ├── layout.tsx
-│   │   │   ├── cart/page.tsx
-│   │   │   ├── checkout/page.tsx
-│   │   │   ├── orders/[id]/page.tsx
-│   │   │   └── wishlist/page.tsx
-│   │   ├── (seller)/               # セラー系レイアウトグループ
-│   │   │   ├── layout.tsx          # SellerSidebar を含む
-│   │   │   ├── seller/dashboard/page.tsx
-│   │   │   ├── seller/products/
-│   │   │   │   ├── page.tsx
-│   │   │   │   ├── new/page.tsx
-│   │   │   │   └── [id]/edit/page.tsx
-│   │   │   └── seller/orders/page.tsx
-│   │   ├── (admin)/                # 管理者系レイアウトグループ
-│   │   │   ├── layout.tsx
-│   │   │   ├── admin/users/page.tsx
-│   │   │   └── admin/seller-applications/page.tsx
 │   │   ├── products/[id]/page.tsx
 │   │   ├── shops/[id]/page.tsx
 │   │   ├── search/page.tsx
-│   │   ├── layout.tsx              # ルートレイアウト（ThemeProvider・Navbar・Footer）
-│   │   ├── page.tsx                # ホーム
+│   │   ├── layout.tsx              # ルートレイアウト（ThemeProvider・QueryProvider のみ）
 │   │   ├── loading.tsx
 │   │   ├── error.tsx
 │   │   ├── not-found.tsx
+│   │   ├── unauthorized.tsx        # 401 エラー画面（Next.js 16）
+│   │   ├── forbidden.tsx           # 403 エラー画面（Next.js 16）
 │   │   └── global-error.tsx
 │   ├── components/
-│   │   ├── layout/                 # Navbar, Footer, SellerSidebar
+│   │   ├── layout/                 # GlobalHeader, GlobalFooter, SellerSidebar, AdminHeader/Sidebar
 │   │   ├── ui/                     # shadcn/ui ラッパー + 共通 UI（EmptyState, ErrorFallback）
 │   │   ├── product/                # ProductCard, ProductGrid, ProductForm
 │   │   ├── order/                  # OrderCard, OrderSummary
@@ -145,7 +147,7 @@ export async function getProduct(id: string): Promise<Product> {
 // ✅ 良い例: インタラクティブ部分だけを切り出す
 // src/components/product/AddToCartButton.tsx
 'use client'
-export default function AddToCartButton({ productId }: { productId: string }) {
+export function AddToCartButton({ productId }: { productId: string }) {
   const [isPending, startTransition] = useTransition()
   // ...
 }
@@ -173,8 +175,9 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   })
   if (res.status === 401) redirect('/auth/login')
   if (!res.ok) {
-    const error = await res.json()
-    throw new ApiError(error.title, error.status, error.detail, error.errorCode)
+    const problem: ProblemDetail = await res.json()
+    // ProblemDetail のエラーコードフィールドは `code`（`errorCode` ではない）
+    throw new ApiError(problem.title, problem.status, problem.detail, problem.code)
   }
   return res.json()
 }
@@ -289,7 +292,7 @@ if (!session.hasAccess) forbidden()
 | ページファイル | `page.tsx`（固定） | `app/products/[id]/page.tsx` |
 | レイアウト | `layout.tsx`（固定） | `app/(seller)/layout.tsx` |
 | Skeleton | `{ComponentName}Skeleton.tsx` | `ProductCardSkeleton.tsx` |
-| コンポーネント関数 | `PascalCase` | `export default function ProductCard` |
+| コンポーネント関数 | `PascalCase` | `export function ProductCard`（ルートファイルのみ `export default`） |
 | Props 型 | `{ComponentName}Props` | `type ProductCardProps` |
 
 ### 3.2 Atomic Design 分類
@@ -317,7 +320,7 @@ interface ProductGridProps {
   error?: Error | null
 }
 
-export default function ProductGrid({ products, isLoading, error }: ProductGridProps) {
+export function ProductGrid({ products, isLoading, error }: ProductGridProps) {
   if (isLoading) return <ProductGridSkeleton />
   if (error) return <ErrorFallback message="商品の読み込みに失敗しました" />
   if (products.length === 0) return <EmptyState title="商品が見つかりません" />
@@ -344,7 +347,7 @@ export default async function ProductPage({ params }) {
 
 // Client Component
 'use client'
-export default function ProductDetailClient({ product }: { product: ProductDto }) {
+export function ProductDetailClient({ product }: { product: ProductDto }) {
   const [quantity, setQuantity] = useState(1)
   // ...
 }
@@ -409,7 +412,7 @@ useEffect(async () => { /* クリーンアップできない */ }, [])
 'use client'
 import { useOptimistic, useTransition } from 'react'
 
-export default function WishlistButton({ productId, initialLiked }: WishlistButtonProps) {
+export function WishlistButton({ productId, initialLiked }: WishlistButtonProps) {
   const [optimisticLiked, toggleOptimistic] = useOptimistic(
     initialLiked,
     (state) => !state
@@ -593,7 +596,7 @@ export const ROUTES = {
 ```tsx
 // ❌ ページ全体が CSR になる
 'use client'
-export default function SearchBar() {
+export function SearchBar() {
   const searchParams = useSearchParams()
   return <input defaultValue={searchParams.get('q') ?? ''} />
 }
@@ -789,7 +792,7 @@ export function useAddToCartMutation() {
       queryClient.invalidateQueries({ queryKey: queryKeys.cart.detail })
     },
     onError: (error: ApiError) => {
-      toast.error(getErrorMessage(error.errorCode))
+      toast.error(getErrorMessage(error.code))
     },
   })
 }
@@ -814,7 +817,7 @@ export default async function ProductPage({ params }) {
 
 // ProductDetailClient.tsx (Client Component)
 'use client'
-export default function ProductDetailClient({ initialProduct, productId }) {
+export function ProductDetailClient({ initialProduct, productId }) {
   const { data: product } = useProductQuery(productId, { initialData: initialProduct })
   // ...
 }
@@ -832,11 +835,13 @@ src/types/
 │   ├── product.ts
 │   ├── order.ts
 │   ├── auth.ts
-│   └── common.ts     # PageResponse<T>, ProblemDetail, ApiErrorCode
+│   ├── problem-detail.ts # ProblemDetail, ValidationError
+│   ├── page-response.ts  # PageResponse<T>
+│   ├── error-codes.ts    # ApiErrorCode
+│   └── index.ts          # api/ の re-export（バレル）
 ├── domain/           # フロントエンドのドメインモデル（API 型を加工したもの）
 │   └── cart.ts
-├── enums.ts          # バックエンド Enum と対応する const + type 定義
-└── index.ts          # re-export
+└── enums.ts          # バックエンド Enum と対応する const + type 定義
 ```
 
 ### 9.2 命名規則
@@ -853,26 +858,36 @@ src/types/
 バックエンドの API 設計書（`docs/design/API_DESIGN.md`）の JSON フィールドに厳密に対応させる。
 
 ```ts
-// src/types/api/common.ts
+// src/types/api/page-response.ts
 export interface PageResponse<T> {
   content: T[]
+  page: number
+  size: number
   totalElements: number
   totalPages: number
-  size: number
-  number: number
-  first: boolean
   last: boolean
+}
+
+// src/types/api/problem-detail.ts
+export interface ValidationError {
+  field: string
+  message: string
+  rejectedValue?: unknown
 }
 
 export interface ProblemDetail {
   type: string
   title: string
   status: number
+  /** UPPER_SNAKE_CASE エラーコード（フィールド名は `code`。`errorCode` ではない） */
+  code: string
   detail: string
   instance: string
-  errorCode: ApiErrorCode
+  /** バリデーションエラー時のフィールド別詳細 */
+  errors?: ValidationError[]
 }
 
+// src/types/api/error-codes.ts
 export type ApiErrorCode =
   | 'PRODUCT_NOT_FOUND'
   | 'PRODUCT_OUT_OF_STOCK'
@@ -958,12 +973,14 @@ export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
 
 Zod スキーマは `src/lib/validations/` 配下に集約し、フォームコンポーネントと分離する。
 
+> **Zod v4:** メール検証はトップレベルの `z.email()` を使う。`z.string().email()` は v4 で **deprecated**。
+
 ```ts
 // src/lib/validations/auth.ts
 import { z } from 'zod'
 
 export const loginSchema = z.object({
-  email: z.string().email('有効なメールアドレスを入力してください'),
+  email: z.email('有効なメールアドレスを入力してください'),
   password: z.string().min(8, 'パスワードは8文字以上です'),
 })
 
@@ -980,7 +997,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
 import { loginSchema, type LoginFormValues } from '@/lib/validations/auth'
 
-export default function LoginForm() {
+export function LoginForm() {
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: { email: '', password: '' },
@@ -1036,17 +1053,25 @@ export default function LoginForm() {
 
 ### 11.1 基本ルール
 
-- コンポーネントは `function` 宣言 + `export default` を使う（アロー関数の default export 禁止）
-- ファイル 1 つにつき 1 コンポーネントを export する（名前付き export の複数公開は可）
+- コンポーネントは `function` 宣言で定義する（アロー関数に代入した default export は禁止）
+- **export の方針:**
+  - **ルートファイル（`page.tsx` / `layout.tsx` / `error.tsx` / `not-found.tsx` / `global-error.tsx` / `loading.tsx` 等）は `export default`**（Next.js が default export を要求するため、選択の余地はない）
+  - **それ以外のコンポーネント・Provider・ユーティリティは名前付き export**（`export function ProductCard`）。リファクタ時の一括リネーム・エディタの auto-import・grep 追跡に有利で、匿名 default export による命名ゆらぎを防ぐ
+- ファイル 1 つにつき 1 コンポーネントを export する（補助的な型・定数の名前付き export 併用は可）
 - JSX 内のコメントは `{/* */}` のみ使用する
 
 ```tsx
-// ✅
-export default function ProductCard({ product }: ProductCardProps) {
+// ✅ 非ルートコンポーネント: 名前付き export + function 宣言
+export function ProductCard({ product }: ProductCardProps) {
   return <div>{product.name}</div>
 }
 
-// ❌
+// ✅ ルートファイル（page.tsx / layout.tsx 等）のみ default export
+export default function ProductPage() {
+  return <ProductCard product={product} />
+}
+
+// ❌ アロー関数に代入した default export
 const ProductCard = ({ product }) => <div>{product.name}</div>
 export default ProductCard
 ```
@@ -1174,57 +1199,78 @@ const nextConfig = {
 
 ### 11.6 フォント最適化
 
-フォントは必ず `next/font` を使う。Google Fonts や `<link>` タグによる外部読み込みは **レイアウトシフトの原因になるため禁止**。
+フォントは必ず `next/font` を使う。Google Fonts や `<link>` タグによる外部読み込みは **レイアウトシフトの原因になるため禁止**。  
+見出しは `Noto Serif JP`、本文は `Noto Sans JP` を使い、CSS 変数 `--font-heading` / `--font-body` で制御する（MASTER.md §3 準拠）。
 
 ```tsx
 // src/app/layout.tsx
-import { Noto_Sans_JP, Inter } from 'next/font/google'
+import { Noto_Serif_JP, Noto_Sans_JP } from 'next/font/google'
 
-const notoSansJP = Noto_Sans_JP({
+const notoSerif = Noto_Serif_JP({
   subsets: ['latin'],
-  weight: ['400', '500', '700'],
-  variable: '--font-noto-sans-jp',
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-heading',
   display: 'swap',
+  preload: false,
 })
 
-const inter = Inter({
+const notoSans = Noto_Sans_JP({
   subsets: ['latin'],
-  variable: '--font-inter',
+  weight: ['300', '400', '500', '700'],
+  variable: '--font-body',
   display: 'swap',
+  preload: false,
 })
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ja" className={`${notoSansJP.variable} ${inter.variable}`}>
+    <html lang="ja" className={`${notoSerif.variable} ${notoSans.variable}`}>
       <body className="font-sans">{children}</body>
     </html>
   )
 }
 ```
 
-```ts
-// tailwind.config.ts
-theme: {
-  extend: {
-    fontFamily: {
-      sans: ['var(--font-noto-sans-jp)', 'var(--font-inter)', 'sans-serif'],
-    },
-  },
+`app/globals.css` の `@theme inline` で Tailwind トークンにマッピングする：
+
+```css
+/* app/globals.css */
+@theme inline {
+  --font-sans: var(--font-body);     /* 本文 */
+  --font-serif: var(--font-heading); /* 見出し */
 }
 ```
 
+使い分け：見出し（h1–h2、ページタイトル）は `font-serif`、本文・ラベル・ボタンは `font-sans` を明示する。
+
 ### 11.7 ダークモード
+
+公開画面（`/` `(public)/*`）はライトモード固定。Seller・Admin ダッシュボードはセグメントスコープダークモード対応の拡張性を保つ（Phase 3+）が、**Phase 2 では実装不要**。
+
+**ライトモード固定（現在）:**
 
 ```tsx
 // ✅ CSS 変数を使った条件分岐不要のスタイリング
 <div className="bg-background text-foreground border-border" />
-
-// ✅ ダークモード専用スタイルが必要な場合
-<div className="bg-white dark:bg-zinc-900" />
-
-// tailwind.config.ts: darkMode: ['class']
-// ThemeProvider の設定で next-themes を使用
 ```
+
+**セグメントスコープダークモード（Phase 3+ での拡張用）:**
+
+`globals.css` の `@custom-variant dark (&:is(.dark *))` により、`.dark` クラスを持つ祖先要素配下にダークテーマを適用できる。
+
+```tsx
+// src/app/(seller)/layout.tsx — 例（Phase 3+）
+export default function SellerLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="dark min-h-screen bg-background text-foreground">
+      <SellerSidebar />
+      <main>{children}</main>
+    </div>
+  )
+}
+```
+
+詳細は `design-system/pages/layout.md §1` を参照。
 
 ---
 
@@ -1344,6 +1390,7 @@ return (
 ### 13.1 コンポーネント作成時
 
 - [ ] Server / Client Component のどちらにすべきか判断した
+- [ ] export 方針に従っている（ルートファイルのみ `export default`、他コンポーネントは名前付き export）
 - [ ] `'use client'` は葉コンポーネントに限定している
 - [ ] Loading / Error / Empty の 3 状態を実装している
 - [ ] Skeleton コンポーネントを用意している

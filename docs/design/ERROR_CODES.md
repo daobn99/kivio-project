@@ -74,6 +74,8 @@ Spring Boot 3.x の `ProblemDetail` をベースとする。
 | エラーコード | HTTPステータス | title | 発生条件 |
 |---|---|---|---|
 | `VALIDATION_FAILED` | 422 | Validation Failed | Bean Validation失敗（必須項目・文字数・範囲等） |
+| `INVALID_REQUEST_BODY` | 400 | Invalid Request Body | リクエストボディの JSON パース失敗（`Content-Type: application/json` 未指定・不正な JSON 形式） |
+| `NOT_FOUND` | 404 | Not Found | Spring MVC に未登録のパスへのアクセス（エンドポイント自体が存在しない） |
 | `RESOURCE_NOT_FOUND` | 404 | Resource Not Found | 対象リソースが存在しない / soft delete済み |
 | `ACCESS_DENIED` | 403 | Access Denied | 認証済みだが権限不足（他人のリソース・ロール不足） |
 | `UNAUTHORIZED` | 401 | Unauthorized | 認証が必要なAPIへの未認証アクセス |
@@ -89,11 +91,12 @@ Spring Boot 3.x の `ProblemDetail` をベースとする。
 
 | エラーコード | HTTPステータス | title | 発生条件 | 該当エンドポイント |
 |---|---|---|---|---|
-| `EMAIL_ALREADY_REGISTERED` | 409 | Email Already Registered | 登録済みメールアドレスで新規登録を試みた | `POST /auth/check-email`, `POST /auth/register` |
+| `EMAIL_ALREADY_REGISTERED` | 409 | Email Already Registered | 登録済みメールアドレスで新規登録を試みた | `POST /auth/check-email`, `POST /auth/register/request-otp`, `POST /auth/register/complete` |
 | `INVALID_CREDENTIALS` | 401 | Invalid Credentials | メールアドレスまたはパスワードが不一致 | `POST /auth/login` |
-| `EMAIL_NOT_VERIFIED` | 403 | Email Not Verified | メール未確認ユーザーのログイン試行 | `POST /auth/login` |
-| `EMAIL_VERIFICATION_TOKEN_INVALID` | 400 | Email Verification Token Invalid | メール認証トークンが不正・使用済み | `POST /auth/verify-email` |
-| `EMAIL_VERIFICATION_TOKEN_EXPIRED` | 400 | Email Verification Token Expired | メール認証トークンの有効期限切れ（24時間超過）| `POST /auth/verify-email` |
+| `OTP_INVALID` | 400 | OTP Invalid | 入力された認証コード（OTP）が不一致 | `POST /auth/register/verify-otp` |
+| `OTP_EXPIRED` | 400 | OTP Expired | 認証コード（OTP）の有効期限切れ（10分超過） | `POST /auth/register/verify-otp` |
+| `OTP_MAX_ATTEMPTS_EXCEEDED` | 429 | OTP Max Attempts Exceeded | 認証コード（OTP）の検証試行回数が上限（5回）に達した。再送信が必要 | `POST /auth/register/verify-otp` |
+| `REGISTRATION_SESSION_INVALID` | 400 | Registration Session Invalid | 登録セッショントークン（`registrationToken`）が無効・期限切れ・使用済み。登録を最初からやり直す | `POST /auth/register/complete` |
 | `GOOGLE_TOKEN_INVALID` | 401 | Google Token Invalid | Google ID Tokenの検証失敗 | `POST /auth/google` |
 | `REFRESH_TOKEN_INVALID` | 401 | Refresh Token Invalid | Refresh Tokenが無効・失効・期限切れ | `POST /auth/refresh` |
 | `USER_DEACTIVATED` | 403 | User Deactivated | 管理者によって無効化されたアカウントのログイン | `POST /auth/login` |
@@ -196,10 +199,14 @@ Spring Boot 3.x の `ProblemDetail` をベースとする。
 | エラーコード（UPPER_SNAKE_CASE） | type URI パス |
 |---|---|
 | `VALIDATION_FAILED` | `/problems/validation-failed` |
+| `INVALID_REQUEST_BODY` | `/problems/invalid-request-body` |
+| `NOT_FOUND` | `/problems/not-found` |
 | `RESOURCE_NOT_FOUND` | `/problems/resource-not-found` |
 | `EMAIL_ALREADY_REGISTERED` | `/problems/email-already-registered` |
-| `EMAIL_VERIFICATION_TOKEN_INVALID` | `/problems/email-verification-token-invalid` |
-| `EMAIL_VERIFICATION_TOKEN_EXPIRED` | `/problems/email-verification-token-expired` |
+| `OTP_INVALID` | `/problems/otp-invalid` |
+| `OTP_EXPIRED` | `/problems/otp-expired` |
+| `OTP_MAX_ATTEMPTS_EXCEEDED` | `/problems/otp-max-attempts-exceeded` |
+| `REGISTRATION_SESSION_INVALID` | `/problems/registration-session-invalid` |
 | `PRODUCT_OUT_OF_STOCK` | `/problems/product-out-of-stock` |
 | `ORDER_NOT_CANCELLABLE` | `/problems/order-not-cancellable` |
 | `SELLER_APPLICATION_PENDING` | `/problems/seller-application-pending` |

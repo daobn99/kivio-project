@@ -1,26 +1,20 @@
-import type { NextConfig } from "next";
+import type { NextConfig } from 'next'
 
-const API_BASE_URL = process.env.API_BASE_URL ?? "http://localhost:8080";
-
+// `/api/v1/*` は BFF Route Handler（src/app/api/v1/[...path]）が処理する。
+// 認証 Cookie → Bearer の詰め替え・トークンの Cookie 化が必要なため、透過 rewrite は使わない。
 const nextConfig: NextConfig = {
-  output: "standalone",
-  async rewrites() {
-    return [
-      {
-        source: "/api/v1/:path*",
-        destination: `${API_BASE_URL}/api/v1/:path*`,
-      },
-    ];
-  },
+  output: 'standalone',
   images: {
+    dangerouslyAllowSVG: true,
+    contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
     remotePatterns: [
       {
-        protocol: "https",
-        hostname: "res.cloudinary.com",
-        pathname: "/**",
+        protocol: 'https',
+        hostname: 'res.cloudinary.com',
+        pathname: '/**',
       },
     ],
   },
-};
+}
 
-export default nextConfig;
+export default nextConfig

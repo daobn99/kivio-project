@@ -20,24 +20,26 @@ pnpm dev        # → http://localhost:3000
 
 ## コマンド
 
-| コマンド | 説明 |
-|---|---|
-| `pnpm dev` | 開発サーバー起動（ホットリロード） |
-| `pnpm build` | 本番ビルド |
-| `pnpm start` | 本番ビルドの配信 |
-| `pnpm lint` | ESLint 実行 |
+| コマンド         | 説明                                       |
+| ---------------- | ------------------------------------------ |
+| `pnpm dev`       | 開発サーバー起動（ホットリロード）         |
+| `pnpm build`     | 本番ビルド                                 |
+| `pnpm start`     | 本番ビルドの配信                           |
+| `pnpm test`      | テスト実行（Jest + React Testing Library） |
+| `pnpm typecheck` | TypeScript 型チェック                      |
+| `pnpm lint`      | ESLint 実行                                |
 
 ## 環境変数
 
 `.env.local.example` を `.env.local` にコピーして値を設定する。
 
-| 変数名 | 説明 |
-|---|---|
-| `API_BASE_URL` | Server Component が使うバックエンド URL（デフォルト: `http://localhost:8080`） |
-| `NEXT_PUBLIC_API_BASE_URL` | Client Component / ブラウザが使うバックエンド URL |
-| `AUTH_SECRET` | NextAuth シークレット — `openssl rand -base64 32` で生成 |
-| `AUTH_GOOGLE_ID` | Google OAuth クライアント ID |
-| `AUTH_GOOGLE_SECRET` | Google OAuth クライアントシークレット |
+| 変数名                     | 説明                                                                           |
+| -------------------------- | ------------------------------------------------------------------------------ |
+| `API_BASE_URL`             | Server Component が使うバックエンド URL（デフォルト: `http://localhost:8080`） |
+| `NEXT_PUBLIC_API_BASE_URL` | Client Component / ブラウザが使うバックエンド URL                              |
+| `AUTH_SECRET`              | NextAuth シークレット — `openssl rand -base64 32` で生成                       |
+| `AUTH_GOOGLE_ID`           | Google OAuth クライアント ID                                                   |
+| `AUTH_GOOGLE_SECRET`       | Google OAuth クライアントシークレット                                          |
 
 ## shadcn/ui コンポーネントの追加
 
