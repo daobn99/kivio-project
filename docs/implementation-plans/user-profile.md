@@ -333,11 +333,11 @@ src/
 | U-03 | `UserService` 拡張（`updateProfile` / `changePassword` / `withdraw`） | BE | U-01, U-02 | ✅ Done |
 | U-04 | `UserController` 拡張（`PATCH /me` / `PATCH /me/password` / `DELETE /me`）+ `@Auditable` | BE | U-03 | ✅ Done |
 | U-05 | `VALIDATION_RULES.md §5` に住所フィールド追記（postalCode/phone 正規表現確定） | DOC | なし `[並列可]` | ✅ Done |
-| U-06 | `order` ドメイン: `Address` Entity + `AddressRepository` | BE | U-00 | ⬜ Todo |
-| U-07 | `CreateAddressRequest` / `UpdateAddressRequest` / `AddressResponse` DTO + `ResourceAccessDeniedException`（403 `ACCESS_DENIED`・`ForbiddenException` 継承） | BE | U-05 | ⬜ Todo |
-| U-08 | `AddressService`（CRUD + `isDefault` 付け替え + 所有権チェック 403/404） | BE | U-06, U-07 | ⬜ Todo |
-| U-09 | `AddressController`（`/users/me/addresses` CRUD 4 本） | BE | U-08 | ⬜ Todo |
-| U-10 | Seed: 住所データ（`dev/V13__seed_addresses.sql` or `V10` 追記） | BE | U-00 | ⬜ Todo |
+| U-06 | `order` ドメイン: `Address` Entity + `AddressRepository` | BE | U-00 | ✅ Done |
+| U-07 | `CreateAddressRequest` / `UpdateAddressRequest` / `AddressResponse` DTO + `ResourceAccessDeniedException`（403 `ACCESS_DENIED`・`ForbiddenException` 継承） | BE | U-05 | ✅ Done |
+| U-08 | `AddressService`（CRUD + `isDefault` 付け替え + 所有権チェック 403/404） | BE | U-06, U-07 | ✅ Done |
+| U-09 | `AddressController`（`/users/me/addresses` CRUD 4 本） | BE | U-08 | ✅ Done |
+| U-10 | Seed: 住所データ（`dev/V13__seed_addresses.sql`） | BE | U-00 | ✅ Done |
 | U-11 | Backend 単体テスト（`UserServiceTest` 拡張・`AddressServiceTest` 新規・Mockito） | BE | U-03, U-08 | ⬜ Todo |
 | U-12 | Backend Controller/統合テスト（`UserControllerTest` 拡張＝`ControllerTestBase` スライス・`AddressController` は `IntegrationTestBase` で 403/404・`isDefault` 付け替えを DB 検証） | BE | U-04, U-09 | ⬜ Todo |
 | U-13 | FE: 型定義（`types/api/address.ts`） | FE | なし `[並列可]` | ⬜ Todo |
