@@ -338,8 +338,8 @@ src/
 | U-08 | `AddressService`（CRUD + `isDefault` 付け替え + 所有権チェック 403/404） | BE | U-06, U-07 | ✅ Done |
 | U-09 | `AddressController`（`/users/me/addresses` CRUD 4 本） | BE | U-08 | ✅ Done |
 | U-10 | Seed: 住所データ（`dev/V13__seed_addresses.sql`） | BE | U-00 | ✅ Done |
-| U-11 | Backend 単体テスト（`UserServiceTest` 拡張・`AddressServiceTest` 新規・Mockito） | BE | U-03, U-08 | ⬜ Todo |
-| U-12 | Backend Controller/統合テスト（`UserControllerTest` 拡張＝`ControllerTestBase` スライス・`AddressController` は `IntegrationTestBase` で 403/404・`isDefault` 付け替えを DB 検証） | BE | U-04, U-09 | ⬜ Todo |
+| U-11 | Backend 単体テスト（`UserServiceTest` 拡張・`AddressServiceTest` 新規・Mockito） | BE | U-03, U-08 | ✅ Done |
+| U-12 | Backend Controller/統合テスト（`UserControllerTest` 拡張＝`ControllerTestBase` スライス・`AddressController` は `IntegrationTestBase` で 403/404・`isDefault` 付け替えを DB 検証） | BE | U-04, U-09 | ✅ Done |
 | U-13 | FE: 型定義（`types/api/address.ts`） | FE | なし `[並列可]` | ⬜ Todo |
 | U-14 | FE: Zod スキーマ（`profile.ts` / `address.ts`） | FE | U-05, U-13 | ⬜ Todo |
 | U-15 | FE: API クライアント（`users.ts` 拡張 / `addresses.ts`） | FE | U-13 | ⬜ Todo |
