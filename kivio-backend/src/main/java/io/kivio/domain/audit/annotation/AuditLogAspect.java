@@ -2,7 +2,6 @@ package io.kivio.domain.audit.annotation;
 
 import io.kivio.config.security.KivioUserDetails;
 import io.kivio.domain.audit.domain.AuditLog;
-import io.kivio.domain.audit.repository.AuditLogRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
@@ -28,7 +27,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class AuditLogAspect {
 
-    private final AuditLogRepository auditLogRepository;
+    private final AuditLogWriter auditLogWriter;
 
     @Around("@annotation(auditable)")
     public Object audit(ProceedingJoinPoint pjp, Auditable auditable) throws Throwable {
@@ -59,22 +58,21 @@ public class AuditLogAspect {
             errorMessage = e.getMessage();
             throw e;
         } finally {
-            try {
-                auditLogRepository.save(AuditLog.builder()
-                        .correlationId(correlationId)
-                        .actorId(actorId)
-                        .actorRole(actorRole)
-                        .actorEmail(actorEmail)
-                        .action(auditable.action())
-                        .entityType(auditable.entityType().isEmpty() ? null : auditable.entityType())
-                        .entityId(entityId)
-                        .outcome(outcome)
-                        .errorMessage(errorMessage)
-                        .ipAddress(ipAddress)
-                        .build());
-            } catch (Exception e) {
-                log.error("Failed to save audit log for action={}", auditable.action(), e);
-            }
+            // 監査ログは REQUIRES_NEW の独立トランザクションで書き込む。
+            // 業務処理が例外でロールバックされても FAILURE 監査が消えないようにするため
+            // （同一トランザクションで save するとロールバックに巻き込まれる）。
+            auditLogWriter.write(AuditLog.builder()
+                    .correlationId(correlationId)
+                    .actorId(actorId)
+                    .actorRole(actorRole)
+                    .actorEmail(actorEmail)
+                    .action(auditable.action())
+                    .entityType(auditable.entityType().isEmpty() ? null : auditable.entityType())
+                    .entityId(entityId)
+                    .outcome(outcome)
+                    .errorMessage(errorMessage)
+                    .ipAddress(ipAddress)
+                    .build());
         }
     }
 
