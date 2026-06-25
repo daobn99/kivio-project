@@ -73,6 +73,29 @@ public class User extends SoftDeletableEntity {
         this.googleId = googleId;
     }
 
+    /**
+     * プロフィールを部分更新します。
+     *
+     * <p>
+     * {@code null} のフィールドは更新しません（{@code PATCH} の「未送信＝不変」セマンティクス）。
+     * 値の検証は DTO（Bean Validation）側で済んでいる前提です。
+     */
+    public void updateProfile(String displayName, String avatarUrl) {
+        if (displayName != null) {
+            this.displayName = displayName;
+        }
+        if (avatarUrl != null) {
+            this.avatarUrl = avatarUrl;
+        }
+    }
+
+    /**
+     * パスワードハッシュを差し替えます（照合・エンコードはサービス層の責務）。
+     */
+    public void changePassword(String newPasswordHash) {
+        this.passwordHash = newPasswordHash;
+    }
+
     public boolean isActive() {
         return status == UserStatus.ACTIVE;
     }
