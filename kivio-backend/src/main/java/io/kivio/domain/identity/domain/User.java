@@ -85,7 +85,8 @@ public class User extends SoftDeletableEntity {
             this.displayName = displayName;
         }
         if (avatarUrl != null) {
-            this.avatarUrl = avatarUrl;
+            // 空文字はクリア要求。JSON では未送信と明示的 null を区別できないため空文字に割り当てている
+            this.avatarUrl = avatarUrl.isBlank() ? null : avatarUrl;
         }
     }
 

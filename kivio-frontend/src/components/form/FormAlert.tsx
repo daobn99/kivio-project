@@ -7,8 +7,8 @@ interface FormAlertProps {
 }
 
 /**
- * フォーム上部のサーバーエラー表示。`role="alert"` / `aria-live="polite"` で支援技術に通知する
- * （auth.md §7.2・§13）。ログイン失敗等はメール／パスワードのどちらが誤りかを示さない。
+ * サーバーエラーの表示。認証画面ではフォーム上部に 1 つ、設定画面ではセクション単位で置き、
+ * どの操作が失敗したのかを操作地点で示す。
  */
 export function FormAlert({ children, className }: FormAlertProps) {
   return (

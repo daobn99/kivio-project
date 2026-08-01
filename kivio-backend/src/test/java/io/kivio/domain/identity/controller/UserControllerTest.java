@@ -49,6 +49,7 @@ class UserControllerTest extends ControllerTestBase {
                 .displayName("Buyer Taro")
                 .role(UserRole.ROLE_BUYER)
                 .status(UserStatus.ACTIVE)
+                .hasPassword(true)
                 .createdAt(Instant.parse("2026-06-01T00:00:00Z"))
                 .build();
         given(userService.getById(userId)).willReturn(response);
@@ -60,7 +61,10 @@ class UserControllerTest extends ControllerTestBase {
                 .andExpect(jsonPath("$.email").value("buyer@example.com"))
                 .andExpect(jsonPath("$.displayName").value("Buyer Taro"))
                 .andExpect(jsonPath("$.role").value("ROLE_BUYER"))
-                .andExpect(jsonPath("$.status").value("ACTIVE"));
+                .andExpect(jsonPath("$.status").value("ACTIVE"))
+                .andExpect(jsonPath("$.hasPassword").value(true))
+                // パスワードハッシュ自体は決してレスポンスに含めない
+                .andExpect(jsonPath("$.passwordHash").doesNotExist());
     }
 
     @Test
@@ -110,6 +114,33 @@ class UserControllerTest extends ControllerTestBase {
                 .andExpect(status().is(422))
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
                 .andExpect(jsonPath("$.errors[*].field", hasItem("displayName")));
+    }
+
+    @Test
+    void should_accept_empty_avatar_url_as_clear_request() throws Exception {
+        // 空文字は「クリア」の意思表示であり @URL のバリデーション違反ではない
+        UUID userId = UUID.randomUUID();
+        UserResponse response = UserResponse.builder()
+                .id(userId)
+                .email("buyer@example.com")
+                .displayName("Buyer Taro")
+                .avatarUrl(null)
+                .role(UserRole.ROLE_BUYER)
+                .status(UserStatus.ACTIVE)
+                .hasPassword(true)
+                .createdAt(Instant.parse("2026-06-01T00:00:00Z"))
+                .build();
+        given(userService.updateProfile(eq(userId), any(UpdateProfileRequest.class)))
+                .willReturn(response);
+
+        mockMvc.perform(patch("/api/v1/users/me")
+                        .with(user(new KivioUserDetails(userId, "ROLE_BUYER")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"avatarUrl":""}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.avatarUrl").doesNotExist());
     }
 
     @Test

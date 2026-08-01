@@ -1,8 +1,8 @@
 # ユーザープロフィール・住所 実装計画 / 進捗管理
 **ブランチ:** `feature/user-profile`  
 **担当 Phase:** Phase 2  
-**最終更新:** 2026-06-22  
-**ステータス:** 🟡 計画策定完了・実装着手前。`feature/auth`（T-27 で `GET /users/me` を先行実装済み）をベースに、プロフィール更新・パスワード変更・退会・配送先住所 CRUD を実装する。
+**最終更新:** 2026-08-01  
+**ステータス:** 🟢 U-00〜U-18 完了。バックエンド（プロフィール更新・パスワード変更・退会・住所 CRUD）とフロントエンド（`/profile/settings`・`/profile/addresses`）が実装済み。UI 設計は `design-system/pages/user-profile.md` を正とする。
 
 > **前提（`feature/auth` 由来の既存実装）:**  
 > 認証スライス（`feature/auth`）で `User` エンティティ・`UserRepository`・`UserController`・`UserService`・`UserResponse` および `GET /api/v1/users/me`（T-27）が実装済み。本スライスはこれらを**拡張**する形で進める（新規作成ではなく改修が中心）。`KivioUserDetails`（`@AuthenticationPrincipal`）・`GlobalExceptionHandler`・`SecurityConfig`（`anyRequest().authenticated()`）も利用可能な状態にある。
@@ -274,12 +274,12 @@ io.kivio/
 
 ### 6.3 実装ファイル一覧
 
-> **ルート配置の注意:** 現状の route group は `auth/(auth-group)` と `(public)` のみで、**認証必須グループは未作成**。`/profile` のソフト認証ガードは `src/proxy.ts` の `PROTECTED_PREFIXES`（`'/profile'` 既存・確認済み）が担うため、ルートグループは**レイアウト共有のための任意の整理**にすぎない。下記の `(protected)` は新規提案（`src/app/profile/...` 直置きでも機能する）。
+> **ルート配置（確定）:** `FRONTEND_IA.md §3` に従い **`(authenticated)`** ルートグループを新設した（当初案の仮称 `(protected)` は不採用）。`/profile` のソフト認証ガードは `src/proxy.ts` の `PROTECTED_PREFIXES`（`'/profile'` 既存）が担うため、ルートグループは**グローバル chrome を共有するため**に存在する。URL には影響しない。
 
 ```
 src/
 ├── app/
-│   └── (protected)/                         # ★ 新規（認証必須レイアウト共有用・任意）。proxy.ts が /profile を既にガード
+│   └── (authenticated)/                     # ★ 新規（認証必須レイアウト共有用）。proxy.ts が /profile を既にガード
 │       └── profile/
 │           ├── settings/page.tsx            # ★ プロフィール設定（Phase 2）
 │           └── addresses/page.tsx           # ★ 住所管理（Phase 3・OQ-2）
@@ -340,12 +340,12 @@ src/
 | U-10 | Seed: 住所データ（`dev/V13__seed_addresses.sql`） | BE | U-00 | ✅ Done |
 | U-11 | Backend 単体テスト（`UserServiceTest` 拡張・`AddressServiceTest` 新規・Mockito） | BE | U-03, U-08 | ✅ Done |
 | U-12 | Backend Controller/統合テスト（`UserControllerTest` 拡張＝`ControllerTestBase` スライス・`AddressController` は `IntegrationTestBase` で 403/404・`isDefault` 付け替えを DB 検証） | BE | U-04, U-09 | ✅ Done |
-| U-13 | FE: 型定義（`types/api/address.ts`） | FE | なし `[並列可]` | ⬜ Todo |
-| U-14 | FE: Zod スキーマ（`profile.ts` / `address.ts`） | FE | U-05, U-13 | ⬜ Todo |
-| U-15 | FE: API クライアント（`users.ts` 拡張 / `addresses.ts`） | FE | U-13 | ⬜ Todo |
-| U-16 | FE: プロフィール設定画面（`/profile/settings`・3 フォーム + 退会） | FE | U-14, U-15 | ⬜ Todo |
-| U-17 | FE: 住所管理画面（`/profile/addresses`・Phase 3） | FE | U-14, U-15 | ⚠️ OQ-2 |
-| U-18 | FE: コンポーネントテスト（Vitest + RTL + MSW）+ 必要なら E2E | FE | U-16 | ⬜ Todo |
+| U-13 | FE: 型定義（`types/api/address.ts`） | FE | なし `[並列可]` | ✅ Done |
+| U-14 | FE: Zod スキーマ（`profile.ts` / `address.ts`）+ `constants/prefectures.ts` | FE | U-05, U-13 | ✅ Done |
+| U-15 | FE: API クライアント（`users.ts` 拡張 / `addresses.ts`） | FE | U-13 | ✅ Done |
+| U-16 | FE: プロフィール設定画面（`/profile/settings`・3 フォーム + 退会） | FE | U-14, U-15 | ✅ Done |
+| U-17 | FE: 住所管理画面（`/profile/addresses`） | FE | U-14, U-15 | ✅ Done（OQ-2 決着: 本スライスに含める） |
+| U-18 | FE: コンポーネントテスト（Vitest + RTL + MSW） | FE | U-16 | ✅ Done（27 件追加・計 50 件グリーン） |
 
 **依存グラフ（クリティカルパス）:**
 
@@ -486,15 +486,17 @@ PR をマージするには以下を全て満たすこと。
 
 ## 11. Risks / Open Questions
 
-### Open Questions（着手前に確認が必要）
+### Open Questions（2026-08-01 時点で全件クローズ）
 
-| # | 質問 | 影響タスク | 提案 |
+> UI 設計側で追加検討した OQ-P1〜P6 とその決定は `design-system/pages/user-profile.md §17` にまとめてある。
+
+| # | 質問 | 影響タスク | 決定 |
 |---|---|---|---|
-| OQ-1 | **Address 集約の所属ドメイン** — `CLAUDE.md`/`DB_DESIGN.md` では `order` ドメイン。URL は `/users/me/addresses`（identity 文脈）。どちらに置くか | U-06〜U-09 | **`order` ドメインに置く**（CLAUDE.md 準拠）。`identity` とは `userId`（UUID）値参照のみ。本スライスで `domain/order/` を新規作成 |
-| OQ-2 | **住所管理 UI（`/profile/addresses`）のフェーズ** — IA では Phase 3。バックエンド API は本スライス（Phase 2）で完成。FE 画面も同時に作るか後続スライスに委ねるか | U-17 | バックエンド + 最小 FE（一覧/追加/編集/削除）まで本スライスで作り E2E を通す。装飾的 UX は Phase 3 で磨く。**オーナー判断を仰ぐ** |
-| OQ-3 | **退会時の連動処理と監査アクション** — `DB_DESIGN.md §3.2` は `users.deleted_at` 設定時に `shops.deleted_at` を連動。本スライスでは Shop 未実装。また退会の監査アクション名が `AUDIT.md §4` に未定義 | U-04 | Shop 連動は**フック/TODO のみ用意**し `feature/catalog` 側で結線（Spring Events 経由）。監査アクションは `USER_WITHDRAWN` を `AUDIT.md` に追記提案。退会済みユーザーへの再アクセス時の挙動（401 vs 404）も確定する |
-| OQ-4 | **PATCH の「未送信」と `null` の区別** — 部分更新で「フィールド未送信＝不変」「`null` 送信＝クリア」をどう扱うか。record + Bean Validation だけでは区別不可 | U-01, U-03, U-07 | `displayName` は空文字/`null` 不可（常に有効値か未送信）。`avatarUrl` のみ「`null` でクリア可」を許容するか確定。`JsonNullable`（openapi-jackson-databind-nullable）導入の要否を判断 |
-| OQ-5 | **住所バリデーション正規表現と一覧の並び順** — `VALIDATION_RULES` に住所節が未記載。`postalCode`/`phoneNumber` のパターン、一覧のソート（デフォルト優先 or `created_at`） | U-05, U-07, U-08 | `VALIDATION_RULES.md §5` に追記してから実装。暫定 `postalCode=^\d{3}-?\d{4}$` / `phoneNumber=^0\d{1,4}-?\d{1,4}-?\d{4}$`。並び順は「デフォルト住所を先頭 → `created_at` 昇順」を提案 |
+| ~~OQ-1~~ ✅ | **Address 集約の所属ドメイン** — `CLAUDE.md`/`DB_DESIGN.md` では `order` ドメイン。URL は `/users/me/addresses`（identity 文脈）。どちらに置くか | U-06〜U-09 | **`order` ドメインに置く**（CLAUDE.md 準拠）。`identity` とは `userId`（UUID）値参照のみ。本スライスで `domain/order/` を新規作成 |
+| ~~OQ-2~~ ✅ | **住所管理 UI（`/profile/addresses`）のフェーズ** — IA では Phase 3。バックエンド API は本スライス（Phase 2）で完成。FE 画面も同時に作るか後続スライスに委ねるか | U-17 | **決定: 本スライスで FE も実装する**（一覧/追加/編集/削除/デフォルト切替）。API が完成済みで UI 設計も確定しているため後続に残す理由がない。郵便番号→住所自動補完などの装飾的 UX のみ Phase 3 に残す |
+| ~~OQ-3~~ ✅ | **退会時の連動処理と監査アクション** — `DB_DESIGN.md §3.2` は `users.deleted_at` 設定時に `shops.deleted_at` を連動。本スライスでは Shop 未実装。また退会の監査アクション名が `AUDIT.md §4` に未定義 | U-04 | Shop 連動は**フック/TODO のみ用意**し `feature/catalog` 側で結線（Spring Events 経由）。監査アクションは `USER_WITHDRAWN` を `AUDIT.md` に追記提案。退会済みユーザーへの再アクセス時の挙動（401 vs 404）も確定する |
+| ~~OQ-4~~ ✅ | **PATCH の「未送信」と `null` の区別** — 部分更新で「フィールド未送信＝不変」「`null` 送信＝クリア」をどう扱うか。record + Bean Validation だけでは区別不可 | U-01, U-03, U-07 | **決定: `displayName` は空文字不可（`@Size(min=1)`）。`avatarUrl` は「未送信＝不変 / 空文字 `""`＝クリア（null 化）」**。`JsonNullable` の導入は見送り（依存を増やさず空文字で意思表示できるため）。`@URL` は空文字を有効と扱うのでバリデーションは通過する。`API_DESIGN.md` / `VALIDATION_RULES.md §2.1` に反映済み |
+| ~~OQ-5~~ ✅ | **住所バリデーション正規表現と一覧の並び順** — `VALIDATION_RULES` に住所節が未記載。`postalCode`/`phoneNumber` のパターン、一覧のソート（デフォルト優先 or `created_at`） | U-05, U-07, U-08 | `VALIDATION_RULES.md §5` に追記してから実装。暫定 `postalCode=^\d{3}-?\d{4}$` / `phoneNumber=^0\d{1,4}-?\d{1,4}-?\d{4}$`。並び順は「デフォルト住所を先頭 → `created_at` 昇順」を提案 |
 
 ### Risks（既知のリスク）
 

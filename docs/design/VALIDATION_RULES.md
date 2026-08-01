@@ -71,7 +71,7 @@ UI 表記は必ず左列に統一する。表記揺れを禁止する。
 | `password`<br>（ログイン） | ◯ | **必須のみ**（長さ検証しない） | ログインは強度ポリシーを課す場ではない。不一致は `INVALID_CREDENTIALS`（401）で返す。`currentPassword`（§2.3）と同思想 | `@NotBlank` | `z.string().min(1)` | 「パスワードを入力してください」 |
 | `passwordConfirm` | ◯ | `password` と一致 | 入力ミス防止 | （サーバ検証は任意・主にフロント責務） | `.refine(p === pc, path:['passwordConfirm'])` | 「パスワードと確認用パスワードが一致しません」 |
 | `displayName` | ◯ | 1〜100文字 | DATA_DICTIONARY `users.display_name`（VARCHAR 100・必須）。空表示名による画面崩れ防止のため登録時必須 | `@NotBlank @Size(max=100)` | `z.string().trim().min(1).max(100)` | 未入力:「表示名を入力してください」 / 上限:「表示名は100文字以内で入力してください」 |
-| `avatarUrl` | 任意 | URL形式 | PATCH /users/me（Cloudinary URL） | `@URL` | `z.url().optional()` | 「URLの形式が正しくありません」 |
+| `avatarUrl` | 任意 | URL形式。**空文字 `""` はクリア（`null` 化）を意味し、バリデーションエラーにしない** | PATCH /users/me（Cloudinary URL）。`@URL` は空文字を有効と扱う（Hibernate Validator の仕様）ため、空文字はサービス層まで到達し `null` 化される | `@URL` | `z.union([z.literal(''), z.url()]).optional()` | 「URLの形式が正しくありません」 |
 
 ### 2.2 OTP 登録フロー
 

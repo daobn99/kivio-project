@@ -379,9 +379,11 @@ async function logout(router: AppRouterInstance) {
 
 ```typescript
 export const queryKeys = {
-  // 認証・ユーザー
-  currentUser:         ['users', 'me'] as const,
-  addresses:           ['users', 'me', 'addresses'] as const,
+  // 認証・ユーザー（実装は src/lib/queryKeys.ts の `user`（単数）名前空間が正）
+  user: {
+    me:        ['user', 'me'] as const,
+    addresses: ['user', 'me', 'addresses'] as const,
+  },
   sellerApplication:   ['seller-applications', 'me'] as const,
 
   // カテゴリー（静的・Infinity staleTime）
@@ -461,10 +463,12 @@ TanStack Query では部分キー一致による一括 invalidation が可能。
 
 | Mutation | Invalidate するキー |
 |---|---|
-| `PATCH /users/me` | `['users', 'me']` |
-| `POST /users/me/addresses` | `['users', 'me', 'addresses']` |
-| `PATCH /users/me/addresses/{id}` | `['users', 'me', 'addresses']` |
-| `DELETE /users/me/addresses/{id}` | `['users', 'me', 'addresses']` |
+| `PATCH /users/me` | `['user', 'me']`（`queryKeys.user.me`）※ 併せて `useAuthStore.setUser` でストアも更新する |
+| `PATCH /users/me/password` | なし（204・キャッシュに影響しない） |
+| `DELETE /users/me` | `queryClient.clear()`（退会後に前ユーザーのキャッシュを残さない） |
+| `POST /users/me/addresses` | `['user', 'me', 'addresses']`（`queryKeys.user.addresses`） |
+| `PATCH /users/me/addresses/{id}` | `['user', 'me', 'addresses']` |
+| `DELETE /users/me/addresses/{id}` | `['user', 'me', 'addresses']` |
 | `POST /seller-applications` | `['seller-applications', 'me']` |
 | `POST /products` | `['products', 'list']` |
 | `PATCH /products/{id}` | `['products', 'detail', id]`（detail）、`['products', 'list']` |
@@ -516,9 +520,9 @@ TanStack Query では部分キー一致による一括 invalidation が可能。
 
 | API コール | 用途 | 必要フィールド |
 |---|---|---|
-| `GET /users/me` | 初期値でフォームを埋める | `displayName`, `avatarUrl`, `email`, `role` |
-| `PATCH /users/me` | 表示名・アバター URL 更新 | `displayName?`, `avatarUrl?` |
-| `PATCH /users/me/password` | パスワード変更 | `currentPassword`, `newPassword` |
+| `GET /users/me` | 初期値でフォームを埋める | `displayName`, `avatarUrl`, `email`, `role`, `hasPassword` |
+| `PATCH /users/me` | 表示名・アバター URL 更新 | `displayName?`, `avatarUrl?`（空文字でアバターをクリア） |
+| `PATCH /users/me/password` | パスワード変更 | `currentPassword`, `newPassword`。`hasPassword: false`（Google 専用）ならセクションごと非表示 |
 | `DELETE /users/me` | 退会 | 204 → `clearAuth()` → `/` |
 
 並列フェッチ: `GET /users/me` のみ。

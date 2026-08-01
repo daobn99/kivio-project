@@ -42,6 +42,9 @@
   --success: hsl(172, 70%, 36%);
   --success-foreground: hsl(0, 0%, 100%);
 
+  /* モーダル背後*/
+  --overlay: rgb(0 0 0 / 0.6);
+
   /* チャート */
   --chart-1: hsl(213, 52%, 24%);
   --chart-2: hsl(172, 70%, 36%);
@@ -101,6 +104,9 @@
   --warning-foreground: hsl(222, 47%, 11%);
   --success: hsl(172, 65%, 44%);
   --success-foreground: hsl(0, 0%, 100%);
+
+  /* 暗い面の上ではネイビーの減光が効かないため、より暗く不透明にする */
+  --overlay: hsl(215 55% 4% / 0.6);
 }
 
 @theme inline {
@@ -128,6 +134,7 @@
   --color-warning-foreground: var(--warning-foreground);
   --color-success: var(--success);
   --color-success-foreground: var(--success-foreground);
+  --color-overlay: var(--overlay);
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);

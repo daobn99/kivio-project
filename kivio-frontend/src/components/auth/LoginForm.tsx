@@ -8,17 +8,17 @@ import { login } from '@/lib/api/client/auth'
 import { getCurrentUser } from '@/lib/api/client/users'
 import { loginSchema, type LoginFormValues } from '@/lib/validations/auth'
 import { useAuthStore } from '@/stores/useAuthStore'
-import { resolveAuthError } from '@/lib/authErrors'
+import { resolveApiError } from '@/lib/apiErrors'
 import { ROUTES } from '@/lib/constants'
 import { FloatingLabelInput } from '@/components/ui/FloatingLabelInput'
 import { PasswordField } from '@/components/auth/PasswordField'
 import { AuthSubmitButton } from '@/components/auth/AuthSubmitButton'
-import { FormAlert } from '@/components/auth/FormAlert'
-import { FieldError } from '@/components/auth/FieldError'
+import { FormAlert } from '@/components/form/FormAlert'
+import { FieldError } from '@/components/form/FieldError'
 import { AuthDivider } from '@/components/auth/AuthDivider'
 import { GoogleSignInButton } from '@/components/auth/GoogleSignInButton'
 
-// ログイン失敗はメール／パスワードのどちらが誤りかを示さない（列挙攻撃対策・auth.md §7.2）
+// ログイン失敗はメール／パスワードのどちらが誤りかを示さない（アカウント列挙攻撃の対策）
 const LOGIN_ERRORS: Record<string, string> = {
   INVALID_CREDENTIALS: 'メールアドレスまたはパスワードが正しくありません。',
   USER_DEACTIVATED: 'このアカウントは利用停止中です。サポートへお問い合わせください。',
@@ -57,7 +57,7 @@ export function LoginForm({ defaultEmail = '' }: LoginFormProps) {
     },
   })
 
-  const serverError = mutation.isError ? resolveAuthError(mutation.error, LOGIN_ERRORS) : null
+  const serverError = mutation.isError ? resolveApiError(mutation.error, LOGIN_ERRORS) : null
 
   return (
     <form
@@ -98,7 +98,7 @@ export function LoginForm({ defaultEmail = '' }: LoginFormProps) {
         />
         <FieldError id="login-password-error" message={errors.password?.message} />
         <div className="flex justify-end">
-          {/* Phase 2 はリセット機能未実装のため href="#"（auth.md §7.2） */}
+          {/* リセット機能は未実装のため href="#" */}
           <Link href="#" className="text-accent text-sm hover:underline">
             パスワードを忘れた方
           </Link>

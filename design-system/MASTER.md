@@ -74,6 +74,9 @@ shadcn/ui + Tailwind CSS 4.x では、CSS変数に `hsl()` 等の**完全な色�
   --success:           hsl(172, 70%, 36%);        /* #1A9E87 — アクセントと統一 */
   --success-foreground: hsl(0, 0%, 100%);
 
+  /* モーダル背後*/
+  --overlay: rgb(0 0 0 / 0.6);
+
   /* チャート */
   --chart-1: hsl(213, 52%, 24%);   /* ネイビー */
   --chart-2: hsl(172, 70%, 36%);   /* ティール */
@@ -158,6 +161,7 @@ Tailwind CSS v4 では `@theme inline` を使い、CSS変数をそのまま `var
   --color-warning-foreground:   var(--warning-foreground);
   --color-success:              var(--success);
   --color-success-foreground:   var(--success-foreground);
+  --color-overlay:              var(--overlay);
 
   /* 角丸 */
   --radius-sm:   calc(var(--radius) - 4px);  /* 4px */
@@ -182,6 +186,19 @@ Tailwind CSS v4 では `@theme inline` を使い、CSS変数をそのまま `var
 | ボーダー | `#E2E8F0` | — | 区切り線、入力枠 |
 | 破壊的操作 | `#DC2626` | `#EF4444` | 削除・エラー |
 | 警告 | `#D97706` | `#F59E0B` | 在庫少・注意 |
+| オーバーレイ | ブラック 40% | `#000000` 60% | モーダル・シート・ダイアログ背後のスクリム |
+
+### 2.4 オーバーレイ（スクリム）
+
+モーダル・Sheet・AlertDialog の背後は **減光のみ**で覆い、`backdrop-filter: blur()` は使わない。
+
+減光が弱いままぼかすと、背後の文字がコントラストを保ったまま輪郭だけ崩れ、「読めそうで読めない」状態になる。目が焦点を合わせ続けようとするため、短時間でも疲労を強く感じる。背後を確実に「操作できない」と伝える役割は、ぼかしではなく**輝度差**が担う。
+
+- 不透明度は 40%。背後のレイアウトは判別できるが、読む対象ではないことが一目でわかる水準に置く
+- 色は黒ではなくブランドネイビー。純黒のスクリムは白背景の上で灰色に濁って見える
+- 値は `--overlay` に集約し、`bg-overlay` で参照する。個別コンポーネントで `bg-black/xx` を直書きしない
+
+> shadcn/ui のデフォルト（`bg-black/10` + `backdrop-blur-xs`）はこの方針に反するため、`dialog` / `alert-dialog` / `sheet` の Backdrop を上書き済み。新しいオーバーレイ系コンポーネントを追加したときも同様に置き換える。
 
 ---
 
@@ -552,3 +569,5 @@ import { ShoppingCart, Heart, Search, Store, User } from "lucide-react";
 
 **既存のページ別オーバーライド:**
 - [`design-system/pages/layout.md`](pages/layout.md) — GlobalHeader / GlobalFooter / MobileBottomNav（ダークモード方針含む）
+- [`design-system/pages/auth.md`](pages/auth.md) — ログイン / 会員登録（`(auth)` 専用 chrome・フローティングラベル）
+- [`design-system/pages/user-profile.md`](pages/user-profile.md) — プロフィール設定 / 配送先住所管理（`/profile/*` アカウント領域 chrome・設定フォーム規約）

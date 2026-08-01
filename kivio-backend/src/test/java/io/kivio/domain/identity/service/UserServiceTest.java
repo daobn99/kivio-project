@@ -63,6 +63,34 @@ class UserServiceTest {
     }
 
     @Test
+    void should_expose_has_password_true_when_password_is_set() {
+        UUID userId = UUID.randomUUID();
+        User user = User.builder()
+                .id(userId)
+                .email("buyer@example.com")
+                .displayName("Buyer Taro")
+                .passwordHash("$2a$12$hash")
+                .build();
+        given(userRepository.findByIdOrThrow(userId)).willReturn(user);
+
+        assertThat(userService.getById(userId).hasPassword()).isTrue();
+    }
+
+    @Test
+    void should_expose_has_password_false_for_google_only_user() {
+        UUID userId = UUID.randomUUID();
+        User user = User.builder()
+                .id(userId)
+                .email("google@example.com")
+                .displayName("Google User")
+                .googleId("google-sub-123")
+                .build();
+        given(userRepository.findByIdOrThrow(userId)).willReturn(user);
+
+        assertThat(userService.getById(userId).hasPassword()).isFalse();
+    }
+
+    @Test
     void should_propagate_not_found_when_user_is_absent() {
         UUID userId = UUID.randomUUID();
         given(userRepository.findByIdOrThrow(userId))
@@ -111,6 +139,25 @@ class UserServiceTest {
 
         assertThat(user.getDisplayName()).isEqualTo("New Name");
         assertThat(user.getAvatarUrl()).isEqualTo("https://example.com/old.png");
+    }
+
+    @Test
+    void should_clear_avatar_url_when_empty_string_is_sent() {
+        // 空文字 = クリアの意思表示（未送信の null とは区別する）
+        UUID userId = UUID.randomUUID();
+        User user = User.builder()
+                .id(userId)
+                .email("buyer@example.com")
+                .displayName("Buyer Taro")
+                .avatarUrl("https://example.com/old.png")
+                .build();
+        given(userRepository.findByIdOrThrow(userId)).willReturn(user);
+
+        UserResponse response = userService.updateProfile(userId, new UpdateProfileRequest(null, ""));
+
+        assertThat(user.getAvatarUrl()).isNull();
+        assertThat(response.avatarUrl()).isNull();
+        assertThat(user.getDisplayName()).isEqualTo("Buyer Taro");
     }
 
     // ============================================================
