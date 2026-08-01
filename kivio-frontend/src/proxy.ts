@@ -1,7 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 
 // 認証必須ルート（未認証 → /auth/login へ）。トップレベルのパスプレフィックスで判定する。
-// 一覧の正は docs/design/frontend/FRONTEND_IA.md §1.2 / §1.2b / §1.3。
 const PROTECTED_PATHS = [
   '/cart',
   '/checkout',

@@ -7,7 +7,7 @@ interface AuthMobileLogoProps {
 }
 
 /**
- * モバイル（< md）上部中央のロゴ（auth.md §4）。
+ * モバイル（< md）上部中央のロゴ。
  * 認証を中断してトップへ戻る正規の出口を 1 つだけ残すため `/` へリンクする。
  */
 export function AuthMobileLogo({ className }: AuthMobileLogoProps) {

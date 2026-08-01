@@ -19,7 +19,7 @@ interface BackendTokens {
 /**
  * クライアントへ返す body からトークンの保管責務を分離する。
  * Refresh Token は httpOnly Cookie 専用とし JS から不可視にする。Access Token は
- * 既存設計どおりメモリ（Zustand）保持のため body でも返す（OQ-6 / SECURITY.md §2.1）。
+ * Access Token はメモリ保持のため body でも返す。
  */
 function stripRefreshToken(tokens: BackendTokens) {
   return {

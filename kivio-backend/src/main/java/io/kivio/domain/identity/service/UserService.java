@@ -77,7 +77,7 @@ public class UserService {
      *
      * <p>
      * {@code deleted_at} を設定し、以降 {@code @SQLRestriction} により通常クエリから除外されます。
-     * Shop の連動削除（{@code DB_DESIGN.md §3.2}）は Shop 未実装のため本スライスでは扱いません（OQ-3）。
+     * Shop の連動削除は Shop 自体が未実装のため、まだ扱いません。
      *
      * @throws io.kivio.common.exception.ResourceNotFoundException ユーザーが存在しない場合
      */

@@ -10,7 +10,7 @@ import java.time.Instant;
  * 監査ログリポジトリを表現します。
  *
  * <p>
- * audit_logs は追記専用です。DELETE / UPDATE 操作は禁止されています（AUDIT.md §3.1）。
+ * audit_logs は追記専用です。DELETE / UPDATE 操作は禁止されています。
  */
 public interface AuditLogRepository extends JpaRepository<AuditLog, AuditLog.AuditLogId> {
 

@@ -21,7 +21,7 @@ export function renderWithQuery(ui: ReactElement, options?: RenderOptions) {
 /**
  * renderHook 用 wrapper ファクトリ。QueryClient をテストごとに 1 度だけ生成する
  * （wrapper 関数内で生成すると再レンダリングのたびにキャッシュが消え waitFor が
- * 永久ループする・FRONTEND_TEST_STRATEGY.md §6）。
+ * 永久ループするため）。
  */
 export function createQueryWrapper() {
   const client = createTestQueryClient()

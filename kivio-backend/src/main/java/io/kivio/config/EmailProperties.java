@@ -8,7 +8,7 @@ import org.springframework.validation.annotation.Validated;
 /**
  * 送信メールの差出人情報を表現します。
  *
- * <p>EMAIL_DESIGN.md §1「送信設定」に対応する。dev・prod の各 {@code EmailSender} 実装が共有する。
+ * <p>dev・prod の各 {@code EmailSender} 実装が共有します。
  */
 @Validated
 @ConfigurationProperties(prefix = "app.email")

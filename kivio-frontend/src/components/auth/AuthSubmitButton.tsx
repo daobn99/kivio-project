@@ -9,7 +9,7 @@ interface AuthSubmitButtonProps {
 }
 
 /**
- * 認証フォームの主 CTA（accent・full width・h-11）。auth.md §7.2。
+ * 認証フォームの主 CTA（accent・full width・h-11）。
  */
 export function AuthSubmitButton({ children, pending, disabled }: AuthSubmitButtonProps) {
   return (

@@ -9,7 +9,7 @@ interface GoogleSignInButtonProps {
 }
 
 /**
- * Google サインインボタン（auth.md §10）。NextAuth の signIn("google") を呼ぶ。
+ * Google サインインボタン。NextAuth の signIn("google") を呼ぶ。
  * outline バリアントで accent CTA と差別化し、メール導線を主・ソーシャルを副に見せる。
  */
 export function GoogleSignInButton({ mode }: GoogleSignInButtonProps) {

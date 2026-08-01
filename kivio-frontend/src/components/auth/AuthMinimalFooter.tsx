@@ -1,6 +1,6 @@
 import Link from 'next/link'
 
-// 残すのは法的必須（プライバシー・利用規約・特商法）+ サポート（ヘルプ）の 4 本のみ（auth.md §11）。
+// 残すのは法的必須（プライバシー・利用規約・特商法）+ サポート（ヘルプ）の 4 本のみ。
 // マーケ導線は出さない。Phase 2 は href="#"、実 URL 確定後に差し替える。
 const FOOTER_LINKS = [
   { label: 'プライバシーポリシー', href: '#' },
@@ -10,7 +10,7 @@ const FOOTER_LINKS = [
 ]
 
 /**
- * 認証画面の最小フッター（auth.md §11）。1 行・画面全幅・低彩度（bg-background）。
+ * 認証画面の最小フッター。1 行・画面全幅・低彩度（bg-background）。
  */
 export function AuthMinimalFooter() {
   return (
