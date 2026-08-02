@@ -657,7 +657,9 @@ Content-Type: application/problem+json
 
 | フィールド | 型 | 必須 | 制約 |
 |---|---|---|---|
-| `reason` | string | ◯ | 申請理由（1000文字以内） |
+| `reason` | string | ◯ | 申請理由（1〜1000文字・空白のみ不可。`VALIDATION_RULES.md §6`） |
+
+> **リクエストは `reason` のみ。** `status` / `reviewerId` / `reviewComment` / `reviewedAt` はサーバーが決める値であり受け付けない。新規申請は常に `status = PENDING` で作成される。ショップ名・説明文は承認後の `PATCH /shops/me` で入力するため、申請時には受け取らない。
 
 #### レスポンス（201 Created）
 
@@ -692,6 +694,7 @@ Content-Type: application/problem+json
 ```json
 {
   "id": "...",
+  "applicantId": "...",
   "status": "PENDING",
   "reason": "...",
   "reviewComment": null,
@@ -702,11 +705,15 @@ Content-Type: application/problem+json
 
 `status`: `PENDING` / `APPROVED` / `REJECTED`
 
+> **`null` フィールドはレスポンスから省略される。** `spring.jackson.default-property-inclusion: non_null` の設定により、未審査（`PENDING`）の申請では `reviewComment` / `reviewedAt` は上記のように `null` として出力されるのではなく、**キーごとレスポンスに含まれない**。クライアント側の型は省略を許容する形（例: `reviewComment?: string | null`）で定義すること。この挙動は本 API 固有ではなく全エンドポイント共通。
+
+> **返るのは常に最新の 1 件。** 却下後に再申請したユーザーには新しい `PENDING` の申請が返り、過去の却下履歴は返らない（申請履歴の一覧 API は提供しない）。
+
 #### エラー
 
 | エラーコード | HTTP | 条件 |
 |---|---|---|
-| `RESOURCE_NOT_FOUND` | 404 | 申請が存在しない |
+| `RESOURCE_NOT_FOUND` | 404 | 申請が存在しない（＝**未申請**。クライアントはこれをエラーではなく「申請フォームを出す」正常状態として扱う） |
 
 ---
 

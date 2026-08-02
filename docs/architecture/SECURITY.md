@@ -196,13 +196,24 @@ http.authorizeHttpRequests(auth -> auth
 
     // ロール別制限
     .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
-    .requestMatchers(POST, "/api/v1/seller-applications").hasRole("BUYER")
     .requestMatchers(POST, "/api/v1/products").hasRole("SELLER")
 
     // その他は認証必須
     .anyRequest().authenticated()
 );
 ```
+
+### 3.1 Filter Chain に置かない認可 — `POST /api/v1/seller-applications`
+
+**セラー申請の「BUYER のみ」制限は Filter Chain ではなく Application Service で行う。** かつては `.requestMatchers(POST, "/api/v1/seller-applications").hasRole("BUYER")` を置いていたが、これだと `ROLE_SELLER` / `ROLE_ADMIN` のリクエストがフィルターで 403 `ACCESS_DENIED` に落ち、`ERROR_CODES.md §2.3` が定める **409 `SELLER_APPLICATION_ALREADY_APPROVED` に到達できなかった**ため削除した（`feature/seller-application`・2026-08-02）。
+
+| 観点 | Filter Chain（`hasRole`） | Application Service（採用） |
+|---|---|---|
+| 応答 | 403 `ACCESS_DENIED`（汎用文言） | 409 `SELLER_APPLICATION_ALREADY_APPROVED`（「すでに出品者として承認されています」） |
+| 仕様との整合 | `API_DESIGN.md §4` / `ERROR_CODES.md §2.3` のエラーコードが死ぬ | 仕様どおり |
+| 認可の強度 | 同等（どちらも必ず弾く） | 同等。**Service の判定が唯一の認可ポイントになるため、削除・迂回は不可** |
+
+> **判断基準:** ロール制限が「単なるアクセス可否」なら Filter Chain に置く（`/admin/**`・`POST /products`）。ロール制限が**業務上の意味を持ち、利用者に固有の説明を返すべき**なら Application Service に置く。後者を Filter Chain に置くと、業務エラーコードが到達不能になる。
 
 ---
 

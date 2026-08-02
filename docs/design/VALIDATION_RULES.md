@@ -3,7 +3,8 @@
 
 **作成日：** 2026年6月12日  
 **作成者：** Dao Nguyen  
-**バージョン：** 1.0（Phase 2 Auth/User スコープ）  
+**バージョン：** 1.2（Phase 2 スコープ: Auth / User / 配送先住所 / セラー申請）  
+**改訂履歴：** 1.0 Auth/User（2026-06-12） → 1.1 §5 配送先住所を追加（2026-06-23・`feature/user-profile`） → 1.2 §6 セラー申請を追加・旧 §6 を §7 へ繰り下げ（2026-08-02・`feature/seller-application`）  
 **参照元：** [ERROR_CODES.md](./ERROR_CODES.md)、[API_DESIGN.md](./API_DESIGN.md)、[DATA_DICTIONARY.md](./DATA_DICTIONARY.md)、[REQUIREMENTS.md](../requirements/REQUIREMENTS.md)
 
 ---
@@ -125,6 +126,7 @@ UI 表記は必ず左列に統一する。表記揺れを禁止する。
 | `VerifyOtpRequest` | `otp` | ✅ `@Pattern("\\d{6}")` で整合済み |
 | `ChangePasswordRequest`（`PATCH /users/me/password`） | `currentPassword` / `newPassword` | ✅ `currentPassword`=`@NotBlank` / `newPassword`=`@NotBlank @Size(min=8, max=72)`（2026-06-23・U-01） |
 | `UpdateProfileRequest`（`PATCH /users/me`） | `displayName` / `avatarUrl` | ✅ 部分更新のため `displayName`=`@Size(min=1, max=100)`（`null` 許容＝未送信）/ `avatarUrl`=`@URL`（2026-06-23・U-01） |
+| `CreateSellerApplicationRequest`（`POST /seller-applications`） | `reason` | ⬜ 未実装（`feature/seller-application` SA-04）。規約は §6。`@NotBlank @Size(max=1000)` |
 
 ---
 
@@ -154,11 +156,32 @@ UI 表記は必ず左列に統一する。表記揺れを禁止する。
 
 ---
 
-## 6. 今後の拡張（Phase 3 以降）
+## 6. セラー申請（`POST /seller-applications`）
+
+`feature/seller-application` で追記（2026-08-02）。`API_DESIGN.md §4` / `DB_DESIGN.md §3.4` / `DATA_DICTIONARY §4` の `seller_applications` を根拠とする。
+
+> **リクエストフィールドは `reason` の 1 つだけ。** `status` / `reviewerId` / `reviewComment` / `reviewedAt` は**サーバーが決める値**であり、リクエスト DTO に含めない（mass assignment 防止）。新規申請は常に `status = PENDING` で作成される。
+>
+> **部分更新の API は存在しない。** 却下後の再申請は既存レコードの更新ではなく**新規レコードの作成**（`POST` の再実行）で行うため、`PATCH` 用の緩和した制約は不要（REQUIREMENTS `SELLER-05`）。
+
+| フィールド | 必須 | 制約 | 根拠 | Bean Validation | zod | エラー文言 |
+|---|---|---|---|---|---|---|
+| `reason` | ◯ | 1〜1000文字（空白のみ不可） | DATA_DICTIONARY `seller_applications.reason`（TEXT・NOT NULL）。上限 1000 は `API_DESIGN.md §4` の「1000文字以内」 | `@NotBlank @Size(max=1000)` | `z.string().trim().min(1).max(1000)` | 未入力:「申請理由を入力してください」 / 上限:「申請理由は1000文字以内で入力してください」 |
+
+**確定事項（2026-08-02）:**
+
+| # | 項目 | 決定 |
+|---|---|---|
+| 1 | 下限の担保方法 | **`@NotBlank`**（`@Size(min=1)` は使わない）。`@Size(min=1)` は空白のみ（`"   "`）を通してしまうため（`implementation-plans/user-profile.md §8 S-4` の指摘を踏まえた方針）。zod 側も `.trim()` を挟んでから `.min(1)` する |
+| 2 | 上限のメッセージ | 文字数のみを伝える。DB は TEXT で物理的な上限が無いため、1000 はアプリケーション上の方針値である旨を実装コメントに残す |
+| 3 | `shopName` / `description` の扱い | **本フェーズでは受け取らない。** ショップ名・説明文は承認後の `PATCH /shops/me`（`feature/catalog`）で入力する。旧「今後の拡張」節にあった `shopName` / `category` / `description` の記載は、実スキーマ（`reason` のみ）と一致しないため本改訂で削除した |
+
+---
+
+## 7. 今後の拡張（Phase 3 以降）
 
 以下のフィールドは別フェーズで本書に追記する。
 
-- **SellerApplication**: `shopName`（プラットフォーム全体で一意・100文字）、`category`、`description`
 - **Shop**: `name`（部分UNIQUE・100文字）、ショップ説明、ロゴURL
 - **Product**: `name`、`price`（整数・1円以上）、`stock`、`description`、`images[]`（最大5枚）
 - **Review**: `rating`（1〜5）、`comment`

@@ -1260,6 +1260,7 @@ com.kivio/
 | `users` | 90日 | **匿名化**（PII削除・IDは保持） | 注文履歴との参照整合性維持 |
 | `shops` | 90日 | 匿名化（ショップ名・説明文を削除） | ユーザー退会時に連動 |
 | `addresses` | 90日（ユーザー退会後） | **物理削除**（ユーザー匿名化と同時） | 全項目がPII。注文の配送先は`orders.delivery_*`にスナップショット保存され、`orders.address_id`は`ON DELETE SET NULL`のため参照整合性に影響しない |
+| `seller_applications` | 90日（ユーザー退会後） | **匿名化**（`reason` / `review_comment` を削除・IDと審査結果は保持） | `reason`は自由記述で氏名・屋号・連絡先等のPIIを含みうる。`applicant_id`から個人を再特定できるため`users`匿名化と同時に本文を消す。一方で「誰がいつ承認されてセラーになったか」は権限昇格の監査証跡として保持する必要があるため物理削除しない |
 | `categories` | 180日 | 物理削除 | 商品の`category_id`はNULL許容で設計 |
 | `products` | 180日（`status='DELETED'`後） | 物理削除 | 注文明細はスナップショット保存のため影響なし |
 | `orders` / `order_items` | **7年** | 匿名化（PII項目のみ） | 法人税法・青色申告要件 |
@@ -1297,6 +1298,20 @@ WHERE user_id IN (
   SELECT id FROM users
   WHERE deleted_at < NOW() - INTERVAL '90 days'
 );
+```
+
+`seller_applications.reason` は申請者が自由に記述するため、氏名・屋号・連絡先・事業内容といったPIIを含みうる。`users` を匿名化しても `applicant_id` から本文をたどれば個人が再特定できてしまうため、**同一トランザクションで本文フィールドを匿名化する**（RET-10）。ただしレコード自体は削除しない。`ROLE_SELLER` への権限昇格が「いつ・誰の承認で行われたか」は監査証跡として保持する必要があるためである。
+
+```sql
+-- seller_applications 匿名化（users 匿名化と同一トランザクション）
+UPDATE seller_applications SET
+  reason         = '(削除済み)',
+  review_comment = CASE WHEN review_comment IS NULL THEN NULL ELSE '(削除済み)' END
+WHERE applicant_id IN (
+  SELECT id FROM users
+  WHERE deleted_at < NOW() - INTERVAL '90 days'
+)
+  AND reason <> '(削除済み)';  -- 冪等性確保
 ```
 
 ### 15.5 audit_logs のアーカイブ戦略
@@ -1362,6 +1377,7 @@ public void anonymizeExpiredUsers() {
 | RET-07 | バッチジョブは `@Scheduled` で実装し、実行結果を `audit_logs` に記録する |
 | RET-08 | `audit_logs` テーブルはcreated_atによる月別パーティショニングを採用する |
 | RET-09 | ユーザー匿名化（RET-01）と同一トランザクションで、当該ユーザーの `addresses` を物理削除する |
+| RET-10 | ユーザー匿名化（RET-01）と同一トランザクションで、当該ユーザーの `seller_applications.reason` / `review_comment` を匿名化する（レコード自体は権限昇格の監査証跡として保持） |
 
 ---
 

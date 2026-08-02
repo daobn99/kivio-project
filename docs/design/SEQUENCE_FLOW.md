@@ -313,7 +313,9 @@ sequenceDiagram
 
 ## 3. Seller Application
 
-**エンドポイント:** `POST /seller-applications` | `PATCH /admin/seller-applications/{id}/approve` | `PATCH /admin/seller-applications/{id}/reject`
+**エンドポイント:** `POST /seller-applications` | `POST /admin/seller-applications/{id}/approve` | `POST /admin/seller-applications/{id}/reject`
+
+> **列名・HTTP メソッドの正:** 本図の SQL は `DB_DESIGN.md §3.4` の実スキーマに準拠する（申請者は `applicant_id`、申請日時は `created_at`。`user_id` / `submitted_at` という列は存在しない）。審査 API のメソッドは `API_DESIGN.md §15 管理者` / `REQUIREMENTS.md §API 一覧` と揃えて `POST`（状態遷移を起こす非冪等な操作のため）。
 
 ```mermaid
 sequenceDiagram
@@ -325,32 +327,35 @@ sequenceDiagram
     participant M as Resend
 
     Note over B,M: ── ① 出品者申請 ──
-    B->>S: POST /api/v1/seller-applications<br/>(Bearer: access_token)<br/>{shopName, description, ...}
-    S->>DB: SELECT * FROM seller_applications<br/>WHERE user_id = ? AND status IN (PENDING, APPROVED)
+    B->>S: POST /api/v1/seller-applications<br/>(Bearer: access_token)<br/>{reason}
+    S->>DB: SELECT role FROM users WHERE id = ?
+    S->>DB: SELECT * FROM seller_applications<br/>WHERE applicant_id = ? AND status IN (PENDING, APPROVED)
 
-    alt 審査中の申請あり
+    alt role が ROLE_BUYER でない / APPROVED 申請あり
+        S-->>B: 409 SELLER_APPLICATION_ALREADY_APPROVED
+    else 審査中の申請あり
         S-->>B: 409 SELLER_APPLICATION_PENDING
-    else 承認済み (すでに SELLER)
-        S-->>B: 409 ALREADY_APPROVED
-    else 申請可能
-        S->>DB: INSERT INTO seller_applications<br/>(user_id, status=PENDING, submitted_at=NOW())
+    else 申請可能 (未申請 または REJECTED のみ)
+        S->>DB: INSERT INTO seller_applications<br/>(applicant_id, reason, status=PENDING)
+        Note right of DB: created_at は DEFAULT NOW()。<br/>却下後の再申請は既存行を更新せず新規行を作る (SELLER-05)
         S->>DB: INSERT INTO audit_logs<br/>(action=SELLER_APPLICATION_SUBMITTED)
-        S-->>B: 201 {application_id, status: PENDING}
+        S-->>B: 201 {id, applicantId, reason, status: PENDING, createdAt}
     end
 
     Note over A,M: ── ② 管理者: 申請一覧確認 ──
     A->>S: GET /api/v1/admin/seller-applications<br/>?status=PENDING&page=0&size=20
-    S->>DB: SELECT * FROM seller_applications<br/>WHERE status=PENDING ORDER BY submitted_at
+    S->>DB: SELECT * FROM seller_applications<br/>WHERE status=PENDING ORDER BY created_at
     S-->>A: 200 PageResponse<SellerApplicationSummary>
 
     Note over A,M: ── ③a 承認 ──
-    A->>S: PATCH /api/v1/admin/seller-applications/{id}/approve<br/>(Bearer: admin_token)
+    A->>S: POST /api/v1/admin/seller-applications/{id}/approve<br/>(Bearer: admin_token)
     S->>DB: SELECT * FROM seller_applications<br/>WHERE id = ?
     opt status が PENDING でない
-        S-->>A: 409 NOT_REVIEWABLE
+        S-->>A: 409 SELLER_APPLICATION_NOT_REVIEWABLE
     end
-    S->>DB: UPDATE seller_applications<br/>SET status=APPROVED, reviewed_by=admin_id, reviewed_at=NOW()
-    S->>DB: UPDATE users SET role=SELLER WHERE id=applicant_user_id
+    S->>DB: UPDATE seller_applications<br/>SET status=APPROVED, reviewer_id=admin_id, reviewed_at=NOW()
+    S->>DB: UPDATE users SET role='ROLE_SELLER' WHERE id=applicant_id
+    S->>DB: INSERT INTO shops (owner_id, name, status)<br/>ショップレコード自動生成 (SELLER-03)
     S->>DB: INSERT INTO audit_logs (action=SELLER_APPLICATION_APPROVED)
     S->>DB: INSERT INTO notifications<br/>(user_id=applicant, type=SELLER_APPROVED)
     S->>WS: /topic/notifications/{applicant_user_id}<br/>{type: SELLER_APPROVED}
@@ -358,17 +363,17 @@ sequenceDiagram
     S-->>A: 200 {status: APPROVED}
 
     Note over A,M: ── ③b 拒否 ──
-    A->>S: PATCH /api/v1/admin/seller-applications/{id}/reject<br/>{reason}
+    A->>S: POST /api/v1/admin/seller-applications/{id}/reject<br/>{comment}
     S->>DB: SELECT * FROM seller_applications WHERE id = ?
     opt status が PENDING でない
-        S-->>A: 409 NOT_REVIEWABLE
+        S-->>A: 409 SELLER_APPLICATION_NOT_REVIEWABLE
     end
-    S->>DB: UPDATE seller_applications<br/>SET status=REJECTED, rejection_reason=?, reviewed_at=NOW()
+    S->>DB: UPDATE seller_applications<br/>SET status=REJECTED, review_comment=?,<br/>reviewer_id=admin_id, reviewed_at=NOW()
     Note right of DB: users.role は BUYER のまま変更なし
     S->>DB: INSERT INTO audit_logs (action=SELLER_APPLICATION_REJECTED)
     S->>DB: INSERT INTO notifications<br/>(user_id=applicant, type=SELLER_REJECTED)
-    S->>WS: /topic/notifications/{applicant_user_id}<br/>{type: SELLER_REJECTED, reason}
-    S->>M: Send rejection email (reason 含む)
+    S->>WS: /topic/notifications/{applicant_user_id}<br/>{type: SELLER_REJECTED, comment}
+    S->>M: Send rejection email (review_comment 含む)
     S-->>A: 200 {status: REJECTED}
 ```
 
@@ -719,6 +724,7 @@ sequenceDiagram
         J->>DB: UPDATE users SET<br/>  email = 'deleted_' || id || '@kivio.invalid',<br/>  display_name = '退会済みユーザー',<br/>  password_hash = NULL,<br/>  avatar_url = NULL,<br/>  google_id = NULL<br/>WHERE id = ?
         J->>DB: UPDATE shops SET<br/>  name = 'クローズドショップ',<br/>  description = NULL,<br/>  logo_url = NULL<br/>WHERE seller_id = ?<br/>  AND deleted_at IS NOT NULL
         J->>DB: DELETE FROM addresses<br/>WHERE user_id = ?<br/>(全項目PII・物理削除 RET-09)
+        J->>DB: UPDATE seller_applications SET<br/>  reason = '(削除済み)',<br/>  review_comment = '(削除済み)'<br/>WHERE applicant_id = ?<br/>(自由記述にPII・レコードは監査証跡として保持 RET-10)
         J->>DB: INSERT INTO audit_logs<br/>(actor_id=NULL, action=USER_ANONYMIZED,<br/>entity_type=USER, entity_id=?, outcome=SUCCESS)
     end
     J->>DB: INSERT INTO audit_logs<br/>(action=BATCH_USER_ANONYMIZATION_COMPLETED,<br/>new_value={processedCount})
