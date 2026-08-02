@@ -118,7 +118,7 @@ domain/{context}/
 ├── controller/    @RestController — HTTP の入出力のみ
 ├── service/       @Service + @Transactional — ユースケース調整
 ├── domain/        集約ルート・Entity・Value Object・Domain Event
-├── repository/    @Repository インターフェース（実装は Spring が生成）
+├── repository/    Spring Data JPA インターフェース（実装は Spring が生成）
 └── dto/           Request DTO（Lombok class）・Response DTO（record）・Mapper
 ```
 
@@ -398,12 +398,13 @@ public class ProductService {
         return PageResponse.of(productRepository.findAll(pageable).map(ProductResponse::from));
     }
 
+    // 操作主体の userId は Controller が @AuthenticationPrincipal から渡す（§5.2）
     @Auditable(action = "PRODUCT_CREATED", entityType = "PRODUCT")
-    public ProductResponse create(CreateProductRequest request) {
-        Shop shop = shopRepository.findByOwnerIdOrThrow(SecurityHelper.getCurrentUserId());
+    public ProductResponse create(UUID ownerId, CreateProductRequest request) {
+        Shop shop = shopRepository.findByOwnerIdOrThrow(ownerId);
         Product product = Product.builder()
-                .name(request.getName())
-                .price(request.getPrice())
+                .name(request.name())
+                .price(request.price())
                 .shop(shop)
                 .build();
         Product saved = productRepository.save(product);
@@ -412,17 +413,16 @@ public class ProductService {
     }
 
     @Auditable(action = "PRODUCT_DELETED", entityType = "PRODUCT", entityIdParam = "id")
-    public void delete(UUID id) {
+    public void delete(UUID ownerId, UUID id) {
         Product product = productRepository.findByIdOrThrow(id);
-        verifyOwnership(product);
+        verifyOwnership(product, ownerId);
         product.delete();  // status = DELETED（ソフトデリート）
         productRepository.save(product);
     }
 
-    private void verifyOwnership(Product product) {
-        UUID currentUserId = SecurityHelper.getCurrentUserId();
-        if (!product.getShop().getOwnerId().equals(currentUserId)) {
-            throw new AccessDeniedException("このリソースへのアクセス権がありません");
+    private void verifyOwnership(Product product, UUID ownerId) {
+        if (!product.getShop().getOwnerId().equals(ownerId)) {
+            throw new ResourceAccessDeniedException();
         }
     }
 }
@@ -441,7 +441,8 @@ public class ProductService {
 **責務:** DB アクセス専用。ビジネスロジックを持たない。
 
 ```java
-@Repository
+// @Repository は付けない。JpaRepository を継承したインターフェースは
+// Spring Data JPA が自動的に Bean 登録するため、付けても効果がない
 public interface ProductRepository extends JpaRepository<Product, UUID> {
 
     // N+1 防止: 必要な関連は JOIN FETCH で一括取得
@@ -468,6 +469,7 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
 
 **ルール:**
 - 集約ルートごとに Repository を 1 つ定義する（`OrderItem` の Repository は作らない）
+- `@Repository` は付与しない（Spring Data JPA が自動登録するため不要）
 - `findAll()` の安易な使用を避け、必要なフィールドだけを取得する Projection を検討する
 - `findByIdOrThrow()` のような便利メソッドは `default` メソッドとして Repository に定義する
 - ネイティブ SQL は原則禁止。`EXPLAIN ANALYZE` で検証が必要な場合のみ `@Query(nativeQuery = true)` を使う
@@ -703,30 +705,46 @@ public class SecurityConfig {
 
 ### 5.2 現在のユーザー情報の取得
 
-SecurityContext から現在のユーザーを取得するヘルパーを `common` に定義し、Service 層から利用する。
+**Controller が `@AuthenticationPrincipal` で認証情報を受け取り、Service には `UUID` を引数で渡す。** Service 層から `SecurityContextHolder` を参照しない。
+
+理由は 2 つある。① Service が SecurityContext に依存しないため、単体テストでモックの認証コンテキストを組み立てる必要がない ② 「誰の操作か」がメソッドシグネチャに現れ、呼び出し側から追える（バッチ処理など認証コンテキストが無い経路からも同じ Service を再利用できる）。
 
 ```java
-// common/SecurityHelper.java
-public final class SecurityHelper {
+// config/security/KivioUserDetails.java — JWT の sub から復元される principal
+public class KivioUserDetails implements UserDetails {
 
-    public static UUID getCurrentUserId() {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null || !auth.isAuthenticated()) {
-            throw new AuthenticationCredentialsNotFoundException("認証情報が見つかりません");
-        }
-        KivioUserDetails userDetails = (KivioUserDetails) auth.getPrincipal();
-        return userDetails.getUserId();
-    }
+    private final UUID userId;
+    private final String role;
 
-    public static boolean hasRole(String role) {
-        return SecurityContextHolder.getContext().getAuthentication()
-                .getAuthorities().stream()
-                .anyMatch(a -> a.getAuthority().equals("ROLE_" + role));
-    }
-
-    private SecurityHelper() {}
+    public UUID getUserId() { ... }
 }
 ```
+
+```java
+// Controller: principal から userId だけを取り出して Service へ渡す
+@GetMapping("/me")
+@Operation(summary = "自分のセラー申請状況")
+public ResponseEntity<SellerApplicationResponse> getMyLatest(
+        @AuthenticationPrincipal KivioUserDetails principal) {
+    return ResponseEntity.ok(sellerApplicationService.getMyLatest(principal.getUserId()));
+}
+```
+
+```java
+// Service: userId を引数で受け取る。SecurityContextHolder は参照しない
+@Transactional(readOnly = true)
+public SellerApplicationResponse getMyLatest(UUID applicantId) {
+    return sellerApplicationRepository.findFirstByApplicantIdOrderByCreatedAtDesc(applicantId)
+            .map(SellerApplicationResponse::from)
+            .orElseThrow(() -> new ResourceNotFoundException("セラー申請が見つかりません"));
+}
+```
+
+**ルール:**
+- 対象ユーザーは**常にトークンの `sub`（`principal.getUserId()`）から解決する**。パス変数・リクエストボディから `userId` を受け取らない（他人になりすませてしまう）
+- `/me` 系エンドポイントは URL に user_id を含めない
+- 所有権チェック（`entity.getUserId().equals(currentUserId)`）は Service 層で行う（§4.3）
+- 監査ログの actor は `AuditLogAspect` が SecurityContext から自動取得するため、Service で actor を組み立てる必要はない（§11）
 
 ### 5.3 メソッドレベル認可
 
@@ -823,155 +841,220 @@ public class RateLimitingFilter extends OncePerRequestFilter {
 
 ### 6.1 例外クラス階層
 
+すべてのアプリケーション例外は `KivioException` を継承する。`KivioException` は **エラーコード（`code`）と HTTP ステータス（`status`）を自身が持つ**。この 2 つを例外側に持たせることで、`GlobalExceptionHandler` は例外の型ごとにハンドラーを増やさずに済む（§6.2）。
+
 ```
-KivioException（abstract）
-├── ResourceNotFoundException（404）
-├── BusinessRuleException（422）
-│   ├── OrderNotCancellableException
-│   ├── InsufficientStockException
-│   └── InvalidOrderStateException
+KivioException（abstract・code + status を保持）
+├── BadRequestException（400・abstract）
+│   ├── OtpExpiredException / OtpInvalidException
+│   ├── PasswordChangeFailedException
+│   └── RegistrationSessionInvalidException
+├── UnauthorizedException（401・abstract）
+│   ├── InvalidCredentialsException
+│   ├── RefreshTokenInvalidException
+│   └── GoogleTokenInvalidException
+├── TokenExpiredException（401・具象）
+├── TokenInvalidException（401・具象）
+├── ForbiddenException（403・abstract）
+│   ├── UserDeactivatedException
+│   └── ResourceAccessDeniedException
+├── ResourceNotFoundException（404・具象）
 ├── ConflictException（409）
-│   └── DuplicateEmailException
-└── ExternalServiceException（502）
-    ├── StripeException
-    └── CloudinaryException
+│   ├── EmailAlreadyRegisteredException
+│   ├── SellerApplicationPendingException
+│   └── SellerApplicationAlreadyApprovedException
+├── BusinessRuleException（422・abstract）
+└── TooManyRequestsException（429・abstract）
+    ├── OtpMaxAttemptsExceededException
+    └── OtpResendThrottledException
 ```
 
+- ステータス別の基底クラスは `io.kivio.common.exception` に置く。**具象例外は各ドメインの `exception/` パッケージ**に置く（`domain/identity/exception/` 等）。
+- ステータス別の基底クラスは `abstract` とし、コンストラクタを `protected` にする。`ConflictException` と `ResourceNotFoundException` のみ具象クラスだが、**`ConflictException` のコンストラクタは `protected`** のため、409 を返したい場合は必ずサブクラスを定義する。
+- `ExternalServiceException`（502）は外部サービス連携の実装時に追加する（Phase 5 以降）。
+
 ```java
-// 基底例外クラス
+// 基底例外クラス（io.kivio.common.exception）
 public abstract class KivioException extends RuntimeException {
 
     private final String code;
+    private final HttpStatusCode status;
 
-    protected KivioException(String message, String code) {
+    // 引数順は code → message → status。message は super() へ渡す
+    protected KivioException(String code, String message, HttpStatusCode status) {
         super(message);
         this.code = code;
+        this.status = status;
     }
 
     public String getCode() {
         return code;
     }
-}
 
-// 404: リソース未発見
-public class ResourceNotFoundException extends KivioException {
-
-    public ResourceNotFoundException(String resource, UUID id) {
-        super(resource + " が見つかりません: " + id, "RESOURCE_NOT_FOUND");
+    public HttpStatusCode getStatus() {
+        return status;
     }
 }
 
-// 422: ビジネスルール違反の基底（サブクラスで具体的な例外を定義）
+// ステータス別の基底クラス: status を固定し、サブクラスには code と message だけを書かせる
 public abstract class BusinessRuleException extends KivioException {
 
-    protected BusinessRuleException(String message, String code) {
-        super(message, code);
+    protected BusinessRuleException(String code, String message) {
+        super(code, message, HttpStatus.UNPROCESSABLE_CONTENT);
     }
 }
 
-// 422: 具体的なビジネスルール違反
-public class InsufficientStockException extends BusinessRuleException {
-
-    public InsufficientStockException(UUID productId, int requested, int available) {
-        super(String.format("在庫不足: productId=%s requested=%d available=%d",
-                productId, requested, available), "INSUFFICIENT_STOCK");
-    }
-}
-
-public class OrderNotCancellableException extends BusinessRuleException {
-
-    public OrderNotCancellableException(UUID orderId, OrderStatus currentStatus) {
-        super(String.format("注文をキャンセルできません: orderId=%s status=%s", orderId, currentStatus),
-                "ORDER_NOT_CANCELLABLE");
-    }
-}
-
-// 409: 競合
 public class ConflictException extends KivioException {
 
-    protected ConflictException(String message, String code) {
-        super(message, code);
+    protected ConflictException(String code, String message) {
+        super(code, message, HttpStatus.CONFLICT);
     }
 }
 
-public class DuplicateEmailException extends ConflictException {
+// 404 のみ、エンティティ名 + ID からメッセージを組み立てるコンストラクタを併せ持つ
+public class ResourceNotFoundException extends KivioException {
 
-    public DuplicateEmailException(String email) {
-        super("このメールアドレスはすでに登録されています: " + email, "DUPLICATE_EMAIL");
+    public ResourceNotFoundException(String detail) {
+        super("RESOURCE_NOT_FOUND", detail, HttpStatus.NOT_FOUND);
+    }
+
+    public ResourceNotFoundException(String entityName, Object id) {
+        super("RESOURCE_NOT_FOUND",
+                "ID '%s' の %s は存在しないか削除されています".formatted(id, entityName),
+                HttpStatus.NOT_FOUND);
     }
 }
 ```
 
+**具象例外の書き方:**
+
+```java
+// io.kivio.domain.identity.exception
+/**
+ * メールアドレス重複登録例外を表現します。
+ */
+public class EmailAlreadyRegisteredException extends ConflictException {
+
+    public EmailAlreadyRegisteredException() {
+        super("EMAIL_ALREADY_REGISTERED", "このメールアドレスは既に登録されています");
+    }
+}
+```
+
+**ルール:**
+- `code` は `UPPER_SNAKE_CASE`。**`docs/design/ERROR_CODES.md` に定義済みのコードと一字一句一致させる**（`type` と `title` はこの `code` から機械的に導出されるため、コードがずれると problem type の URL までずれる）
+- メッセージは**利用者に見える文言**として書く。他ユーザーの情報・内部 ID・DB 制約名を含めない
+- 引数を取らない例外（メッセージが固定）は引数なしコンストラクタにする。ID 等を埋め込む必要がある場合のみ引数を取る
+- `ResourceNotFoundException(String entityName, Object id)` はメッセージに ID を埋め込む。**自分以外の ID を渡さない**（渡す ID がリクエスト元のものでない場合は単一引数版を使う）
+
 ### 6.2 グローバル例外ハンドラー
+
+`io.kivio.config.security.GlobalExceptionHandler` に集約する。**`KivioException` は 1 つのハンドラーで処理するため、例外クラスを増やしてもハンドラーを追加する必要はない。**
 
 ```java
 // @Order(Ordered.HIGHEST_PRECEDENCE) が必須。
 // spring.mvc.problemdetails.enabled=true を有効にすると Spring Boot が
 // ProblemDetailsExceptionHandler を自動登録し、MethodArgumentNotValidException 等を
 // 横取りする。最高優先度を明示することでカスタムハンドラーを確実に先に適用する。
+@Slf4j
 @Order(Ordered.HIGHEST_PRECEDENCE)
 @RestControllerAdvice
-@Slf4j
 public class GlobalExceptionHandler {
 
-    // JSON パースエラー（Content-Type 未指定・不正な JSON 形式）
-    @ExceptionHandler(HttpMessageNotReadableException.class)
-    public ProblemDetail handleMessageNotReadable(HttpMessageNotReadableException ex,
-                                                   HttpServletRequest request) {
-        ProblemDetail detail = ProblemDetail.forStatusAndDetail(
-                HttpStatus.BAD_REQUEST, "リクエストボディの形式が正しくありません");
-        detail.setProperty("code", "INVALID_REQUEST_BODY");
-        return detail;
+    // 機微情報を含みうるフィールドは errors の rejectedValue に載せない
+    private static final Set<String> SENSITIVE_FIELDS =
+            Set.of("password", "token", "secret", "credential", "otp");
+
+    @Value("${app.problem-base-url:https://kivio.example.com}")
+    private String problemBaseUrl;
+
+    // すべての KivioException をここで処理する。個別のハンドラーは定義しない
+    @ExceptionHandler(KivioException.class)
+    public ProblemDetail handleKivioException(KivioException ex, HttpServletRequest request) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(ex.getStatus(), ex.getMessage());
+        // type / title は code から機械的に導出する（SELLER_APPLICATION_PENDING
+        // → /problems/seller-application-pending・"Seller Application Pending"）
+        problem.setType(URI.create(problemBaseUrl + "/problems/" + toKebabCase(ex.getCode())));
+        problem.setTitle(toTitle(ex.getCode()));
+        problem.setInstance(URI.create(request.getRequestURI()));
+        problem.setProperty("code", ex.getCode());
+        return problem;
     }
 
     // Bean Validation エラー（422: フィールド別詳細を errors に含める）
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ProblemDetail handleValidation(MethodArgumentNotValidException ex) {
-        ProblemDetail detail = ProblemDetail.forStatus(HttpStatus.UNPROCESSABLE_CONTENT);
-        detail.setProperty("code", "VALIDATION_FAILED");
-        detail.setProperty("errors", ex.getBindingResult().getFieldErrors().stream()
-                .map(e -> Map.of("field", e.getField(), "message", e.getDefaultMessage()))
-                .toList());
-        return detail;
+    public ProblemDetail handleValidation(MethodArgumentNotValidException ex,
+                                          HttpServletRequest request) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.UNPROCESSABLE_CONTENT, "リクエストの入力値に不正があります");
+        problem.setProperty("code", "VALIDATION_FAILED");
+        // field / message に加え、機微でないフィールドのみ rejectedValue を含める
+        problem.setProperty("errors", buildFieldErrors(ex.getBindingResult().getFieldErrors()));
+        return problem;
     }
 
-    // リソース未発見
-    @ExceptionHandler(ResourceNotFoundException.class)
-    public ProblemDetail handleNotFound(ResourceNotFoundException ex) {
-        ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
-        detail.setProperty("code", ex.getCode());
-        return detail;
+    // DB の一意制約違反。アプリ側でチェック済みの重複は個別の KivioException で返すため、
+    // ここに到達するのは並行リクエストによる競合。サーバー不具合ではないので 500 ではなく 409 とする
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ProblemDetail handleDataIntegrityViolation(DataIntegrityViolationException ex,
+                                                      HttpServletRequest request) {
+        log.warn("data_integrity_violation path={} correlationId={} cause={}",
+                request.getRequestURI(), MDC.get("correlationId"),
+                ex.getMostSpecificCause().getMessage());
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.CONFLICT, "他の操作と競合したため処理できませんでした。再度お試しください");
+        problem.setProperty("code", "DUPLICATE_ENTRY");
+        return problem;
     }
 
-    // ビジネスルール違反
-    @ExceptionHandler(BusinessRuleException.class)
-    public ProblemDetail handleBusinessRule(BusinessRuleException ex) {
-        ProblemDetail detail = ProblemDetail.forStatusAndDetail(
-                HttpStatus.UNPROCESSABLE_CONTENT, ex.getMessage());
-        detail.setProperty("code", ex.getCode());
-        return detail;
-    }
-
-    // 想定外のエラー（ログに残してから返す）
+    // 想定外のエラー（ログに残してから返す。例外の内容はクライアントに漏らさない）
     @ExceptionHandler(Exception.class)
-    public ProblemDetail handleUnexpected(Exception ex, HttpServletRequest req) {
+    public ProblemDetail handleGeneral(Exception ex, HttpServletRequest request) {
         log.error("unexpected_error path={} correlationId={}",
-                req.getRequestURI(), MDC.get("correlationId"), ex);
-        return ProblemDetail.forStatusAndDetail(
-                HttpStatus.INTERNAL_SERVER_ERROR, "予期しないエラーが発生しました");
+                request.getRequestURI(), MDC.get("correlationId"), ex);
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.INTERNAL_SERVER_ERROR, "サーバー内部エラーが発生しました");
+        problem.setProperty("code", "INTERNAL_SERVER_ERROR");
+        return problem;
     }
 }
 ```
 
+上記のほか、`HttpMessageNotReadableException`（400 `INVALID_REQUEST_BODY`）・`AuthenticationException`（401 `UNAUTHORIZED`）・`AccessDeniedException`（403 `ACCESS_DENIED`）のハンドラーを持つ。いずれも `type` / `title` / `instance` / `code` を同じ形で設定する。
+
+**ルール:**
+- **ドメイン例外ごとに `@ExceptionHandler` を追加しない。** `KivioException` を継承していれば自動的に正しいステータスとコードで返る
+- 新しいエラーコードを追加したら `docs/design/ERROR_CODES.md` の一覧と problem type 一覧に必ず追記する
+- `catch` して別の例外に変換する場合を除き、Service / Controller で `try-catch` を書かない
+
 **エラーレスポンス形式（RFC 9457）:**
+
+`type` と `title` は `code` から導出される（`app.problem-base-url` + `/problems/` + kebab-case、および各語を先頭大文字にした文字列）。`instance` にはリクエストパスが入る。
 
 ```json
 {
-  "type": "https://kivio.io/problems/insufficient-stock",
-  "title": "Unprocessable Entity",
+  "type": "https://kivio.example.com/problems/seller-application-pending",
+  "title": "Seller Application Pending",
+  "status": 409,
+  "detail": "審査中の申請があります。結果をお待ちください",
+  "instance": "/api/v1/seller-applications",
+  "code": "SELLER_APPLICATION_PENDING"
+}
+```
+
+バリデーションエラー（422）は `errors` 配列を追加で持つ。`rejectedValue` は機微フィールド（`password` / `token` / `secret` / `credential` / `otp` を名前に含むもの）では省略される。
+
+```json
+{
+  "type": "https://kivio.example.com/problems/validation-failed",
+  "title": "Validation Failed",
   "status": 422,
-  "detail": "在庫が不足しています",
-  "code": "INSUFFICIENT_STOCK"
+  "detail": "リクエストの入力値に不正があります",
+  "instance": "/api/v1/seller-applications",
+  "code": "VALIDATION_FAILED",
+  "errors": [
+    { "field": "reason", "message": "申請理由を入力してください", "rejectedValue": "" }
+  ]
 }
 ```
 

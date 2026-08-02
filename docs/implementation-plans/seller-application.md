@@ -2,7 +2,7 @@
 **ブランチ:** `feature/seller-application`  
 **担当 Phase:** Phase 2（`SENIOR_SETUP_PLAN.md` バーティカルスライス #3）  
 **最終更新:** 2026-08-02  
-**ステータス:** 🟡 ドキュメント同期タスク（SA-05 / SA-06 / SA-13 / SA-13b）完了。**Open Questions は全件クローズ済み**（2026-08-02）。実装タスクは未着手で、SA-00 から着手可能。
+**ステータス:** 🟡 バックエンド実装（SA-00〜SA-10）完了（2026-08-02）。残: バックエンドテスト（SA-11 / SA-12）・フロントエンド一式（SA-14〜SA-19）。**`V2` のチェックサムが変わったため、開発 DB の `docker compose down -v` が未実施**（オーナー対応待ち）。
 
 > **⚠️ 着手前の必須手順（OQ-3 の決定に伴う）:** 本スライスは `V2__create_identity_tables.sql` を**直接編集**する。既存の開発 DB では Flyway が `Migration checksum mismatch` で起動に失敗するため、**実装開始前に `docker compose down -v` で全テーブルをドロップして作り直すこと**（実施はプロジェクトオーナーが行う）。Testcontainers は毎回新規 DB を立てるため CI・テストへの影響はない。
 
@@ -490,17 +490,17 @@ src/
 
 | ID | タスク | 担当 | 依存 | ステータス |
 |---|---|---|---|---|
-| SA-00 | 前提確認（`seller_applications` スキーマ・インデックス・`SecurityConfig` L103・Seed ユーザー・FE の既存リンク/queryKeys/ApiErrorCode） | BE | なし | ⬜ Todo |
-| SA-01 | `SecurityConfig` から `POST /api/v1/seller-applications` の `hasRole("BUYER")` を削除（OQ-1）※`SECURITY.md §3.1` への反映は完了済み | BE | SA-00 | ⬜ Todo |
-| SA-02 | `SellerApplicationStatus` enum + `SellerApplication` Entity | BE | SA-00 `[並列可]` | ⬜ Todo |
-| SA-03 | `SellerApplicationRepository`（`existsByApplicantIdAndStatus` / `findFirstBy...OrderByCreatedAtDesc`） | BE | SA-02 | ⬜ Todo |
-| SA-04 | DTO 2 本 + 例外 2 本（`ConflictException` 継承） | BE | なし `[並列可]` | ⬜ Todo |
+| SA-00 | 前提確認（`seller_applications` スキーマ・インデックス・`SecurityConfig` L103・Seed ユーザー・FE の既存リンク/queryKeys/ApiErrorCode） | BE | なし | ✅ Done（2026-08-02・全項目が計画書の記述どおりであることを確認） |
+| SA-01 | `SecurityConfig` から `POST /api/v1/seller-applications` の `hasRole("BUYER")` を削除（OQ-1）※`SECURITY.md §3.1` への反映は完了済み | BE | SA-00 | ✅ Done（`SecurityConfig.java` の 1 行削除のみ） |
+| SA-02 | `SellerApplicationStatus` enum + `SellerApplication` Entity | BE | SA-00 `[並列可]` | ✅ Done |
+| SA-03 | `SellerApplicationRepository`（`existsByApplicantIdAndStatus` / `findFirstBy...OrderByCreatedAtDesc`） | BE | SA-02 | ✅ Done |
+| SA-04 | DTO 2 本 + 例外 2 本（`ConflictException` 継承） | BE | なし `[並列可]` | ✅ Done（文言は `VALIDATION_RULES.md §6` と一致） |
 | SA-05 | `VALIDATION_RULES.md` に `reason` の節を追記（§6 新設・旧 §6→§7 繰り下げ・§4 実装同期状況も更新） | DOC | なし `[並列可]` | ✅ Done（2026-08-02） |
 | SA-06 | `AUDIT.md §4` に `SELLER_APPLICATION_SUBMITTED` を追記（+ 新規作成イベントの `entity_id` が null になる旨の注記） | DOC | なし `[並列可]` | ✅ Done（2026-08-02） |
-| SA-07 | `SellerApplicationService`（3 段の申請可否判定 + `@Auditable`） | BE | SA-03, SA-04, SA-01 | ⬜ Todo |
-| SA-08 | `SellerApplicationController`（POST 201 / GET me 200・Swagger アノテーション） | BE | SA-07 | ⬜ Todo |
-| SA-09 | `V2__create_identity_tables.sql` に部分 UNIQUE インデックスを直接追記（OQ-3）※事前に `docker compose down -v` 済みであること | BE | SA-00 | ⬜ Todo |
-| SA-10 | Seed: `dev/V14__seed_seller_applications.sql`（+ 検証用 BUYER 2 名） | BE | SA-00 | ⬜ Todo |
+| SA-07 | `SellerApplicationService`（3 段の申請可否判定 + `@Auditable`） | BE | SA-03, SA-04, SA-01 | ✅ Done |
+| SA-08 | `SellerApplicationController`（POST 201 / GET me 200・Swagger アノテーション） | BE | SA-07 | ✅ Done |
+| SA-09 | `V2__create_identity_tables.sql` に部分 UNIQUE インデックスを直接追記（OQ-3）※事前に `docker compose down -v` 済みであること | BE | SA-00 | ✅ Done（**開発 DB の作り直しは未実施 — オーナー対応待ち**） |
+| SA-10 | Seed: `dev/V14__seed_seller_applications.sql`（+ 検証用 BUYER 2 名） | BE | SA-00 | ✅ Done（OQ-5 の推奨どおり `buyer1` 未申請 / `buyer2` PENDING / `buyer3` REJECTED / `seller1` APPROVED） |
 | SA-11 | Backend 単体テスト（`SellerApplicationServiceTest`・Mockito） | BE | SA-07 | ⬜ Todo |
 | SA-12 | Backend Controller/統合テスト（`ControllerTestBase` スライス + `IntegrationTestBase` で 409 / 404 / ロールガード / 部分 UNIQUE を DB 検証） | BE | SA-08, SA-09 | ⬜ Todo |
 | SA-13 | 保持ポリシーの明記（R-7）: `REQUIREMENTS.md §15.3` 表・§15.4 匿名化 SQL・§15.7 `RET-10` / `SEQUENCE_FLOW §9.1` の `UserAnonymizationJob` / `DATA_DICTIONARY §4` | DOC | なし `[並列可]` | ✅ Done（2026-08-02） |

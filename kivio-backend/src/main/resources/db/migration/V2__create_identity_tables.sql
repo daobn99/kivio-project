@@ -62,3 +62,9 @@ CREATE INDEX idx_refresh_tokens_user_id          ON refresh_tokens (user_id);
 CREATE INDEX idx_refresh_tokens_expires_at       ON refresh_tokens (expires_at);
 CREATE INDEX idx_seller_applications_applicant_id ON seller_applications (applicant_id);
 CREATE INDEX idx_seller_applications_status      ON seller_applications (status);
+CREATE UNIQUE INDEX idx_seller_applications_pending_unique
+  ON seller_applications (applicant_id)
+  WHERE status = 'PENDING';
+
+COMMENT ON INDEX idx_seller_applications_pending_unique
+  IS '同一ユーザーの PENDING 申請は 1 件まで。二重送信・並行リクエストによる重複申請を構造的に防ぐ。';
