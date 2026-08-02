@@ -100,7 +100,6 @@ public class SecurityConfig {
                         .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
                         .requestMatchers("/actuator/health").permitAll()
                         .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.POST, "/api/v1/seller-applications").hasRole("BUYER")
                         .requestMatchers(HttpMethod.POST, "/api/v1/products").hasRole("SELLER")
                         .anyRequest().authenticated())
                 .exceptionHandling(ex -> ex

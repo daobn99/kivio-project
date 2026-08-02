@@ -21,6 +21,14 @@ export const ROUTES = {
 
   seller: {
     dashboard: '/seller/dashboard',
+    /** 申請フォーム兼・審査状況の確認画面（1 URL で 4 状態を出し分ける） */
+    applicationNew: '/seller/applications/new',
+    /**
+     * 申請が不要なユーザー（SELLER / ADMIN / 承認済み）の送り先。
+     * `/seller/dashboard` が未実装のため暫定でトップページ。実装後はこの 1 箇所を
+     * `dashboard` に差し替えれば 3 経路すべてが切り替わる。
+     */
+    applicationRedirect: '/',
     products: '/seller/products',
     newProduct: '/seller/products/new',
     editProduct: (id: string) => `/seller/products/${id}/edit`,

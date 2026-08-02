@@ -99,7 +99,7 @@
 │       ├── プロフィール設定 → /profile/settings
 │       ├── 注文履歴 → /orders
 │       ├── セラー申請 → /seller/applications/new
-│       │   ※ 申請未済かつ PENDING 申請なしの場合のみ表示
+│       │   ※ 申請未済かつ PENDING 申請なしの場合のみ表示（※下記の注記を参照）
 │       └── ログアウト
 │
 ├── SELLER
@@ -128,6 +128,14 @@
     │   └── プラットフォーム設定 → /admin/platform-configs
     └── アバターメニュー → ログアウト
 ```
+
+> **「セラー申請」リンクの表示条件（2026-08-02 決定・`seller-application.md` OQ-7）:** 実装は
+> **`isBuyer` のみ**を条件とし、申請状況（未申請 / PENDING）は条件に含めない。条件を厳密化すると
+> グローバルヘッダーが全ページで `GET /seller-applications/me` を叩くことになり、コストが便益に
+> 見合わないため。**PENDING 中にリンクを踏んだ場合は `/seller/applications/new` が審査中の状態を
+> 表示する**（同 URL が 4 状態を出し分ける。`design-system/pages/seller-application.md §4`）。
+> 該当箇所: `UserMenu` / `MobileMenuSheet`。`GlobalFooter` の「セラー登録」はロール非依存で、
+> 未認証は `proxy.ts` がログインへ、SELLER / ADMIN は画面側がリダイレクトする。
 
 ### 2.2 セラーサイドナビ（/seller/* 共通）
 

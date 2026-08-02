@@ -285,6 +285,7 @@ audit_logs
 | 認証 | `USER_LOGGED_OUT` | ログアウト | - |
 | 認証 | `USER_PASSWORD_CHANGED` | パスワード変更 | - |
 | 認証 | `USER_WITHDRAWN` | 退会（`deleted_at` 設定の論理削除） | - |
+| **セラー申請** | `SELLER_APPLICATION_SUBMITTED` | セラー申請の送信（`POST /seller-applications`） | - |
 | **管理者操作** | `SELLER_APPLICATION_APPROVED` | セラー申請承認 | status の変更前後 |
 | 管理者操作 | `SELLER_APPLICATION_REJECTED` | セラー申請却下 | status の変更前後 |
 | 管理者操作 | `USER_DEACTIVATED` | ユーザーアカウント無効化 | status の変更前後 |
@@ -292,6 +293,8 @@ audit_logs
 | 管理者操作 | `PRODUCT_FORCEFULLY_DEACTIVATED` | 管理者による商品強制非公開 | status の変更前後 |
 | 管理者操作 | `PLATFORM_CONFIG_UPDATED` | 手数料率等の設定変更 | config_value の変更前後 |
 | **重要状態変更** | `ORDER_CANCELLED` | 注文キャンセル | order status の変更前後 |
+
+> **新規作成イベントの `entity_id` について:** `AuditLogAspect#extractEntityId` は `@Auditable(entityIdParam = ...)` で指定されたメソッド**引数**から `UUID` を拾う実装で、戻り値からは取得しない。したがって「作成した結果 ID が決まる」イベント（`USER_REGISTERED`・`SELLER_APPLICATION_SUBMITTED` 等）では `entityIdParam` を指定せず、`entity_id` は `null` になる。作成対象の ID を追跡する必要が生じた場合は Aspect 側の拡張（戻り値からの抽出）を別途起票すること。
 
 ### アクション名命名規則
 
