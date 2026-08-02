@@ -6,6 +6,7 @@ import io.kivio.domain.identity.dto.request.ChangePasswordRequest;
 import io.kivio.domain.identity.dto.request.UpdateProfileRequest;
 import io.kivio.domain.identity.dto.response.UserResponse;
 import io.kivio.domain.identity.exception.PasswordChangeFailedException;
+import io.kivio.domain.identity.repository.RefreshTokenRepository;
 import io.kivio.domain.identity.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -22,6 +23,7 @@ import java.util.UUID;
 public class UserService {
 
     private final UserRepository userRepository;
+    private final RefreshTokenRepository refreshTokenRepository;
     private final PasswordEncoder passwordEncoder;
 
     /**
@@ -77,6 +79,8 @@ public class UserService {
      *
      * <p>
      * {@code deleted_at} を設定し、以降 {@code @SQLRestriction} により通常クエリから除外されます。
+     * あわせて当該ユーザーの Refresh Token を削除します（{@code RefreshTokenPurgeJob} は
+     * {@code expires_at} 基準のため、削除しないと最長 7 日残存するのを防ぐハイジーン措置）。
      * Shop の連動削除は Shop 自体が未実装のため、まだ扱いません。
      *
      * @throws io.kivio.common.exception.ResourceNotFoundException ユーザーが存在しない場合
@@ -86,5 +90,6 @@ public class UserService {
     public void withdraw(UUID userId) {
         User user = userRepository.findByIdOrThrow(userId);
         user.softDelete();
+        refreshTokenRepository.deleteAllByUserId(userId);
     }
 }

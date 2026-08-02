@@ -1259,6 +1259,7 @@ com.kivio/
 |---|---|---|---|
 | `users` | 90日 | **匿名化**（PII削除・IDは保持） | 注文履歴との参照整合性維持 |
 | `shops` | 90日 | 匿名化（ショップ名・説明文を削除） | ユーザー退会時に連動 |
+| `addresses` | 90日（ユーザー退会後） | **物理削除**（ユーザー匿名化と同時） | 全項目がPII。注文の配送先は`orders.delivery_*`にスナップショット保存され、`orders.address_id`は`ON DELETE SET NULL`のため参照整合性に影響しない |
 | `categories` | 180日 | 物理削除 | 商品の`category_id`はNULL許容で設計 |
 | `products` | 180日（`status='DELETED'`後） | 物理削除 | 注文明細はスナップショット保存のため影響なし |
 | `orders` / `order_items` | **7年** | 匿名化（PII項目のみ） | 法人税法・青色申告要件 |
@@ -1286,6 +1287,17 @@ WHERE deleted_at < NOW() - INTERVAL '90 days'
 ```
 
 **匿名化後も保持するフィールド：** `id`、`created_at`、`deleted_at`、ロール情報（統計用途）
+
+`addresses` は全項目がPII（受取人名・住所・電話番号）で、`users` を匿名化しても `user_id` から個人が再特定できてしまうため、**同一トランザクションで物理削除する**（RET-09）。注文の配送先は `orders.delivery_*` にスナップショット保存済みで、`orders.address_id` は `ON DELETE SET NULL` のため注文履歴は影響を受けない。
+
+```sql
+-- addresses 物理削除（users 匿名化と同一トランザクション）
+DELETE FROM addresses
+WHERE user_id IN (
+  SELECT id FROM users
+  WHERE deleted_at < NOW() - INTERVAL '90 days'
+);
+```
 
 ### 15.5 audit_logs のアーカイブ戦略
 
@@ -1349,6 +1361,7 @@ public void anonymizeExpiredUsers() {
 | RET-06 | `audit_logs` は1年間DBに保持し、パーティションDROPで期限管理する |
 | RET-07 | バッチジョブは `@Scheduled` で実装し、実行結果を `audit_logs` に記録する |
 | RET-08 | `audit_logs` テーブルはcreated_atによる月別パーティショニングを採用する |
+| RET-09 | ユーザー匿名化（RET-01）と同一トランザクションで、当該ユーザーの `addresses` を物理削除する |
 
 ---
 

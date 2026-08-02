@@ -8,6 +8,7 @@ import io.kivio.support.IntegrationTestBase;
 import io.kivio.support.TestJwtTokenFactory;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -15,6 +16,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.hasItem;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -175,6 +177,70 @@ class AddressControllerIntegrationTest extends IntegrationTestBase {
     }
 
     @Test
+    void should_promote_address_to_default_and_demote_the_previous_one() throws Exception {
+        User owner = createUser();
+        Address previous = addressRepository.save(addressOf(owner.getId(), "旧デフォルト", true));
+        Address target = addressRepository.save(addressOf(owner.getId(), "新デフォルト", false));
+
+        mockMvc.perform(patch("/api/v1/users/me/addresses/{id}", target.getId())
+                        .header("Authorization", bearer(owner.getId()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"isDefault":true}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.isDefault").value(true));
+
+        assertThat(addressRepository.findById(target.getId())).get()
+                .extracting(Address::isDefault).isEqualTo(true);
+        assertThat(addressRepository.findById(previous.getId())).get()
+                .extracting(Address::isDefault).isEqualTo(false);
+    }
+
+    @Test
+    void should_keep_default_when_reasserting_default_on_the_current_default_address()
+            throws Exception {
+        User owner = createUser();
+        Address current = addressRepository.save(addressOf(owner.getId(), "デフォルト", true));
+
+        // 既にデフォルトの住所に isDefault=true を再指定しても、デフォルトが消失しないこと
+        mockMvc.perform(patch("/api/v1/users/me/addresses/{id}", current.getId())
+                        .header("Authorization", bearer(owner.getId()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"isDefault":true}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.isDefault").value(true));
+
+        // レスポンスと DB が一致していること（DB 上でデフォルトが落ちていない）
+        assertThat(addressRepository.findById(current.getId())).get()
+                .extracting(Address::isDefault).isEqualTo(true);
+        assertThat(addressRepository.findByUserIdOrderByIsDefaultDescCreatedAtAsc(owner.getId()))
+                .filteredOn(Address::isDefault).hasSize(1);
+    }
+
+    @Test
+    void should_not_touch_other_users_default_address_when_setting_own_default() throws Exception {
+        User owner = createUser();
+        User other = createUser();
+        Address ownerAddress = addressRepository.save(addressOf(owner.getId(), "自分", false));
+        Address otherDefault = addressRepository.save(addressOf(other.getId(), "他人", true));
+
+        mockMvc.perform(patch("/api/v1/users/me/addresses/{id}", ownerAddress.getId())
+                        .header("Authorization", bearer(owner.getId()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"isDefault":true}
+                                """))
+                .andExpect(status().isOk());
+
+        // 付け替えは自ユーザーのスコープ内に閉じている
+        assertThat(addressRepository.findById(otherDefault.getId())).get()
+                .extracting(Address::isDefault).isEqualTo(true);
+    }
+
+    @Test
     void should_return_403_when_updating_another_users_address() throws Exception {
         User owner = createUser();
         User attacker = createUser();
@@ -263,6 +329,50 @@ class AddressControllerIntegrationTest extends IntegrationTestBase {
     void should_return_401_when_deleting_without_authentication() throws Exception {
         mockMvc.perform(delete("/api/v1/users/me/addresses/{id}", UUID.randomUUID()))
                 .andExpect(status().isUnauthorized());
+    }
+
+    // ============================================================
+    // デフォルト住所の一意性（DB 制約・実装計画 R-4）
+    // ============================================================
+
+    @Test
+    void should_reject_second_default_address_at_database_level() {
+        User owner = createUser();
+        addressRepository.saveAndFlush(addressOf(owner.getId(), "既定の住所", true));
+
+        // アプリ側の付け替え手順を経由せずに 2 件目のデフォルトを差し込もうとしても、
+        // 部分 UNIQUE インデックスが弾く（並行リクエストで両者が互いの未コミット行を
+        // 見ないケースの最終防衛線・V4__create_order_tables.sql の idx_addresses_user_default_unique）
+        Address second = addressOf(owner.getId(), "二つ目の既定", true);
+        assertThatThrownBy(() -> addressRepository.saveAndFlush(second))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void should_allow_multiple_non_default_addresses() {
+        User owner = createUser();
+        addressRepository.saveAndFlush(addressOf(owner.getId(), "その1", false));
+        addressRepository.saveAndFlush(addressOf(owner.getId(), "その2", false));
+        addressRepository.saveAndFlush(addressOf(owner.getId(), "その3", false));
+
+        // 部分インデックスのため is_default = false は何件でも許容される
+        assertThat(addressRepository.findByUserIdOrderByIsDefaultDescCreatedAtAsc(owner.getId()))
+                .hasSize(3);
+    }
+
+    @Test
+    void should_allow_one_default_address_per_user() {
+        User owner = createUser();
+        User other = createUser();
+
+        addressRepository.saveAndFlush(addressOf(owner.getId(), "本人の既定", true));
+        addressRepository.saveAndFlush(addressOf(other.getId(), "他人の既定", true));
+
+        // 一意性はユーザー単位（user_id ごと）であり、ユーザーをまたいで衝突しない
+        assertThat(addressRepository.findByUserIdOrderByIsDefaultDescCreatedAtAsc(owner.getId()))
+                .singleElement().extracting(Address::isDefault).isEqualTo(true);
+        assertThat(addressRepository.findByUserIdOrderByIsDefaultDescCreatedAtAsc(other.getId()))
+                .singleElement().extracting(Address::isDefault).isEqualTo(true);
     }
 
     // ============================================================

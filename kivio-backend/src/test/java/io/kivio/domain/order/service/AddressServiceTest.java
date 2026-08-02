@@ -135,7 +135,8 @@ class AddressServiceTest {
 
         assertThat(response.isDefault()).isTrue();
         assertThat(address.isDefault()).isTrue();
-        verify(addressRepository).clearDefaultForUser(userId);
+        // 対象住所自身は除外して他住所のデフォルトのみ落とす
+        verify(addressRepository).clearDefaultForUserExcept(userId, addressId);
     }
 
     @Test

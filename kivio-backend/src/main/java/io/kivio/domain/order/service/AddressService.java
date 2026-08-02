@@ -81,7 +81,8 @@ public class AddressService {
                 request.city(), request.addressLine(), request.phoneNumber());
         if (request.isDefault() != null) {
             if (request.isDefault()) {
-                addressRepository.clearDefaultForUser(userId);
+                // 対象住所自身は除外する（既定住所への再指定でデフォルトが消失するのを防ぐ）
+                addressRepository.clearDefaultForUserExcept(userId, addressId);
                 address.markDefault();
             } else {
                 address.unsetDefault();

@@ -121,6 +121,8 @@ COMMENT ON COLUMN payments.stripe_refund_id IS 'Stripe Refunds APIのrefund ID�
 -- インデックス
 CREATE INDEX idx_addresses_user_id         ON addresses (user_id);
 CREATE INDEX idx_addresses_user_default    ON addresses (user_id, is_default);
+-- デフォルト住所はユーザーにつき1件（部分UNIQUE）。is_default = FALSE は何件でも許容する。
+CREATE UNIQUE INDEX idx_addresses_user_default_unique ON addresses (user_id) WHERE is_default;
 CREATE INDEX idx_cart_items_cart_id        ON cart_items (cart_id);
 CREATE INDEX idx_orders_buyer_id           ON orders (buyer_id);
 CREATE INDEX idx_orders_shop_id            ON orders (shop_id);

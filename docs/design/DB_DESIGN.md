@@ -374,7 +374,9 @@ CREATE TABLE addresses (
 COMMENT ON TABLE  addresses IS 'ユーザーの配送先住所。複数登録可。注文時にはordersテーブルへスナップショット保存。';
 ```
 
-**業務ルール：** `is_default = TRUE` はユーザーにつき1件のみ（アプリ側で `UPDATE addresses SET is_default = FALSE WHERE user_id = ? AND id != ?` を実行）
+**業務ルール：** `is_default = TRUE` はユーザーにつき1件のみ。アプリ側で付け替え（`UPDATE addresses SET is_default = FALSE WHERE user_id = ? AND id != ?` を実行してから対象を `TRUE` に）を行い、**DB 側は部分 UNIQUE インデックス `idx_addresses_user_default_unique` で担保する**。アプリ側の手順だけでは READ COMMITTED 下の並行リクエストで複数デフォルトが残り得るため（`V4__create_order_tables.sql`）。競合時は `409 DUPLICATE_ENTRY` を返し、クライアントの再試行で解消する。
+
+> **付け替え時の注意:** 一括 `UPDATE` から**対象住所自身を除外する**こと（`AND id != ?`）。除外しないと、既にデフォルトの住所へ `isDefault = true` を再指定した際に自身も `FALSE` に落ち、JPA の dirty checking で復元されずデフォルトが消失する。
 
 ---
 
@@ -761,6 +763,8 @@ CREATE INDEX idx_product_images_product_order ON product_images (product_id, dis
 -- ── addresses ────────────────────────────────────────────────────────────
 CREATE INDEX idx_addresses_user_id         ON addresses (user_id);
 CREATE INDEX idx_addresses_user_default    ON addresses (user_id, is_default);
+-- デフォルト住所はユーザーにつき1件（部分UNIQUE）。並行リクエストによる複数デフォルトを防ぐ。
+CREATE UNIQUE INDEX idx_addresses_user_default_unique ON addresses (user_id) WHERE is_default;
 
 -- ── cart_items ───────────────────────────────────────────────────────────
 CREATE INDEX idx_cart_items_cart_id ON cart_items (cart_id);

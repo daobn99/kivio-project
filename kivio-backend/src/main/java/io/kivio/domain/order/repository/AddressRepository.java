@@ -20,9 +20,21 @@ public interface AddressRepository extends JpaRepository<Address, UUID> {
     List<Address> findByUserIdOrderByIsDefaultDescCreatedAtAsc(UUID userId);
 
     /**
-     * 指定ユーザーの全住所のデフォルトフラグを落とします（デフォルト付け替え用）。
+     * 指定ユーザーの全住所のデフォルトフラグを落とします（新規住所をデフォルトにする際に使用）。
      */
-    @Modifying
+    @Modifying(flushAutomatically = true)
     @Query("UPDATE Address a SET a.isDefault = false WHERE a.userId = :userId")
     void clearDefaultForUser(@Param("userId") UUID userId);
+
+    /**
+     * 指定住所を除く、指定ユーザーの住所のデフォルトフラグを落とします（既存住所への付け替え用）。
+     *
+     * <p>
+     * 対象住所自身を除外するのは、既にデフォルトの住所に対して {@code isDefault = true} を再指定した際に
+     * 一括 UPDATE で {@code false} に落ちたまま（エンティティに変更がなく dirty checking で復元されない）
+     * デフォルト住所が消失するのを防ぐためです。
+     */
+    @Modifying(flushAutomatically = true)
+    @Query("UPDATE Address a SET a.isDefault = false WHERE a.userId = :userId AND a.id <> :excludedId")
+    void clearDefaultForUserExcept(@Param("userId") UUID userId, @Param("excludedId") UUID excludedId);
 }

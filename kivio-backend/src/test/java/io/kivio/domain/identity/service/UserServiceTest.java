@@ -8,6 +8,7 @@ import io.kivio.domain.identity.dto.request.ChangePasswordRequest;
 import io.kivio.domain.identity.dto.request.UpdateProfileRequest;
 import io.kivio.domain.identity.dto.response.UserResponse;
 import io.kivio.domain.identity.exception.PasswordChangeFailedException;
+import io.kivio.domain.identity.repository.RefreshTokenRepository;
 import io.kivio.domain.identity.repository.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,6 +33,8 @@ class UserServiceTest {
 
     @Mock
     private UserRepository userRepository;
+    @Mock
+    private RefreshTokenRepository refreshTokenRepository;
     @Mock
     private PasswordEncoder passwordEncoder;
     @InjectMocks
@@ -239,5 +242,20 @@ class UserServiceTest {
 
         assertThat(user.isDeleted()).isTrue();
         assertThat(user.getDeletedAt()).isNotNull();
+    }
+
+    @Test
+    void should_delete_refresh_tokens_when_withdrawing() {
+        UUID userId = UUID.randomUUID();
+        User user = User.builder()
+                .id(userId)
+                .email("buyer@example.com")
+                .displayName("Buyer Taro")
+                .build();
+        given(userRepository.findByIdOrThrow(userId)).willReturn(user);
+
+        userService.withdraw(userId);
+
+        verify(refreshTokenRepository).deleteAllByUserId(userId);
     }
 }
