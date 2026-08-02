@@ -2,7 +2,7 @@
 **ブランチ:** `feature/seller-application`  
 **担当 Phase:** Phase 2（`SENIOR_SETUP_PLAN.md` バーティカルスライス #3）  
 **最終更新:** 2026-08-02  
-**ステータス:** 🟡 バックエンド実装（SA-00〜SA-10）完了（2026-08-02）。残: バックエンドテスト（SA-11 / SA-12）・フロントエンド一式（SA-14〜SA-19）。**`V2` のチェックサムが変わったため、開発 DB の `docker compose down -v` が未実施**（オーナー対応待ち）。
+**ステータス:** 🟡 バックエンド実装・テスト（SA-00〜SA-12）完了（2026-08-02）。残: フロントエンド一式（SA-14〜SA-19）。**`V2` のチェックサムが変わったため、開発 DB の `docker compose down -v` が未実施**（オーナー対応待ち）。
 
 > **⚠️ 着手前の必須手順（OQ-3 の決定に伴う）:** 本スライスは `V2__create_identity_tables.sql` を**直接編集**する。既存の開発 DB では Flyway が `Migration checksum mismatch` で起動に失敗するため、**実装開始前に `docker compose down -v` で全テーブルをドロップして作り直すこと**（実施はプロジェクトオーナーが行う）。Testcontainers は毎回新規 DB を立てるため CI・テストへの影響はない。
 
@@ -501,8 +501,8 @@ src/
 | SA-08 | `SellerApplicationController`（POST 201 / GET me 200・Swagger アノテーション） | BE | SA-07 | ✅ Done |
 | SA-09 | `V2__create_identity_tables.sql` に部分 UNIQUE インデックスを直接追記（OQ-3）※事前に `docker compose down -v` 済みであること | BE | SA-00 | ✅ Done（**開発 DB の作り直しは未実施 — オーナー対応待ち**） |
 | SA-10 | Seed: `dev/V14__seed_seller_applications.sql`（+ 検証用 BUYER 2 名） | BE | SA-00 | ✅ Done（OQ-5 の推奨どおり `buyer1` 未申請 / `buyer2` PENDING / `buyer3` REJECTED / `seller1` APPROVED） |
-| SA-11 | Backend 単体テスト（`SellerApplicationServiceTest`・Mockito） | BE | SA-07 | ⬜ Todo |
-| SA-12 | Backend Controller/統合テスト（`ControllerTestBase` スライス + `IntegrationTestBase` で 409 / 404 / ロールガード / 部分 UNIQUE を DB 検証） | BE | SA-08, SA-09 | ⬜ Todo |
+| SA-11 | Backend 単体テスト（`SellerApplicationServiceTest`・Mockito） | BE | SA-07 | ✅ Done（2026-08-02・`SellerApplicationServiceTest` 11 件 + `SellerApplicationTest`（Entity）4 件） |
+| SA-12 | Backend Controller/統合テスト（`ControllerTestBase` スライス + `IntegrationTestBase` で 409 / 404 / ロールガード / 部分 UNIQUE を DB 検証） | BE | SA-08, SA-09 | ✅ Done（2026-08-02・`SellerApplicationControllerTest` 21 件 + `SellerApplicationControllerIntegrationTest` 18 件） |
 | SA-13 | 保持ポリシーの明記（R-7）: `REQUIREMENTS.md §15.3` 表・§15.4 匿名化 SQL・§15.7 `RET-10` / `SEQUENCE_FLOW §9.1` の `UserAnonymizationJob` / `DATA_DICTIONARY §4` | DOC | なし `[並列可]` | ✅ Done（2026-08-02） |
 | SA-13b | 仕様不整合の訂正（R-5 / R-8）: `SEQUENCE_FLOW §3` の列名・リクエストボディ・HTTP メソッド・エラーコード名 / `API_DESIGN.md §4` の `non_null` 省略と `reason` のみ受け取る旨 | DOC | なし `[並列可]` | ✅ Done（2026-08-02） |
 | SA-14 | UI 設計書 `design-system/pages/seller-application.md`（OQ-8 未決着） | FE | なし `[並列可]` | ⚠️ 要判断 |
@@ -536,40 +536,45 @@ SA-14（独立・OQ-8 待ち）
 
 ### 認可・ロール
 
-- [ ] 両エンドポイントが認証必須である（`SecurityConfig` の `permitAll` 列挙に `/api/v1/seller-applications` が含まれないことをコードで確認）。未認証 → 401 をテストで裏付ける
-- [ ] **申請者を常にトークンの `sub`（`@AuthenticationPrincipal`）から解決**している。パス・ボディに `applicantId` を取らず、ボディに他人の `applicantId` を混ぜても無視されることをテストで確認
-- [ ] **`ROLE_BUYER` 以外の申請を拒否**している。OQ-1 により `SecurityConfig` のロールガードを外したため、**`SellerApplicationService` のロール判定が唯一の認可ポイント**である。SELLER / ADMIN のトークンで `POST` して 409 `SELLER_APPLICATION_ALREADY_APPROVED` になること、および**申請レコードが作られないこと**を統合テストで裏付ける（フロントの分岐は認可の根拠にしない）
-- [ ] `SecurityConfig` の変更が `POST /api/v1/seller-applications` の 1 行削除のみに留まっている（`/api/v1/admin/**` の `hasRole("ADMIN")` や `/api/v1/products` の `hasRole("SELLER")` に影響していない）
-- [ ] `GET /me` が**自分の申請しか返さない**（他ユーザーの申請が混ざらないことを、複数ユーザーの申請が存在する状態でテスト）
+- [x] 両エンドポイントが認証必須である（`SecurityConfig.java:89-104` の `permitAll` 列挙に `/api/v1/seller-applications` は無く `anyRequest().authenticated()` が適用される）。未認証 → 401 をテストで裏付ける（スライス: `should_return_401_when_applying_unauthenticated` / `should_return_401_when_reading_status_unauthenticated`、統合: `should_return_401_when_applying_without_authentication` / `should_return_401_when_reading_status_without_authentication`）
+- [x] **申請者を常にトークンの `sub`（`@AuthenticationPrincipal`）から解決**している（`SellerApplicationController.java:44-58`）。パス・ボディに `applicantId` を取らず、ボディに他人の `applicantId` を混ぜても無視されることをテストで確認（`should_pass_only_token_subject_as_applicant_id` / 統合 `should_ignore_server_controlled_fields_in_the_request_body`）
+- [x] **`ROLE_BUYER` 以外の申請を拒否**している（`SellerApplicationService.java:49-51` が唯一の認可ポイント）。SELLER / ADMIN のトークンで `POST` して 409 `SELLER_APPLICATION_ALREADY_APPROVED` になること、および**申請レコードが作られないこと**を統合テストで裏付け済み（`should_return_409_and_create_no_row_when_applicant_is_not_a_buyer`）。スライス側の `should_return_409_not_403_when_non_buyer_applies` が **403 で弾かれていない**ことを追加で保証する
+- [x] `SecurityConfig` の変更が `POST /api/v1/seller-applications` の 1 行削除のみに留まっている（`git show 2d46609 -- SecurityConfig.java` が 1 行削除のみ。`/api/v1/admin/**` の `hasRole("ADMIN")`（L102）・`/api/v1/products` の `hasRole("SELLER")`（L103）は現存）
+- [x] `GET /me` が**自分の申請しか返さない**（`should_return_only_own_application`。2 ユーザー分の申請を投入して検証）
 
 ### 入力・mass assignment
 
-- [ ] リクエスト DTO が **`reason` のみ**を持ち、`status` / `reviewerId` / `reviewComment` / `reviewedAt` を**受け付けない**（`spring.jackson.deserialization.fail-on-unknown-properties: false` のため、未知フィールドは 400 にならず**黙って無視される**。DTO にフィールドが無いことが唯一の防御線）
-- [ ] 新規申請の `status` が**常に `PENDING`** で作られる（Entity の `@Builder.Default`。リクエスト由来の値を使わない）
-- [ ] `reason` が `@NotBlank` + `@Size(max = 1000)` で検証されている（空白のみを弾く）
-- [ ] `reason` は自由入力テキストであり、**フロントで `dangerouslySetInnerHTML` を使わない**（React の既定エスケープに委ねる）。バックエンドで HTML サニタイズはしない（保存は原文・表示時にエスケープ）
+- [x] リクエスト DTO が **`reason` のみ**を持ち、`status` / `reviewerId` / `reviewComment` / `reviewedAt` を**受け付けない**（`CreateSellerApplicationRequest.java:20-23`）。実 DB での回帰テスト: `should_ignore_server_controlled_fields_in_the_request_body`（`status: "APPROVED"` / `reviewerId` / `reviewComment` / `reviewedAt` を全部混ぜても DB は `PENDING` / NULL のまま）
+- [x] 新規申請の `status` が**常に `PENDING`** で作られる（`SellerApplication.java:63-64` の `@Builder.Default`）。`should_persist_pending_status_and_applicant_id_from_token`（`ArgumentCaptor`）・`SellerApplicationTest#should_default_status_to_pending_when_not_specified`・統合 `should_persist_pending_application_for_token_subject`
+- [x] `reason` が `@NotBlank` + `@Size(max = 1000)` で検証されている（空白のみを弾く）（`should_return_422_when_reason_is_blank` ほか。**ただし全角スペース（U+3000）のみは通過する** — R-10 参照）
+- [ ] `reason` は自由入力テキストであり、**フロントで `dangerouslySetInnerHTML` を使わない**（React の既定エスケープに委ねる）。バックエンドで HTML サニタイズはしない（保存は原文・表示時にエスケープ）→ **FE 未着手（SA-18）。バックエンド側は保存を原文のまま行っており正しい**
 
 ### 重複・整合性
 
-- [ ] 同一ユーザーの `PENDING` 申請が 2 件作られない（アプリ層の事前チェック + `V2` に追記した部分 UNIQUE インデックス）
-- [ ] 二重送信（同一リクエストの並行実行）で 500 にならず、409 が返る（`DataIntegrityViolationException` → `DUPLICATE_ENTRY` のハンドラーが既存）
-- [ ] `REJECTED` 申請が何件あっても新規申請を妨げない（SELLER-05）
+- [x] 同一ユーザーの `PENDING` 申請が 2 件作られない（アプリ層の事前チェック + `V2` に追記した部分 UNIQUE インデックス）（`should_return_409_without_creating_a_second_row_when_pending_exists` + `should_reject_second_pending_application_at_database_level`）
+- [x] 二重送信（同一リクエストの並行実行）で 500 にならず、409 が返る（`DataIntegrityViolationException` → `DUPLICATE_ENTRY` のハンドラーが既存）（DB 制約が `DataIntegrityViolationException` を投げることを `should_reject_second_pending_application_at_database_level` で確認。**真の並行実行そのものは自動テスト化していない** — 通常経路ではアプリ層の事前チェックが先に 409 を返すため）
+- [x] `REJECTED` 申請が何件あっても新規申請を妨げない（SELLER-05）（`should_create_a_new_row_when_only_rejected_applications_exist` + `should_allow_multiple_rejected_applications_for_the_same_applicant`）
 
 ### 情報漏洩・監査
 
-- [ ] 409 / 404 のエラーメッセージに**他ユーザーの情報・内部 ID・DB 制約名が含まれない**
-- [ ] `SELLER_APPLICATION_SUBMITTED` が `audit_logs` に記録される（`correlation_id` 付き）。`reason` の全文が監査ログに載らないこと（`AuditLogAspect` はメソッド引数を保存しない設計だが、実挙動を確認する）
-- [ ] `GlobalExceptionHandler` の `SENSITIVE_FIELDS` マスキングが本スライスのフィールドに悪影響を与えていない（`reason` はマスク対象外でよい）
+- [x] 409 / 404 のエラーメッセージに**他ユーザーの情報・内部 ID・DB 制約名が含まれない**（例外 2 本は固定文言・`SellerApplicationPendingException.java:10` / `SellerApplicationAlreadyApprovedException.java:10`。404 は `ResourceNotFoundException` の**単一引数版**を使い ID を埋め込まない（`SellerApplicationService.java:79`）。`should_throw_not_found_when_applicant_has_no_application` が文言を固定化している）
+- [x] `SELLER_APPLICATION_SUBMITTED` が `audit_logs` に記録される（`correlation_id` 付き）。`reason` の全文が監査ログに載らないこと（`should_write_audit_log_when_application_is_submitted` で `correlation_id` 非 NULL・`old_value` / `new_value` が NULL であることを実 DB で確認）
+- [x] `GlobalExceptionHandler` の `SENSITIVE_FIELDS` マスキングが本スライスのフィールドに悪影響を与えていない（`reason` はマスク対象外。422 レスポンスに `errors[].field = "reason"` が出ることを `should_return_422_when_reason_is_blank` で確認済み）
 
 ### レート制限
 
-- [ ] `POST /seller-applications` が API 全般バケット（100 req/min/user）に入ることを認識している。申請は 409 で弾かれるため濫用の実害は小さいが、**未申請ユーザーが 100 件/分の申請を作れる**わけではないことを、事前チェックで確認する（1 件目成功 → 2 件目以降は 409）
+- [x] `POST /seller-applications` が API 全般バケット（100 req/min/user）に入ることを認識している。**未申請ユーザーが 100 件/分の申請を作れる**わけではないこと（1 件目成功 → 2 件目以降は 409）は `should_return_409_without_creating_a_second_row_when_pending_exists` が担保する（レート制限そのものは既存の `AuthRateLimitIntegrationTest` の担当・テストプロファイルでは緩和されている）
 
 ---
 
 ## 9. Test Checklist
 
-> **実施結果:** （実施後にここへ `./gradlew test` / `pnpm test` の件数・カバレッジを記録すること）
+> **実施結果（Backend・2026-08-02）:** `./gradlew clean build` / `cleanTest test jacocoTestReport jacocoTestCoverageVerification` ともに BUILD SUCCESSFUL。
+> **全体 206 件・失敗 0 件**（本スライス追加分 54 件: Service 11 / Entity 4 / Controller スライス 21 / 統合 18）。
+> JaCoCo ゲート（INSTRUCTION 0.80）通過。本スライスのクラスは `SellerApplicationService` / `SellerApplication` / `SellerApplicationController` / 例外 2 本すべて **INSTRUCTION 100% / BRANCH 100%**。
+> Checkstyle（`checkstyleMain` / `checkstyleTest`）も通過。
+>
+> **Frontend:** 未実施（SA-15〜SA-19 が未着手のため）。
 
 ### 9.1 Backend テスト（JUnit 5 + Mockito + Testcontainers）
 
@@ -579,43 +584,55 @@ SA-14（独立・OQ-8 待ち）
 > - **フルスタック統合**: `IntegrationTestBase`（Testcontainers PostgreSQL）。DB 制約（部分 UNIQUE）・実データでの 409 / 404・`audit_logs` の記録はこちらで検証する
 > - **Entity 単体**: `UserTest` / `AddressTest` が前例。ドメインメソッド（`isPending()` 等）の検証に使う
 
-#### `SellerApplicationServiceTest`（単体・Mockito）
+#### `SellerApplicationServiceTest`（単体・Mockito）— ✅ 全項目実施済み（11 件）
 
-- [ ] `apply`: BUYER・既存申請なし → `PENDING` で保存され `SellerApplicationResponse` を返す
-- [ ] `apply`: 保存される Entity の `status` が `PENDING`・`applicantId` がトークン由来である（`ArgumentCaptor` で検証）
-- [ ] `apply`: `ROLE_SELLER` のユーザー → `SELLER_APPLICATION_ALREADY_APPROVED`
-- [ ] `apply`: `ROLE_ADMIN` のユーザー → `SELLER_APPLICATION_ALREADY_APPROVED`
-- [ ] `apply`: `PENDING` 申請が既存 → `SELLER_APPLICATION_PENDING`（**保存が呼ばれない**ことも検証）
-- [ ] `apply`: `APPROVED` 申請が既存（ロールは BUYER のまま＝不整合状態） → `SELLER_APPLICATION_ALREADY_APPROVED`
-- [ ] `apply`: `REJECTED` 申請のみ既存 → **新規申請が作成される**（SELLER-05）
-- [ ] `apply`: 存在しないユーザー → `RESOURCE_NOT_FOUND`
-- [ ] `getMyLatest`: 申請が複数ある → **`created_at` が最新の 1 件**を返す
-- [ ] `getMyLatest`: 申請が 0 件 → `RESOURCE_NOT_FOUND`
+- [x] `apply`: BUYER・既存申請なし → `PENDING` で保存され `SellerApplicationResponse` を返す（`should_create_pending_application_when_buyer_has_no_existing_application`）
+- [x] `apply`: 保存される Entity の `status` が `PENDING`・`applicantId` がトークン由来である（`ArgumentCaptor` で検証）（`should_persist_pending_status_and_applicant_id_from_token`。`reviewerId` / `reviewComment` / `reviewedAt` が null であることも併せて検証）
+- [x] `apply`: `ROLE_SELLER` のユーザー → `SELLER_APPLICATION_ALREADY_APPROVED`（`should_reject_application_when_applicant_is_seller`。`verifyNoInteractions(repository)` で **DB を触らずに弾く**ことも検証）
+- [x] `apply`: `ROLE_ADMIN` のユーザー → `SELLER_APPLICATION_ALREADY_APPROVED`（`should_reject_application_when_applicant_is_admin`）
+- [x] `apply`: `PENDING` 申請が既存 → `SELLER_APPLICATION_PENDING`（**保存が呼ばれない**ことも検証）（`should_reject_application_when_pending_application_already_exists`）
+- [x] `apply`: `APPROVED` 申請が既存（ロールは BUYER のまま＝不整合状態） → `SELLER_APPLICATION_ALREADY_APPROVED`（`should_reject_application_when_approved_application_exists_despite_buyer_role`）
+- [x] `apply`: `REJECTED` 申請のみ既存 → **新規申請が作成される**（SELLER-05）（`should_not_consider_rejected_applications_as_a_blocker`。単体では **`REJECTED` を条件にした照会が発生しないこと**を検証し、実データでの 2 件目作成は統合テスト側で裏付ける）
+- [x] `apply`: 存在しないユーザー → `RESOURCE_NOT_FOUND`（`should_propagate_not_found_when_applicant_does_not_exist`）
+- [x] `getMyLatest`: 申請が複数ある → **`created_at` が最新の 1 件**を返す（`should_return_latest_application_when_applicant_has_applications` + `should_expose_review_fields_when_latest_application_is_rejected`。**並び順そのものは DB の責務**のため単体では委譲先メソッドと DTO 変換のみを検証し、実際の並び順は統合テスト `should_return_the_latest_application_when_reapplied_after_rejection` で裏付ける）
+- [x] `getMyLatest`: 申請が 0 件 → `RESOURCE_NOT_FOUND`（`should_throw_not_found_when_applicant_has_no_application`。文言が「セラー申請が見つかりません」= 内部 ID を含まない汎用文言であることも検証）
 
-#### `SellerApplicationControllerTest`（スライス・`ControllerTestBase`）
+#### `SellerApplicationTest`（Entity 単体）— ✅ 実施済み（4 件）
 
-- [ ] `POST` 201・レスポンス形式が `API_DESIGN.md §4` と一致（`id` / `applicantId` / `reason` / `status` / `createdAt`）
-- [ ] `POST` 422（`reason` 未送信 / 空文字 / 空白のみ / 1001 文字）
-- [ ] `POST` 409（`SELLER_APPLICATION_PENDING` / `SELLER_APPLICATION_ALREADY_APPROVED`）で `application/problem+json` と `code` が返る
-- [ ] `POST` 未認証 → 401
-- [ ] `POST` `ROLE_SELLER` / `ROLE_ADMIN` のトークン → **409 `SELLER_APPLICATION_ALREADY_APPROVED`**（403 ではない。OQ-1 の決定）。`ControllerTestBase` は `@Import(SecurityConfig)` なので、ロールガードが外れたことをこのスライスで直接検証できる
-- [ ] `GET /me` 200・`reviewComment` / `reviewedAt` が未審査時に**レスポンスから省略される**（`non_null`）
-- [ ] `GET /me` 404（未申請）
-- [ ] `GET /me` 未認証 → 401
-- [ ] `GET /me` は SELLER / ADMIN でも 200 が返る（`API_DESIGN.md` の「権限: 全ロール」）
+計画 §9.1 の前提「Entity 単体: `UserTest` / `AddressTest` が前例。ドメインメソッド（`isPending()` 等）の検証に使う」に対応。`isPending()` / `isApproved()` は本スライスの本番コードからは未使用（`feature/admin` で使う想定）のため、ここで検証しないと JaCoCo 上 0% のまま残る。
 
-#### `SellerApplicationControllerIntegrationTest`（`IntegrationTestBase` + Testcontainers）
+- [x] `status` 未指定時の既定値が `PENDING`（`@Builder.Default`）
+- [x] `isPending()` / `isApproved()` が 3 ステータスすべてで正しく判定する
+- [x] `@EqualsAndHashCode(onlyExplicitlyIncluded = true)` により `id` のみで同一性が決まる
 
-- [ ] `POST` → DB に `status = 'PENDING'`・`applicant_id` がトークンの `sub`・`reviewer_id` / `reviewed_at` が NULL の行が 1 件できる
-- [ ] ボディに `status: "APPROVED"` / `reviewerId` / `reviewComment` を混ぜても**無視され** `PENDING` で保存される（mass assignment 回帰）
-- [ ] `PENDING` がある状態で再 `POST` → 409・**DB の行数が増えない**
-- [ ] `REJECTED` のみの状態で `POST` → 201・**行が 2 件になる**（履歴が残る・SELLER-05）
-- [ ] `GET /me` が他ユーザーの申請を返さない（2 ユーザー分の申請を投入して検証）
-- [ ] `GET /me` が最新 1 件（却下 → 再申請の順で投入し、返るのが新しい PENDING であること）
-- [ ] **部分 UNIQUE インデックスの検証**: アプリの事前チェックを経由せず 2 件目の `PENDING` を直接 INSERT すると `DataIntegrityViolationException` になる／`REJECTED` は同一ユーザーで何件でも INSERT できる（部分インデックスであること）／PENDING の一意性はユーザー単位で他ユーザーと衝突しない
-- [ ] SELLER / ADMIN のトークンでの `POST` が 409 になり、**DB に申請レコードが作られない**（`SecurityConfig` のガードを外した以上、Service の判定が実際に効いていることを実 DB で裏付ける）
-- [ ] `audit_logs` に `action = 'SELLER_APPLICATION_SUBMITTED'` / `entity_type = 'SELLER_APPLICATION'` の行が記録される（`UserAuditIntegrationTest` が前例）
-- [ ] JaCoCo カバレッジゲート（0.80）を維持する
+#### `SellerApplicationControllerTest`（スライス・`ControllerTestBase`）— ✅ 全項目実施済み（21 件）
+
+- [x] `POST` 201・レスポンス形式が `API_DESIGN.md §4` と一致（`id` / `applicantId` / `reason` / `status` / `createdAt`）（`should_return_201_with_application_when_buyer_applies`。**`Location` ヘッダーが付かない**ことも検証）
+- [x] `POST` 422（`reason` 未送信 / 空文字 / 空白のみ / 1001 文字）（`should_return_422_when_reason_is_blank`（`@ParameterizedTest`: `""` / 半角空白 / `\n` / `\t`）・`should_return_422_when_reason_is_missing`・`should_return_422_when_reason_exceeds_1000_characters`。境界値として **1000 文字ちょうどは 201** も検証: `should_accept_reason_of_exactly_1000_characters`）
+- [x] `POST` 409（`SELLER_APPLICATION_PENDING` / `SELLER_APPLICATION_ALREADY_APPROVED`）で `application/problem+json` と `code` が返る（`should_return_409_when_pending_application_exists` / `should_return_409_when_applicant_is_already_approved`）
+- [x] `POST` 未認証 → 401（`should_return_401_when_applying_unauthenticated`。Service が呼ばれないことも検証）
+- [x] `POST` `ROLE_SELLER` / `ROLE_ADMIN` のトークン → **409 `SELLER_APPLICATION_ALREADY_APPROVED`**（403 ではない。OQ-1 の決定）（`should_return_409_not_403_when_non_buyer_applies`・`@ParameterizedTest`。**Service まで到達したこと**を `verify` で裏付けており、`SecurityConfig` の削除漏れ（R-1）があれば 403 で落ちる）
+- [x] `GET /me` 200・`reviewComment` / `reviewedAt` が未審査時に**レスポンスから省略される**（`non_null`）（`should_omit_review_fields_when_latest_application_is_pending`。REJECTED 時に値が返ることは `should_return_review_comment_when_latest_application_is_rejected` で検証し、あわせて **`reviewerId` が DTO に含まれない**ことも確認）
+- [x] `GET /me` 404（未申請）（`should_return_404_when_applicant_has_no_application`・`application/problem+json` も検証）
+- [x] `GET /me` 未認証 → 401（`should_return_401_when_reading_status_unauthenticated`）
+- [x] `GET /me` は SELLER / ADMIN でも 200 が返る（`API_DESIGN.md` の「権限: 全ロール」）（`should_allow_all_roles_to_read_own_application_status`・`@ParameterizedTest` で 3 ロール）
+- [x] （追加）ボディに他人の `applicantId` / `status` を混ぜても Service にはトークンの `sub` だけが渡る（`should_pass_only_token_subject_as_applicant_id`）
+
+#### `SellerApplicationControllerIntegrationTest`（`IntegrationTestBase` + Testcontainers）— ✅ 全項目実施済み（18 件）
+
+DB の検証は `JdbcTemplate`（生 SQL）で行う。Repository に検証専用のメソッド（件数取得等）を追加せず、本番コードを増やさないため。
+
+- [x] `POST` → DB に `status = 'PENDING'`・`applicant_id` がトークンの `sub`・`reviewer_id` / `reviewed_at` が NULL の行が 1 件できる（`should_persist_pending_application_for_token_subject`）
+- [x] ボディに `status: "APPROVED"` / `reviewerId` / `reviewComment` を混ぜても**無視され** `PENDING` で保存される（mass assignment 回帰）（`should_ignore_server_controlled_fields_in_the_request_body`。**他人の ID に紐づく申請が作られない**ことも検証）
+- [x] `PENDING` がある状態で再 `POST` → 409・**DB の行数が増えない**（`should_return_409_without_creating_a_second_row_when_pending_exists`）
+- [x] `REJECTED` のみの状態で `POST` → 201・**行が 2 件になる**（履歴が残る・SELLER-05）（`should_create_a_new_row_when_only_rejected_applications_exist`。却下履歴が上書きされず `REJECTED` + `PENDING` の 2 行になることを検証）
+- [x] `GET /me` が他ユーザーの申請を返さない（2 ユーザー分の申請を投入して検証）（`should_return_only_own_application`）
+- [x] `GET /me` が最新 1 件（却下 → 再申請の順で投入し、返るのが新しい PENDING であること）（`should_return_the_latest_application_when_reapplied_after_rejection`。`created_at` を分離するため投入間に `Thread.sleep(10)` を挟む＝`AddressControllerIntegrationTest` と同じ流儀）
+- [x] **部分 UNIQUE インデックスの検証**: アプリの事前チェックを経由せず 2 件目の `PENDING` を直接 INSERT すると `DataIntegrityViolationException` になる（`should_reject_second_pending_application_at_database_level`）／`REJECTED` は同一ユーザーで何件でも INSERT できる（`should_allow_multiple_rejected_applications_for_the_same_applicant`）／PENDING の一意性はユーザー単位で他ユーザーと衝突しない（`should_allow_one_pending_application_per_user`）
+- [x] SELLER / ADMIN のトークンでの `POST` が 409 になり、**DB に申請レコードが作られない**（`should_return_409_and_create_no_row_when_applicant_is_not_a_buyer`・`@ParameterizedTest`。DB 上のロールと JWT の `role` クレームを揃えて投入している）
+- [x] `audit_logs` に `action = 'SELLER_APPLICATION_SUBMITTED'` / `entity_type = 'SELLER_APPLICATION'` の行が記録される（`UserAuditIntegrationTest` が前例）（`should_write_audit_log_when_application_is_submitted`。`correlation_id` 非 NULL・`actor_role = 'BUYER'`・**`entity_id` が null**（R-9 の想定どおり）・`old_value` / `new_value` が null（`reason` が監査ログに複製されない）まで検証。ロール判定で弾かれた場合に FAILURE 行が残ることは `should_write_failure_audit_log_when_application_is_rejected_by_role_check`）
+- [x] JaCoCo カバレッジゲート（0.80）を維持する（`jacocoTestCoverageVerification` 通過。本スライスのクラスは INSTRUCTION / BRANCH ともに 100%）
+- [x] （追加）`reason` が空白のみの `POST` → 422 かつ **DB に行が作られない**（`should_return_422_when_reason_is_blank`）／`POST` 未認証 → 401 ／`GET /me` 未申請 → 404 ／`GET /me` 未認証 → 401
 
 ### 9.2 Frontend テスト（Vitest + RTL + MSW）
 
@@ -646,28 +663,28 @@ PR をマージするには以下を全て満たすこと。**各項目に根拠
 
 ### 機能要件
 
-- [ ] `POST /seller-applications` が BUYER の申請を受け付け、201 で `PENDING` の申請を返す
-- [ ] 審査中の申請がある状態での再申請が 409 `SELLER_APPLICATION_PENDING` で拒否される
-- [ ] 既に SELLER / ADMIN のユーザーの申請が 409 `SELLER_APPLICATION_ALREADY_APPROVED` で拒否される（OQ-1）
-- [ ] 却下後の再申請が新規レコードとして作成され、過去の申請履歴が残る（SELLER-05）
-- [ ] `GET /seller-applications/me` が最新 1 件を返し、未申請なら 404 を返す
+- [x] `POST /seller-applications` が BUYER の申請を受け付け、201 で `PENDING` の申請を返す（`should_persist_pending_application_for_token_subject`）
+- [x] 審査中の申請がある状態での再申請が 409 `SELLER_APPLICATION_PENDING` で拒否される（`should_return_409_without_creating_a_second_row_when_pending_exists`）
+- [x] 既に SELLER / ADMIN のユーザーの申請が 409 `SELLER_APPLICATION_ALREADY_APPROVED` で拒否される（OQ-1）（`should_return_409_and_create_no_row_when_applicant_is_not_a_buyer`）
+- [x] 却下後の再申請が新規レコードとして作成され、過去の申請履歴が残る（SELLER-05）（`should_create_a_new_row_when_only_rejected_applications_exist`）
+- [x] `GET /seller-applications/me` が最新 1 件を返し、未申請なら 404 を返す（`should_return_the_latest_application_when_reapplied_after_rejection` / `should_return_404_when_applicant_has_never_applied`）
 - [ ] `/seller/applications/new` が 4 状態（未申請 / PENDING / REJECTED / APPROVED）を正しく出し分ける
 - [ ] グローバルナビ（`UserMenu` / `MobileMenuSheet` / `GlobalFooter`）の「セラー申請」リンクが**404 にならず**画面へ到達する
 
 ### セキュリティ要件
 
-- [ ] §8 Security Checklist の全項目を確認済み（根拠を §8 に記載）
-- [ ] mass assignment（`status` / `reviewerId` 等の外部指定）が不可能であることをコードとテストで確認
+- [x] §8 Security Checklist の全項目を確認済み（根拠を §8 に記載）※ `dangerouslySetInnerHTML` の項目のみ FE 未着手（SA-18 で確認する）
+- [x] mass assignment（`status` / `reviewerId` 等の外部指定）が不可能であることをコードとテストで確認（`CreateSellerApplicationRequest` が `reason` のみ + `should_ignore_server_controlled_fields_in_the_request_body`）
 
 ### テスト要件
 
-- [ ] Backend: `./gradlew cleanTest test jacocoTestReport jacocoTestCoverageVerification` がグリーン。JaCoCo ゲート（0.80）を維持
-- [ ] Backend: `SellerApplicationService` の単体カバレッジ ≥ 80%（分岐が多いので分岐カバレッジも確認）
+- [x] Backend: `./gradlew cleanTest test jacocoTestReport jacocoTestCoverageVerification` がグリーン。JaCoCo ゲート（0.80）を維持（2026-08-02・**206 件 / 失敗 0**・`clean build` も BUILD SUCCESSFUL）
+- [x] Backend: `SellerApplicationService` の単体カバレッジ ≥ 80%（分岐が多いので分岐カバレッジも確認）（**INSTRUCTION 100% / BRANCH 100%**。`SellerApplication` Entity も 100% / 100%）
 - [ ] Frontend: `pnpm test` / `pnpm lint` / `pnpm typecheck` / `pnpm build` がグリーン
 
 ### コード品質
 
-- [ ] `BACKEND_CODING_STANDARDS.md` 準拠（DTO = record・Lombok パターン・レイヤー責務・`@Transactional(readOnly)` の適切な使用・例外は `KivioException` 階層）
+- [x] `BACKEND_CODING_STANDARDS.md` 準拠（DTO = record・Lombok パターン・レイヤー責務・`@Transactional(readOnly)` の適切な使用・例外は `KivioException` 階層）※ テストは §13.1 の種別どおり（Entity 単体 / `@ExtendWith(MockitoExtension)` / `@WebMvcTest` / `@SpringBootTest` + Testcontainers）。`checkstyleMain` / `checkstyleTest` 通過
 - [ ] `FRONTEND_CODING_STANDARDS.md` 準拠（`'use client'` は葉のみ・named export・TanStack Query の query/mutation 分離・Zustand セレクタ形式）
 - [ ] Controller がビジネスロジックを持たない（Service 委譲のみ）
 - [ ] **ドメイン間の直接 import がない**（`SellerApplication` は `identity` 内。`applicantId` / `reviewerId` は `UUID` 値参照で `@ManyToOne` を張らない）
@@ -721,6 +738,7 @@ PR をマージするには以下を全て満たすこと。**各項目に根拠
 | R-6 | 承認処理が別スライスのため、本スライス単体では **APPROVED 状態を正規の経路で作れない**。E2E / 動作確認では Seed か手動 UPDATE で APPROVED を作る必要があり、「承認したのにロールが `ROLE_BUYER` のまま」という**本番では起こらない不整合状態**でテストすることになる | 低 | Seed（`V14`）で `seller1`（既に `ROLE_SELLER`）に APPROVED 申請を紐づけ、**ロールと申請の整合が取れた状態**を用意する。Service の判定を「ロール優先 + APPROVED 申請も見る」の 2 段にしてあるため（§3.2）、どちらの状態でも正しく弾ける |
 | R-7 | **`seller_applications` が `REQUIREMENTS.md §15.3`（エンティティ別保持ポリシー）に載っていなかった。** `reason` は自由記述で、申請者が氏名・屋号・連絡先・事業内容などの PII を書き込みうる。退会 90 日後に `users` は匿名化されるが `id` は保持されるため、`applicant_id` から個人を再特定できてしまい、**`user-profile.md` R-6 と同一構造の匿名化の実質無効化**が起きる | 中 | ✅ **仕様化まで完了（2026-08-02・SA-13）。実装は `feature/batch-jobs`（#15）に残る。** 方針は「90 日 / ユーザー匿名化と同一トランザクションで `reason` と `review_comment` を `(削除済み)` に置換」。**物理削除ではなく匿名化**にしたのは、`ROLE_SELLER` への権限昇格が「いつ・誰の承認で行われたか」が監査証跡として必要なため（`addresses` の RET-09 とはここが異なる）。仕様 5 か所に明記: ① `REQUIREMENTS §15.3` の表 ② `§15.4` の匿名化 SQL（冪等性条件付き）③ `§15.7` に `RET-10` 新設 ④ `SEQUENCE_FLOW §9.1` の `UserAnonymizationJob` に処理ステップ ⑤ `DATA_DICTIONARY §4` の概要とカラム備考。**仕様に書かなければ引き継がれない**というのが直前スライスの教訓（`user-profile.md` R-6） |
 | R-8 | `spring.jackson.default-property-inclusion: non_null` により、`API_DESIGN.md §4` の `GET /me` 例にある `"reviewComment": null` は**実際にはキーごと省略される**。フロントの型を `reviewComment: string \| null`（必須）で定義すると、実レスポンスとズレて `undefined` が流れ込む | 低 | ✅ **解決（2026-08-02・SA-13b）**。`API_DESIGN.md §4` のレスポンス例に「`null` フィールドは省略される・クライアント型は省略を許容する形で定義すること」を注記した（全エンドポイント共通の挙動である旨も明記）。実装側は FE 型を `reviewComment?: string \| null` にする（§6.4 ステップ 1） |
+| R-10 | **`@NotBlank` は全角スペース（U+3000）のみの `reason` を通す。** Hibernate Validator の `NotBlankValidator` は `charSequence.toString().trim().length() > 0` で判定し、Java の `String.trim()` は U+0020 以下しか除去しないため。一方フロントの zod は `.trim()`（JS の `String.trim()` は U+3000 も除去する）で弾く想定のため、**FE を通せば弾かれるが API を直接叩くと `reason = "　"` の申請が 201 で通る**。実害は「中身のない申請が 1 件でき、管理者が却下する」程度だが、`VALIDATION_RULES.md §6` の「空白のみ不可」とは食い違う | 低 | SA-11 / SA-12 の範囲外のため**未修正**。テストでは全角スペースのケースを意図的に除外し、`SellerApplicationControllerTest#should_return_422_when_reason_is_blank` の直上にコメントで理由を残した。修正する場合の選択肢は ① `CreateSellerApplicationRequest` に `@Pattern(regexp = "(?sU).*\\S.*")` を追加する（**`(?U)` が必須**。Java の `\s` は既定で US-ASCII のみのため `(?s).*\S.*` では U+3000 が「非空白」と判定されて素通りする。JDK 25 で実測: `"　".matches("(?s).*\\S.*")` → `true` / `"　".matches("(?sU).*\\S.*")` → `false`）② Service で `reason.strip()` した結果が空なら弾く（`String.strip()` は `Character.isWhitespace` 基準で U+3000 を除去する。実測: `"　".strip().length()` → `0`、`"　".trim().length()` → `1`）。**どちらを採るか、そもそも直すかはオーナー判断**。直す場合は `VALIDATION_RULES.md §6` と zod 側の整合も併せて見直すこと |
 | R-9 | `@Auditable` の `entityIdParam` はメソッド**引数**からしか `UUID` を拾えないため、新規作成された申請の `id` を `audit_logs.entity_id` に残せない（null になる）。承認/却下の監査行（`feature/admin`）とは `entity_id` で突き合わせられない | 低 | 本スライスでは `entityIdParam` を指定せず null を許容する（`AuthService#register` の `USER_REGISTERED` と同じ扱い）。戻り値から `entityId` を拾う Aspect 拡張は横断的変更なので、必要になった時点で別途起票する |
 
 ---
