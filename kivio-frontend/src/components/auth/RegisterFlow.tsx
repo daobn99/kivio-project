@@ -15,7 +15,7 @@ interface FlowState {
 }
 
 /**
- * 会員登録フロー（auth.md §8）。可視ステッパーを持たない順序つき状態機械。
+ * 会員登録フロー。可視ステッパーを持たない順序つき状態機械。
  * 現在画面・email・registrationToken を内部状態で保持し、子画面（*Step）を切り替える。
  */
 export function RegisterFlow() {
@@ -24,7 +24,7 @@ export function RegisterFlow() {
   const isInitialMount = useRef(true)
 
   // 進捗 chrome が無いため、画面切替時に新コンテナへフォーカスを移し（先頭は h1）、
-  // 支援技術利用者に「画面が変わった」ことを伝える（auth.md §13）。初回マウントは除く
+  // 支援技術利用者に「画面が変わった」ことを伝える。初回マウントは除く
   useEffect(() => {
     if (isInitialMount.current) {
       isInitialMount.current = false
@@ -35,7 +35,7 @@ export function RegisterFlow() {
 
   return (
     <div
-      // key を step にして切替ごとに remount → auth-fade を再生（§8.5）
+      // key を step にして切替ごとに remount → auth-fade を再生
       key={state.step}
       ref={containerRef}
       tabIndex={-1}

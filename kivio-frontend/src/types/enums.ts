@@ -1,6 +1,6 @@
 /**
  * バックエンド Enum に対応する const + type 定義。
- * 値はバックエンドの Enum 名と完全一致させる（`docs/design/DATA_DICTIONARY.md` 準拠）。
+ * 値はバックエンドの Enum 名と完全一致させる。
  */
 
 export const UserRole = {

@@ -272,6 +272,38 @@ public record CreateProductRequest(
 ) {}
 ```
 
+**部分更新（`PATCH`）の DTO 規約:**
+
+`PATCH` の Request DTO は全フィールドを任意にし、「未送信＝不変」を `null` で表現する。Bean Validation の制約アノテーション（`@Size` / `@URL` 等）は `null` を素通りさせるため、`@NotNull` を付けずにそのまま並べればよい。
+
+null 許容カラムを**クリア**する手段が必要な場合は、**空文字をクリアの意思表示として扱う**。Jackson は「フィールド未送信」と「明示的な `null`」をどちらも `null` にバインドするため、この 2 つを区別できないことによる。クリアの解釈はドメインメソッド側で行い、Service・Controller には持ち込まない。
+
+```java
+public record UpdateProfileRequest(
+        /** 表示名 */
+        @Size(min = 1, max = 100, message = "表示名は100文字以内で入力してください") String displayName,
+
+        /** アバター画像URL */
+        @URL(message = "URLの形式が正しくありません") String avatarUrl) {
+}
+```
+
+```java
+// 集約ルート側でクリアを解釈する
+public void updateProfile(String displayName, String avatarUrl) {
+    if (displayName != null) {
+        this.displayName = displayName;
+    }
+    if (avatarUrl != null) {
+        // 空文字はクリア要求。JSON では未送信と明示的 null を区別できないため空文字に割り当てている
+        this.avatarUrl = avatarUrl.isBlank() ? null : avatarUrl;
+    }
+}
+```
+
+- 空文字クリアを採用したフィールドは `docs/design/API_DESIGN.md` と `docs/design/VALIDATION_RULES.md` に必ず明記する
+- `@NotBlank` を付けたフィールドではこの方式を採れない（空文字が弾かれる）。`@Size(min = 1)` を使うこと
+
 **クロスフィールドバリデーション（`@AssertTrue`）:**
 
 ```java
@@ -595,7 +627,8 @@ public record OrderResponse(
 **ルール:**
 - Response DTO に Entity の参照を持たせない（`from()` 内で変換を完結させる）
 - フィールド名は camelCase（JSON に `@JsonProperty` で別名を付ける場合は明示する）
-- `null` を返す可能性があるフィールドには `@JsonInclude(NON_NULL)` をクラスに付与する
+- `application.yaml` の `default-property-inclusion: non_null` により、**null のフィールドは JSON から丸ごと省略される**。個別の `@JsonInclude` は不要。クライアント側の型は `undefined` を許容する必要があるため、null になり得るフィールドは API 設計書に明記する
+- 機密情報（`passwordHash` 等）はフィールドに含めない。有無だけをクライアントが知る必要がある場合は、`hasPassword` のような **boolean の派生値**を返す（プリミティブ `boolean` は null にならないため常にシリアライズされ、フィールドの有無で分岐する実装を誘発しない）
 
 ---
 
@@ -1869,6 +1902,8 @@ public Optional<Product> findById(UUID id) { ... }
 | コードをコメントアウトして残す | 削除する（`git` で復元可能）|
 | 変更履歴コメント（`// 2026-05-01 修正: ...`）| `git log` / `git blame` が代替 |
 | 自明なコメント（`// ゲッターを呼ぶ`）| 削除する |
+| ドキュメントの章番号引用（`// user-profile.md §8.3 参照`）| 理由そのものを 1 行で書く。参照はドキュメント改訂で無効になり、コードだけを読む人には情報にならない |
+| 課題管理番号の引用（`// OQ-P1 の決定`）| 同上。決定の**内容**を書く |
 
 ---
 

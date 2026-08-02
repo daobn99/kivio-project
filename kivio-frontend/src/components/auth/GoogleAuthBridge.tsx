@@ -5,9 +5,9 @@ import { useRouter } from 'next/navigation'
 import { googleLogin } from '@/lib/api/client/auth'
 import { getCurrentUser } from '@/lib/api/client/users'
 import { useAuthStore } from '@/stores/useAuthStore'
-import { resolveAuthError } from '@/lib/authErrors'
+import { resolveApiError } from '@/lib/apiErrors'
 import { ROUTES } from '@/lib/constants'
-import { FormAlert } from '@/components/auth/FormAlert'
+import { FormAlert } from '@/components/form/FormAlert'
 
 const GOOGLE_ERRORS: Record<string, string> = {
   GOOGLE_TOKEN_INVALID: 'Google 認証に失敗しました。お手数ですが、もう一度お試しください。',
@@ -52,7 +52,7 @@ export function GoogleAuthBridge() {
         router.replace(ROUTES.home)
       } catch (e) {
         await signOut({ redirect: false })
-        setError(resolveAuthError(e, GOOGLE_ERRORS))
+        setError(resolveApiError(e, GOOGLE_ERRORS))
         startedRef.current = false
       }
     })()

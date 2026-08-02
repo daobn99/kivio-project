@@ -4,7 +4,7 @@ interface GoogleIconProps {
 
 /**
  * Google 公式の多色 G マーク（ブランドガイドライン準拠）。
- * lucide の単色アイコンは使わない（auth.md §10）。装飾のため aria-hidden。
+ * ブランド指定の 4 色が必要なため lucide の単色アイコンは使わない。装飾のため aria-hidden。
  */
 export function GoogleIcon({ className }: GoogleIconProps) {
   return (

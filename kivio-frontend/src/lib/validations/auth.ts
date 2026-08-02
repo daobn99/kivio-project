@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-// バリデーション規約・文言の単一の正は docs/design/VALIDATION_RULES.md を参照。
+// 制約と文言はバックエンドの Bean Validation と一致させること。
 // 制約や文言を変更する場合は同ドキュメント・バックエンドの Bean Validation と合わせて更新すること。
 
 const emailField = z

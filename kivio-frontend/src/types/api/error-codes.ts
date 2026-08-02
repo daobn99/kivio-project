@@ -1,6 +1,6 @@
 /**
  * バックエンドが返す UPPER_SNAKE_CASE エラーコード一覧。
- * 完全なリストは docs/design/ERROR_CODES.md を参照。
+ * 実際に画面で分岐に使うものだけを列挙する。
  */
 export type ApiErrorCode =
   // --- 汎用（どのエンドポイントでも発生しうる） ---

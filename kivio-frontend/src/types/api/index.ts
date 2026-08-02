@@ -8,3 +8,4 @@ export type {
   CheckEmailResponse,
   AuthUser,
 } from './auth'
+export type { Address, CreateAddressRequest, UpdateAddressRequest } from './address'

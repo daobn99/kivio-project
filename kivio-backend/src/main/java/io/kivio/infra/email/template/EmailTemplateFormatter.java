@@ -12,7 +12,7 @@ import java.util.Map;
  * メールテンプレート（HTML）を読み込み、{@code {{変数名}}} を実値へ置換します。
  *
  * <p>テンプレートは classpath 上の HTML ファイル（例: {@code emails/ja/registration-otp.html}）。
- * 変数は EMAIL_DESIGN.md の各テンプレート定義「本文変数」に対応する。
+ * 変数はテンプレートごとに定義された「本文変数」に対応します。
  */
 @Component
 public class EmailTemplateFormatter {

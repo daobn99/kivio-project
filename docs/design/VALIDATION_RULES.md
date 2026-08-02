@@ -71,7 +71,7 @@ UI 表記は必ず左列に統一する。表記揺れを禁止する。
 | `password`<br>（ログイン） | ◯ | **必須のみ**（長さ検証しない） | ログインは強度ポリシーを課す場ではない。不一致は `INVALID_CREDENTIALS`（401）で返す。`currentPassword`（§2.3）と同思想 | `@NotBlank` | `z.string().min(1)` | 「パスワードを入力してください」 |
 | `passwordConfirm` | ◯ | `password` と一致 | 入力ミス防止 | （サーバ検証は任意・主にフロント責務） | `.refine(p === pc, path:['passwordConfirm'])` | 「パスワードと確認用パスワードが一致しません」 |
 | `displayName` | ◯ | 1〜100文字 | DATA_DICTIONARY `users.display_name`（VARCHAR 100・必須）。空表示名による画面崩れ防止のため登録時必須 | `@NotBlank @Size(max=100)` | `z.string().trim().min(1).max(100)` | 未入力:「表示名を入力してください」 / 上限:「表示名は100文字以内で入力してください」 |
-| `avatarUrl` | 任意 | URL形式 | PATCH /users/me（Cloudinary URL） | `@URL` | `z.url().optional()` | 「URLの形式が正しくありません」 |
+| `avatarUrl` | 任意 | URL形式。**空文字 `""` はクリア（`null` 化）を意味し、バリデーションエラーにしない** | PATCH /users/me（Cloudinary URL）。`@URL` は空文字を有効と扱う（Hibernate Validator の仕様）ため、空文字はサービス層まで到達し `null` 化される | `@URL` | `z.union([z.literal(''), z.url()]).optional()` | 「URLの形式が正しくありません」 |
 
 ### 2.2 OTP 登録フロー
 
@@ -123,12 +123,38 @@ UI 表記は必ず左列に統一する。表記揺れを禁止する。
 | `CompleteRegistrationRequest` | `displayName` | ✅ `@NotBlank @Size(max=100)` に変更済み（任意→必須） |
 | `RequestOtpRequest` / `CheckEmailRequest` / `LoginRequest` | `email` | ✅ `@Email @Size(max=255)` で整合済み |
 | `VerifyOtpRequest` | `otp` | ✅ `@Pattern("\\d{6}")` で整合済み |
-| （未実装）`PATCH /users/me/password` | `currentPassword` / `newPassword` | ⏳ DTO 未作成。実装時に `newPassword` へ `@Size(min=8, max=72)` を付与 |
-| （未実装）`PATCH /users/me` | `displayName` / `avatarUrl` | ⏳ DTO 未作成。実装時に §2.1 に合わせる |
+| `ChangePasswordRequest`（`PATCH /users/me/password`） | `currentPassword` / `newPassword` | ✅ `currentPassword`=`@NotBlank` / `newPassword`=`@NotBlank @Size(min=8, max=72)`（2026-06-23・U-01） |
+| `UpdateProfileRequest`（`PATCH /users/me`） | `displayName` / `avatarUrl` | ✅ 部分更新のため `displayName`=`@Size(min=1, max=100)`（`null` 許容＝未送信）/ `avatarUrl`=`@URL`（2026-06-23・U-01） |
 
 ---
 
-## 5. 今後の拡張（Phase 2 以降）
+## 5. 配送先住所（`POST` / `PATCH /users/me/addresses`）
+
+`feature/user-profile` で追記（2026-06-23）。住所 CRUD のフィールド制約。`DB_DESIGN.md §3.10` / `DATA_DICTIONARY` の `addresses` を根拠とする。
+
+> **PATCH（部分更新）と POST（新規作成）の差:** 列「必須（POST）」は新規作成時の必須性。`PATCH /users/me/addresses/{id}` は部分更新のため**送信フィールドのみ検証**し、未送信（`null`）は不変とする（`@NotBlank` は POST 用 DTO のみ。`PATCH` 用 DTO は `@Size`/`@Pattern` のみで `null` を許容）。
+
+| フィールド | 必須（POST） | 制約 | 根拠 | Bean Validation（POST） | zod | エラー文言 |
+|---|---|---|---|---|---|---|
+| `recipientName` | ◯ | 1〜100文字 | DATA_DICTIONARY `addresses.recipient_name`（VARCHAR 100） | `@NotBlank @Size(max=100)` | `z.string().trim().min(1).max(100)` | 未入力:「宛名を入力してください」 / 上限:「宛名は100文字以内で入力してください」 |
+| `postalCode` | ◯ | 郵便番号形式（`^\d{3}-?\d{4}$`・ハイフン任意） | DATA_DICTIONARY `addresses.postal_code`（VARCHAR 10）。日本の7桁郵便番号 | `@NotBlank @Pattern(regexp="^\\d{3}-?\\d{4}$")` | `z.string().regex(/^\d{3}-?\d{4}$/)` | 未入力:「郵便番号を入力してください」 / 形式:「郵便番号は7桁の数字で入力してください」 |
+| `prefecture` | ◯ | 1〜20文字 | DATA_DICTIONARY `addresses.prefecture`（VARCHAR 20）。都道府県名 | `@NotBlank @Size(max=20)` | `z.string().trim().min(1).max(20)` | 未入力:「都道府県を選択してください」 / 上限:「都道府県は20文字以内で入力してください」 |
+| `city` | ◯ | 1〜100文字 | DATA_DICTIONARY `addresses.city`（VARCHAR 100）。市区町村 | `@NotBlank @Size(max=100)` | `z.string().trim().min(1).max(100)` | 未入力:「市区町村を入力してください」 / 上限:「市区町村は100文字以内で入力してください」 |
+| `addressLine` | ◯ | 1〜255文字 | DATA_DICTIONARY `addresses.address_line`（VARCHAR 255）。番地・建物名 | `@NotBlank @Size(max=255)` | `z.string().trim().min(1).max(255)` | 未入力:「番地・建物名を入力してください」 / 上限:「番地・建物名は255文字以内で入力してください」 |
+| `phoneNumber` | ◯ | 電話番号形式（`^0\d{1,4}-?\d{1,4}-?\d{4}$`・ハイフン任意） | DATA_DICTIONARY `addresses.phone_number`（VARCHAR 20）。日本の固定/携帯番号 | `@NotBlank @Pattern(regexp="^0\\d{1,4}-?\\d{1,4}-?\\d{4}$")` | `z.string().regex(/^0\d{1,4}-?\d{1,4}-?\d{4}$/)` | 未入力:「電話番号を入力してください」 / 形式:「電話番号の形式が正しくありません」 |
+| `isDefault` | 任意 | 真偽値（既定 `false`） | DATA_DICTIONARY `addresses.is_default`。ユーザーにつき 1 件のみ `true`（複数指定時はアプリ側で他住所を `false` に落とす） | `boolean`（検証なし） | `z.boolean().default(false)` | （ユーザー入力エラーなし） |
+
+**確定事項（2026-06-23・OQ-5）:**
+
+| # | 項目 | 決定 |
+|---|---|---|
+| 1 | `postalCode` 正規表現 | `^\d{3}-?\d{4}$`（ハイフン有無いずれも許容。保存値はそのまま） |
+| 2 | `phoneNumber` 正規表現 | `^0\d{1,4}-?\d{1,4}-?\d{4}$`（先頭 0・ハイフン任意） |
+| 3 | 一覧の並び順 | **デフォルト住所を先頭 → `created_at` 昇順** |
+
+---
+
+## 6. 今後の拡張（Phase 3 以降）
 
 以下のフィールドは別フェーズで本書に追記する。
 

@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.Ordered;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -96,6 +97,28 @@ public class GlobalExceptionHandler {
         problem.setTitle("Access Denied");
         problem.setInstance(URI.create(request.getRequestURI()));
         problem.setProperty("code", "ACCESS_DENIED");
+        return problem;
+    }
+
+    /**
+     * DB の一意制約違反を処理します。
+     *
+     * <p>
+     * アプリ側でチェック済みの重複は個別の {@link KivioException}（例: {@code EMAIL_ALREADY_REGISTERED}）で
+     * 返すため、ここに到達するのは並行リクエストによる競合です（例: デフォルト住所の部分 UNIQUE 違反）。
+     * サーバー側の不具合ではないため 500 ではなく 409 とし、クライアントの再試行で解消できることを示します。
+     */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ProblemDetail handleDataIntegrityViolation(
+            DataIntegrityViolationException ex, HttpServletRequest request) {
+        log.warn("data_integrity_violation path={} correlationId={} cause={}",
+                request.getRequestURI(), MDC.get("correlationId"), ex.getMostSpecificCause().getMessage());
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.CONFLICT, "他の操作と競合したため処理できませんでした。再度お試しください");
+        problem.setType(URI.create(problemBaseUrl + "/problems/duplicate-entry"));
+        problem.setTitle("Duplicate Entry");
+        problem.setInstance(URI.create(request.getRequestURI()));
+        problem.setProperty("code", "DUPLICATE_ENTRY");
         return problem;
     }
 

@@ -6,10 +6,7 @@ interface FieldErrorProps {
   help?: string
 }
 
-/**
- * フィールド直下のエラー / ヘルプテキスト（auth.md §6.3.4）。
- * `id` は対応する入力の `aria-describedby` に渡してメッセージと紐付ける。
- */
+/** `id` は対応する入力の `aria-describedby` に渡してメッセージと紐付ける。 */
 export function FieldError({ id, message, help }: FieldErrorProps) {
   if (!message && !help) return null
   return (

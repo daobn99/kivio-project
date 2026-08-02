@@ -43,10 +43,12 @@ export interface AuthUser {
   id: string
   email: string
   displayName: string
-  /** アバター画像 URL。未設定の場合は null */
-  avatarUrl: string | null
+  /** アバター画像 URL。未設定なら JSON から省略される */
+  avatarUrl?: string | null
   role: UserRole
   status: UserStatus
+  /** パスワードを設定済みか。Google ログイン専用ユーザーは `false` */
+  hasPassword: boolean
   /** ISO 8601 UTC のアカウント作成日時 */
   createdAt: string
 }

@@ -83,7 +83,7 @@ Spring Boot 3.x の `ProblemDetail` をベースとする。
 | `TOKEN_INVALID` | 401 | Token Invalid | JWT署名不正・形式エラー |
 | `RATE_LIMIT_EXCEEDED` | 429 | Rate Limit Exceeded | レート制限超過（認証系10req/min、API全般100req/min） |
 | `INTERNAL_SERVER_ERROR` | 500 | Internal Server Error | サーバー内部エラー（詳細は絶対に露出しない） |
-| `DUPLICATE_ENTRY` | 409 | Duplicate Entry | 汎用重複登録（複合ユニーク制約違反等） |
+| `DUPLICATE_ENTRY` | 409 | Duplicate Entry | 汎用重複登録（複合ユニーク制約違反等）。アプリ側でチェック済みの重複は個別コード（`EMAIL_ALREADY_REGISTERED` 等）を使うため、本コードが返るのは**並行リクエストによる競合**（例: デフォルト住所の同時指定）。クライアントは再試行で解消できる |
 
 ---
 

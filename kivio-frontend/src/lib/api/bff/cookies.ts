@@ -4,7 +4,7 @@ import type { NextResponse } from 'next/server'
 export const ACCESS_TOKEN_COOKIE = 'access_token'
 export const REFRESH_TOKEN_COOKIE = 'refresh_token'
 
-// Refresh Token の寿命（7日）。バックエンドの JWT_REFRESH_TOKEN_EXPIRATION と一致させる（SECURITY.md §Security）。
+// Refresh Token の寿命（7日）。バックエンドの JWT_REFRESH_TOKEN_EXPIRATION と一致させる。
 const REFRESH_MAX_AGE_SECONDS = 60 * 60 * 24 * 7
 
 const baseCookieOptions = {

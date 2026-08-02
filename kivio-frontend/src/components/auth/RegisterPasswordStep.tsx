@@ -11,13 +11,13 @@ import {
   type CompleteRegistrationFormValues,
 } from '@/lib/validations/auth'
 import { useAuthStore } from '@/stores/useAuthStore'
-import { authErrorCode, resolveAuthError } from '@/lib/authErrors'
+import { apiErrorCode, resolveApiError } from '@/lib/apiErrors'
 import { ROUTES } from '@/lib/constants'
 import { FloatingLabelInput } from '@/components/ui/FloatingLabelInput'
 import { PasswordField } from '@/components/auth/PasswordField'
 import { AuthSubmitButton } from '@/components/auth/AuthSubmitButton'
-import { FormAlert } from '@/components/auth/FormAlert'
-import { FieldError } from '@/components/auth/FieldError'
+import { FormAlert } from '@/components/form/FormAlert'
+import { FieldError } from '@/components/form/FieldError'
 
 const COMPLETE_ERRORS: Record<string, string> = {
   RATE_LIMIT_EXCEEDED: '試行回数が上限に達しました。しばらくしてからお試しください。',
@@ -66,7 +66,7 @@ export function RegisterPasswordStep({
       router.replace(ROUTES.home)
     },
     onError: (err) => {
-      const code = authErrorCode(err)
+      const code = apiErrorCode(err)
       if (code === 'REGISTRATION_SESSION_INVALID') {
         onSessionInvalid('セッションの有効期限が切れました。最初からやり直してください。')
       } else if (code === 'EMAIL_ALREADY_REGISTERED') {
@@ -78,9 +78,9 @@ export function RegisterPasswordStep({
   // セッション切れ等は Step1 へ差し戻すため、ここでは残りのコードのみ表示する
   const serverError =
     mutation.isError &&
-    authErrorCode(mutation.error) !== 'REGISTRATION_SESSION_INVALID' &&
-    authErrorCode(mutation.error) !== 'EMAIL_ALREADY_REGISTERED'
-      ? resolveAuthError(mutation.error, COMPLETE_ERRORS)
+    apiErrorCode(mutation.error) !== 'REGISTRATION_SESSION_INVALID' &&
+    apiErrorCode(mutation.error) !== 'EMAIL_ALREADY_REGISTERED'
+      ? resolveApiError(mutation.error, COMPLETE_ERRORS)
       : null
 
   return (

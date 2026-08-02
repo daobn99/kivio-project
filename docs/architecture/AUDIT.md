@@ -284,6 +284,7 @@ audit_logs
 | 認証 | `USER_LOGIN_FAILED` | ログイン失敗 | - |
 | 認証 | `USER_LOGGED_OUT` | ログアウト | - |
 | 認証 | `USER_PASSWORD_CHANGED` | パスワード変更 | - |
+| 認証 | `USER_WITHDRAWN` | 退会（`deleted_at` 設定の論理削除） | - |
 | **管理者操作** | `SELLER_APPLICATION_APPROVED` | セラー申請承認 | status の変更前後 |
 | 管理者操作 | `SELLER_APPLICATION_REJECTED` | セラー申請却下 | status の変更前後 |
 | 管理者操作 | `USER_DEACTIVATED` | ユーザーアカウント無効化 | status の変更前後 |

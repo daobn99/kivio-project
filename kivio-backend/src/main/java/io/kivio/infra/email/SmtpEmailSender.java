@@ -17,7 +17,7 @@ import java.io.UnsupportedEncodingException;
  *
  * <p>devcontainer 上の Mailpit（SMTP {@code MAIL_HOST:MAIL_PORT}）へ HTML メールを送信し、
  * Web UI（http://localhost:8025）で本番同等のメールを目視確認できる。
- * 本番では Resend HTTP API 実装（{@code @Profile("prod")}）へ差し替える（EMAIL_DESIGN.md §5）。
+ * 本番では Resend HTTP API 実装（{@code @Profile("prod")}）へ差し替えます。
  */
 @Slf4j
 @Component

@@ -106,7 +106,7 @@ public class SecurityConfig {
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint(problemDetailAuthEntryPoint())
                         .accessDeniedHandler(problemDetailAccessDeniedHandler()))
-                // JWT を先に解決してから per-user バケットのレート制限を適用する（SECURITY.md §4）
+                // JWT を先に解決してから per-user バケットのレート制限を適用する
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterAfter(rateLimitingFilter, JwtAuthenticationFilter.class);
 

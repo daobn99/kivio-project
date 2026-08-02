@@ -20,10 +20,12 @@
 9. [型定義規約](#9-型定義規約)
 10. [フォームバリデーション規約](#10-フォームバリデーション規約)
 11. [JSX 規約](#11-jsx-規約)
-13. [コメント規約](#12-コメント規約)
-12. [実装チェックリスト](#13-実装チェックリスト)
+12. [コメント規約](#12-コメント規約)
+13. [実装チェックリスト](#13-実装チェックリスト)
 
 > **Next.js 16 移行ポイント:** `middleware.ts` → `proxy.ts`、`params` / `searchParams` / `cookies()` / `headers()` が非同期 (`Promise`) に変更。
+>
+> **React 19 移行ポイント:** `forwardRef` は非推奨。`ref` は通常の props として受け取る（`function Foo({ ref, ...props })`）。
 
 ---
 
@@ -38,59 +40,61 @@ kivio-frontend/
 │   │   ├── (public)/               # 公開画面レイアウトグループ
 │   │   │   ├── layout.tsx
 │   │   │   └── page.tsx            # ホームページ /
-│   │   ├── (authenticated)/        # 認証済みユーザー向けレイアウトグループ
-│   │   │   ├── layout.tsx
-│   │   │   ├── cart/page.tsx
-│   │   │   ├── orders/[id]/page.tsx
-│   │   │   └── wishlist/page.tsx
-│   │   ├── (seller)/               # セラーダッシュボードレイアウトグループ
-│   │   │   ├── layout.tsx          # SellerSidebar を含む、セグメントスコープダーク対応
-│   │   │   ├── dashboard/page.tsx
-│   │   │   └── products/
-│   │   │       ├── page.tsx
-│   │   │       ├── new/page.tsx
-│   │   │       └── [id]/edit/page.tsx
-│   │   ├── (admin)/                # 管理者ダッシュボードレイアウトグループ
-│   │   │   ├── layout.tsx          # AdminHeader + AdminSidebar、セグメントスコープダーク対応
-│   │   │   ├── dashboard/page.tsx
-│   │   │   └── users/page.tsx
-│   │   ├── (auth)/                 # 認証系レイアウトグループ（ヘッダー・フッター非表示）
-│   │   │   ├── layout.tsx
+│   │   ├── (authenticated)/        # 認証必須ページのレイアウトグループ
+│   │   │   ├── layout.tsx          # グローバル chrome をフル表示
+│   │   │   └── profile/
+│   │   │       ├── layout.tsx      # アイデンティティ帯 + AccountNav
+│   │   │       ├── settings/page.tsx
+│   │   │       └── addresses/page.tsx
+│   │   ├── (seller)/               # セラーダッシュボードレイアウトグループ（Phase 3+）
+│   │   ├── (admin)/                # 管理者ダッシュボードレイアウトグループ（Phase 4+）
+│   │   ├── auth/(auth-group)/      # 認証系（ヘッダー・フッター非表示）
+│   │   │   ├── layout.tsx          #   URL は /auth/login。グループ名は URL に出ない
 │   │   │   ├── login/page.tsx
 │   │   │   └── register/page.tsx
-│   │   ├── products/[id]/page.tsx
-│   │   ├── shops/[id]/page.tsx
-│   │   ├── search/page.tsx
-│   │   ├── layout.tsx              # ルートレイアウト（ThemeProvider・QueryProvider のみ）
-│   │   ├── loading.tsx
-│   │   ├── error.tsx
-│   │   ├── not-found.tsx
+│   │   ├── api/                    # Route Handler（BFF・OAuth コールバック）
+│   │   │   ├── v1/[...path]/route.ts   # バックエンドへの汎用プロキシ
+│   │   │   ├── v1/auth/*/route.ts      # Cookie を発行・破棄する認証系のみ個別実装
+│   │   │   └── auth/[...nextauth]/route.ts
+│   │   ├── layout.tsx              # ルートレイアウト（Provider 群のみ）
+│   │   ├── loading.tsx / error.tsx / not-found.tsx / global-error.tsx
 │   │   ├── unauthorized.tsx        # 401 エラー画面（Next.js 16）
-│   │   ├── forbidden.tsx           # 403 エラー画面（Next.js 16）
-│   │   └── global-error.tsx
+│   │   └── forbidden.tsx           # 403 エラー画面（Next.js 16）
 │   ├── components/
-│   │   ├── layout/                 # GlobalHeader, GlobalFooter, SellerSidebar, AdminHeader/Sidebar
-│   │   ├── ui/                     # shadcn/ui ラッパー + 共通 UI（EmptyState, ErrorFallback）
-│   │   ├── product/                # ProductCard, ProductGrid, ProductForm
-│   │   ├── order/                  # OrderCard, OrderSummary
-│   │   ├── cart/                   # CartItem, CartSummary
-│   │   ├── auth/                   # LoginForm, RegisterForm
-│   │   └── seller/                 # SellerStatsCard, ApplicationForm
+│   │   ├── layout/                 # GlobalHeader, GlobalFooter, MobileBottomNav
+│   │   ├── ui/                     # shadcn/ui（@base-ui/react ベース）+ 共通 UI
+│   │   ├── form/                   # 画面横断のフォーム部品（FieldError, FormAlert 等）
+│   │   ├── providers/              # QueryProvider, AuthHydrator 等
+│   │   ├── auth/                   # LoginForm, RegisterFlow
+│   │   ├── profile/                # ProfileSettingsForm, AccountNav
+│   │   ├── address/                # AddressList, AddressFormSheet
+│   │   ├── product/ order/ cart/ seller/
 │   ├── hooks/                      # Custom Hooks（use プレフィックス必須）
+│   │   ├── queries/                # TanStack Query の useQuery ラッパー
+│   │   └── mutations/              # TanStack Query の useMutation ラッパー
 │   ├── lib/
-│   │   ├── api/                    # API クライアント関数（Server/Client 別）
+│   │   ├── api/
+│   │   │   ├── ApiError.ts         # ProblemDetail を包む例外型
+│   │   │   ├── bff/                # Route Handler 側の共通処理（Cookie・CSRF・転送）
+│   │   │   ├── client/             # Client Component 用 API 関数（apiFetch 経由）
+│   │   │   └── server/             # Server Component 用 API 関数（server-only）
 │   │   ├── validations/            # Zod スキーマ
-│   │   ├── utils.ts                # cn() など汎用ユーティリティ
-│   │   └── constants.ts            # 定数（ROUTES, API_BASE_URL 等）
+│   │   ├── constants/              # 定数（index.ts に ROUTES 等、以降は用途別に分割）
+│   │   ├── apiErrors.ts            # エラーコード → 表示文言の変換
+│   │   ├── queryKeys.ts            # Query Key の一元定義
+│   │   ├── format.ts               # Intl ベースの表示整形
+│   │   └── utils.ts                # cn() など汎用ユーティリティ
 │   ├── stores/                     # Zustand ストア
-│   ├── types/                      # TypeScript 型定義（API レスポンス・ドメイン型）
+│   ├── types/                      # TypeScript 型定義（api/ ドメイン型・enums.ts）
+│   ├── test/                       # Vitest セットアップ・MSW ハンドラ
 │   └── proxy.ts                    # 認証ガード（Next.js 16: middleware.ts → proxy.ts）
 ├── public/
 ├── next.config.ts
-├── tailwind.config.ts
 ├── tsconfig.json
 └── components.json                 # shadcn/ui 設定
 ```
+
+> Tailwind CSS 4 は設定を CSS 側（`app/globals.css` の `@theme inline`）に置くため、`tailwind.config.ts` は使わない。
 
 ### 1.2 レンダリング戦略の原則
 
@@ -159,27 +163,37 @@ export default function ProductPage() { /* 全体がクライアントバンド�
 
 ### 2.3 API クライアント（Client 用）
 
-Client Component からの API 呼び出しは `src/lib/api/client/` に集約する。  
-401 はグローバルインターセプトで `/auth/login` にリダイレクトする。
+Client Component からの API 呼び出しは `src/lib/api/client/` に集約し、`apiFetch` を必ず経由する。  
+Access Token は `Authorization` ヘッダーで直接送らず、Route Handler（BFF）が httpOnly Cookie から詰め替える。
+
+`apiFetch` が一元的に担う責務は次の 4 つ。個別の API 関数側で再実装しない。
+
+| 責務 | 内容 |
+|---|---|
+| 401 リカバリ | Refresh Token で 1 度だけ再試行し、失敗したら `/auth/login` へリダイレクトする |
+| リフレッシュの重複排除 | Token Rotation は単一使用のため single-flight にする（並行リクエストが Reuse Detection を誘発するのを防ぐ）|
+| エラー変換 | `ProblemDetail` を `ApiError` に変換して throw する（エラーコードのフィールド名は `code`。`errorCode` ではない）|
+| 204 の扱い | `204 No Content` は `res.json()` が `SyntaxError` になるため早期リターンする |
 
 ```ts
 // src/lib/api/client/base.ts
 'use client'
-import { redirect } from 'next/navigation'
-
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`/api/v1${path}`, {
-    ...init,
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
-    credentials: 'include',
-  })
-  if (res.status === 401) redirect('/auth/login')
+  let res = await doFetch(path, init)
+
+  if (res.status === 401) {
+    // refreshSession() は single-flight（同時実行を 1 本に畳む）
+    if (!(await refreshSession())) redirect('/auth/login')
+    res = await doFetch(path, init)
+    if (res.status === 401) redirect('/auth/login')
+  }
+
   if (!res.ok) {
     const problem: ProblemDetail = await res.json()
-    // ProblemDetail のエラーコードフィールドは `code`（`errorCode` ではない）
     throw new ApiError(problem.title, problem.status, problem.detail, problem.code)
   }
-  return res.json()
+  if (res.status === 204) return undefined as T
+  return res.json() as Promise<T>
 }
 ```
 
@@ -366,6 +380,17 @@ export function ProductDetailClient({ product }: { product: ProductDto }) {
 // ❌ 直接カラー指定
 <div className="bg-blue-600 text-white" />
 ```
+
+**Base UI ベースであることに起因する注意点:**
+
+本プロジェクトの shadcn/ui は Radix ではなく `@base-ui/react` の上に構築されている。ネイティブ要素を前提にしたスタイル・アサーションが通用しないケースがあるため、以下に注意する。
+
+| 事象 | 対処 |
+|---|---|
+| `Checkbox` は `<span role="checkbox">` として描画される | 無効状態は `disabled:` ではなく `data-disabled:` で装飾する。テストも `toBeDisabled()` ではなく `aria-disabled` を検証する |
+| 状態バリアントは `data-*` 属性 | `data-checked:` / `data-open:` を使う（`data-[checked]:` ではなく短縮形が正） |
+| `AlertDialogAction` は素の `Button` で、押しても自動で閉じない | 閉じるタイミングは呼び出し側が制御する（失敗時はダイアログを開いたままエラーを表示できる）|
+| `Sheet` の `side` は `data-[side=…]` クラスで効く | `data-[side=bottom]:*` は `sm:*` より詳細度が高く CSS では上書きできない。画面幅で出し分けるときは `useMediaQuery` で `side` prop 自体を切り替える |
 
 ---
 
@@ -750,6 +775,10 @@ export const queryKeys = {
   cart: {
     detail: ['cart'] as const,
   },
+  user: {
+    me: ['user', 'me'] as const,
+    addresses: ['user', 'me', 'addresses'] as const,
+  },
   seller: {
     stats: ['seller', 'stats'] as const,
     products: (params?: SellerProductListParams) => ['seller', 'products', params] as const,
@@ -757,6 +786,10 @@ export const queryKeys = {
   },
 } as const
 ```
+
+**ルール:**
+- Query Key の文字列リテラルをコンポーネントに直書きしない。必ず `queryKeys` から参照する
+- 親子関係は配列の前方一致で表現する（`['user','me']` を無効化すると `['user','me','addresses']` も無効化される）
 
 ### 8.2 Query Hooks
 
@@ -779,6 +812,10 @@ export function useProductQuery(id: string) {
 
 ### 8.3 Mutation Hooks
 
+`useMutation` をコンポーネントに直接書かず、`src/hooks/mutations/` の Custom Hook に切り出す。
+
+**キャッシュ無効化はミューテーション側の責務とする。** 同じ `invalidateQueries` を複数のコンポーネントに書くと、呼び出し漏れで一覧が古いまま残る。無効化を Hook に閉じ込めれば、呼び出し側は `mutate()` するだけでよい。
+
 ```ts
 // src/hooks/mutations/useAddToCartMutation.ts
 import { useMutation, useQueryClient } from '@tanstack/react-query'
@@ -788,15 +825,22 @@ export function useAddToCartMutation() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (item: AddToCartRequest) => addToCartApi(item),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.cart.detail })
-    },
-    onError: (error: ApiError) => {
-      toast.error(getErrorMessage(error.code))
-    },
+    // 成否によらず無効化する。失敗理由がサーバー側の状態変化（他タブでの削除等）の場合も
+    // 最新化が必要なため onSuccess ではなく onSettled を使う
+    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.cart.detail }),
   })
 }
 ```
+
+**画面固有の副作用（ダイアログを閉じる・遷移する・トーストを出す）は Hook に入れない。** `mutate()` の第 2 引数、または呼び出し側の `onSuccess` で渡す。
+
+```tsx
+// ✅ 汎用ロジックは Hook、画面固有の後処理は呼び出し側
+const mutation = useDeleteAddressMutation()
+mutation.mutate(id, { onSuccess: () => setDialogOpen(false) })
+```
+
+**エラー文言は Hook で決めない。** 同じエラーコードでも画面によって適切な文言が異なるため、`resolveApiError(error, overrides)`（`src/lib/apiErrors.ts`）で表示側が変換する。
 
 ### 8.4 Server Component との共存
 
@@ -857,6 +901,16 @@ src/types/
 
 バックエンドの API 設計書（`docs/design/API_DESIGN.md`）の JSON フィールドに厳密に対応させる。
 
+**バックエンドは Jackson の `default-property-inclusion: non_null` を有効にしており、値が null のフィールドは JSON から丸ごと省略される。** 「null になり得る」フィールドは `?:` で任意にし、`null` との union で受ける。`string | null` だけで宣言すると、実際には `undefined` が来て型と実体がずれる。
+
+```ts
+// ✅ 省略され得るフィールド
+avatarUrl?: string | null
+
+// ❌ 実際には undefined が来るのに null しか許容していない
+avatarUrl: string | null
+```
+
 ```ts
 // src/types/api/page-response.ts
 export interface PageResponse<T> {
@@ -911,7 +965,7 @@ const USER_ROLES = ['BUYER', 'SELLER', 'ADMIN'] as const
 type UserRole = typeof USER_ROLES[number]
 ```
 
-### 9.6 Enum / Union Type
+### 9.5 Enum / Union Type
 
 バックエンドの Enum 値と対応させる。**`const` + `type` パターン**を使い、ランタイムでも参照できるようにする。  
 `src/types/enums.ts` にすべての Enum 定義を集約する。
@@ -954,7 +1008,7 @@ export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
 }
 ```
 
-### 9.5 `any` / `unknown` 使用禁止
+### 9.6 `any` 使用禁止
 
 - `any` の使用は禁止。どうしても必要な場合は `eslint-disable` コメントと理由を記載する
 - 外部データ（API レスポンス・localStorage）には `unknown` を使い、型ガードで絞り込む
@@ -1074,6 +1128,18 @@ export default function ProductPage() {
 // ❌ アロー関数に代入した default export
 const ProductCard = ({ product }) => <div>{product.name}</div>
 export default ProductCard
+```
+
+**`ref` は通常の props として受け取る。** React 19 で `forwardRef` は非推奨になり、関数コンポーネントが直接 `ref` を props として受け取れるようになった。ラッパーが 1 段減り、`displayName` の指定も不要になる。
+
+```tsx
+// ✅ React 19
+export function PasswordInput({ ref, className, ...props }: React.ComponentProps<'input'>) {
+  return <Input ref={ref} className={className} {...props} />
+}
+
+// ❌ forwardRef（React 19 で非推奨）
+export const PasswordInput = forwardRef<HTMLInputElement, Props>(function PasswordInput(props, ref) { ... })
 ```
 
 ### 11.2 アクセシビリティ必須項目（Web Interface Guidelines 準拠）
@@ -1281,6 +1347,16 @@ export default function SellerLayout({ children }: { children: React.ReactNode }
 コードが「何をするか」は命名で伝える。コメントは**「なぜその実装にしたか」**を伝えるためにのみ使う。
 バックエンドの §14.7 と同じ方針を TypeScript / React に適用する。
 
+**ドキュメントの章番号を引用しない。** `// user-profile.md §3.5 に従う` のような参照は、ドキュメント側の改訂で容易に無効になるうえ、後からコードだけを読む人には何の情報も与えない。参照したくなったら、その章に書かれている**判断の理由そのもの**を 1 行で書く。
+
+```tsx
+// ❌ 参照だけ（ドキュメントが変わると嘘になる／読んでも意味がわからない）
+// 設定画面の区画（user-profile.md §6）。見出し列幅は MASTER.md §14 に準拠。
+
+// ✅ 理由を書く（コードだけで完結する）
+// 見出し列の幅はサイドナビと揃えて、ページ左端から一貫した縦のリズムを作る
+```
+
 ### 12.2 TSDoc（`/** */`）— 書く対象と書かない対象
 
 | 対象 | 方針 |
@@ -1380,6 +1456,8 @@ return (
 | コードをコメントアウトして残す | 削除する（`git` で復元可能） |
 | 変更履歴コメント（`// 2026-xx-xx 修正: ...`） | `git log` / `git blame` が代替 |
 | 自明なコメント（`// ローディング中は Skeleton を返す`） | 削除する |
+| ドキュメントの章番号引用（`// auth.md §6.3.3 と揃えている`） | 理由そのものを書く。参照は陳腐化する（§12.1）|
+| コンポーネントの設計意図を段落で書いた TSDoc | 設計ドキュメント側に置く。コードには非自明な判断のみ 1〜2 行 |
 | `/* ... */` ブロックコメント（JSX 外） | `//` を使う |
 | `TODO` / `FIXME` をコードに残す | GitHub Issue で管理する |
 
@@ -1420,9 +1498,10 @@ return (
 
 - [ ] Server Component では `lib/api/server/` の関数を使っている
 - [ ] Client Component からの API 呼び出しは TanStack Query を経由している
+- [ ] `useQuery` / `useMutation` を `hooks/queries/` `hooks/mutations/` の Custom Hook に切り出している
 - [ ] Query Key は `queryKeys.ts` から参照している
 - [ ] 並列取得可能なデータは `Promise.all` / 並列 `useQuery` にしている
-- [ ] Mutation 後に関連 Query を `invalidateQueries` している
+- [ ] `invalidateQueries` をミューテーション Hook 側に持たせている（呼び出し側に散らばっていない）
 - [ ] API エラーは `ApiError` として型安全にハンドリングしている
 
 ### 13.4 フォーム実装時
@@ -1448,14 +1527,15 @@ return (
 
 - [ ] モバイル（375px）でレイアウト崩れがない
 - [ ] デスクトップ（1280px）でレイアウト崩れがない
-- [ ] ダークモードで色・コントラストの問題がない
+- [ ] 色に依存しない状態表現になっている（アクティブ・エラー・デフォルト等を色だけで示していない）
 - [ ] キーボードのみで全操作が可能
-- [ ] `pnpm build` がエラー・型エラーなしで成功する
-- [ ] `pnpm lint` がエラーなしで成功する
+- [ ] `pnpm lint` / `pnpm typecheck` / `pnpm test` / `pnpm build` がすべて成功する
 
 ### 13.7 コメント確認
 
 - [ ] コメントが「なぜ」を説明している（「何をするか」は書いていない）
+- [ ] ドキュメントの章番号を引用していない（`user-profile.md §3.5` のような参照を書いていない）
+- [ ] コンポーネント関数に説明的な TSDoc を付けていない（非自明な設計判断のみ 1〜2 行）
 - [ ] コメントアウトしたコードが残っていない
 - [ ] 変更履歴コメント（`// 2026-xx-xx 修正: ...`）が含まれていない
 - [ ] `export` する型の非自明フィールドに TSDoc を付けている

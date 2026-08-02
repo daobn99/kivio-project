@@ -432,9 +432,14 @@ Content-Type: application/problem+json
   "avatarUrl": "https://res.cloudinary.com/kivio/...",
   "role": "ROLE_BUYER",
   "status": "ACTIVE",
+  "hasPassword": true,
   "createdAt": "2026-05-24T10:00:00Z"
 }
 ```
+
+| フィールド | 型 | 説明 |
+|---|---|---|
+| `hasPassword` | boolean | パスワード設定済みかどうか。Google ログイン専用ユーザー（`password_hash` が null）は `false`。フロントエンドはこの値でパスワード変更 UI を出し分ける（`design-system/pages/user-profile.md §8.3`）。ハッシュ自体は返さない |
 
 ---
 
@@ -455,8 +460,10 @@ Content-Type: application/problem+json
 
 | フィールド | 型 | 制約 |
 |---|---|---|
-| `displayName` | string | 100文字以内 |
-| `avatarUrl` | string | URL形式 |
+| `displayName` | string | 1〜100文字（送信時。空文字不可） |
+| `avatarUrl` | string | URL形式。**空文字 `""` を送るとクリア（`null` 化）** |
+
+**部分更新セマンティクス:** フィールドを**送らない**（または `null`）＝更新しない。`avatarUrl` のみ、クリアの意思表示として**空文字**を受け付ける（`null` と「未送信」を JSON で区別できないため）。
 
 #### レスポンス（200 OK）
 

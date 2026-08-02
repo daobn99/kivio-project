@@ -25,6 +25,8 @@ public record UserResponse(
         UserRole role,
         /** ステータス */
         UserStatus status,
+        /** パスワード設定済みフラグ */
+        boolean hasPassword,
         /** アカウント作成日時（ISO 8601 UTC） */
         Instant createdAt) {
     public static UserResponse from(User user) {
@@ -35,6 +37,7 @@ public record UserResponse(
                 .avatarUrl(user.getAvatarUrl())
                 .role(user.getRole())
                 .status(user.getStatus())
+                .hasPassword(user.hasPassword())
                 .createdAt(user.getCreatedAt())
                 .build();
     }

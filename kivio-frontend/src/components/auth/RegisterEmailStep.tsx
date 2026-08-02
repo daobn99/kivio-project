@@ -5,12 +5,12 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation } from '@tanstack/react-query'
 import { requestOtp } from '@/lib/api/client/auth'
 import { requestOtpSchema, type RequestOtpFormValues } from '@/lib/validations/auth'
-import { resolveAuthError, authErrorCode } from '@/lib/authErrors'
+import { resolveApiError, apiErrorCode } from '@/lib/apiErrors'
 import { ROUTES } from '@/lib/constants'
 import { FloatingLabelInput } from '@/components/ui/FloatingLabelInput'
 import { AuthSubmitButton } from '@/components/auth/AuthSubmitButton'
-import { FormAlert } from '@/components/auth/FormAlert'
-import { FieldError } from '@/components/auth/FieldError'
+import { FormAlert } from '@/components/form/FormAlert'
+import { FieldError } from '@/components/form/FieldError'
 import { AuthDivider } from '@/components/auth/AuthDivider'
 import { GoogleSignInButton } from '@/components/auth/GoogleSignInButton'
 
@@ -44,10 +44,10 @@ export function RegisterEmailStep({ defaultEmail, onSuccess, notice }: RegisterE
   })
 
   // 登録済みメールはログインへ誘導するため専用 UI（リンク付き）を出す
-  const isAlreadyRegistered = authErrorCode(mutation.error) === 'EMAIL_ALREADY_REGISTERED'
+  const isAlreadyRegistered = apiErrorCode(mutation.error) === 'EMAIL_ALREADY_REGISTERED'
   const serverError =
     mutation.isError && !isAlreadyRegistered
-      ? resolveAuthError(mutation.error, EMAIL_STEP_ERRORS)
+      ? resolveApiError(mutation.error, EMAIL_STEP_ERRORS)
       : null
 
   return (

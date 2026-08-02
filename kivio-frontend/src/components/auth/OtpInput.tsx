@@ -14,7 +14,7 @@ interface OtpInputProps {
 }
 
 /**
- * 6 桁分割入力（auth.md §8.3）。フローティングラベルの例外（§6.3）。
+ * 6 桁分割入力。フローティングラベルを使わない唯一の例外。
  * 数字のみ・ペースト対応・Backspace で前セルへ移動。各セルに aria-label を付与する。
  * inputMode="numeric" / autoComplete="one-time-code" で SMS・メールの自動入力に対応する。
  */

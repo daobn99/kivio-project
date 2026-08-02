@@ -17,7 +17,6 @@ import java.util.Map;
  * 実際の送信は profile で切り替わる {@link EmailSender}（dev: SMTP→Mailpit / prod:
  * Resend）へ委譲する。
  * これにより dev/prod の各トランスポート実装にメール種別ごとのテンプレート処理が重複しない。
- * メールテンプレートの定義は EMAIL_DESIGN.md を参照。
  */
 @Slf4j
 @Service

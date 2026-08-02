@@ -702,7 +702,7 @@ sequenceDiagram
 
 ## 9. Batch Jobs
 
-**要件:** RET-01〜RET-08（REQUIREMENTS § 15）  
+**要件:** RET-01〜RET-09（REQUIREMENTS § 15）  
 実行エンジン: Spring `@Scheduled`（Spring Batch は現スコープでは過剰）  
 全ジョブの実行結果は `audit_logs`（`actor_id = NULL`）に記録する。
 
@@ -718,6 +718,7 @@ sequenceDiagram
     loop 対象ユーザーごと
         J->>DB: UPDATE users SET<br/>  email = 'deleted_' || id || '@kivio.invalid',<br/>  display_name = '退会済みユーザー',<br/>  password_hash = NULL,<br/>  avatar_url = NULL,<br/>  google_id = NULL<br/>WHERE id = ?
         J->>DB: UPDATE shops SET<br/>  name = 'クローズドショップ',<br/>  description = NULL,<br/>  logo_url = NULL<br/>WHERE seller_id = ?<br/>  AND deleted_at IS NOT NULL
+        J->>DB: DELETE FROM addresses<br/>WHERE user_id = ?<br/>(全項目PII・物理削除 RET-09)
         J->>DB: INSERT INTO audit_logs<br/>(actor_id=NULL, action=USER_ANONYMIZED,<br/>entity_type=USER, entity_id=?, outcome=SUCCESS)
     end
     J->>DB: INSERT INTO audit_logs<br/>(action=BATCH_USER_ANONYMIZATION_COMPLETED,<br/>new_value={processedCount})

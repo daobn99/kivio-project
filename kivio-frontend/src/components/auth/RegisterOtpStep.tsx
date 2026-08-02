@@ -4,7 +4,7 @@ import { ArrowLeft } from 'lucide-react'
 import { useMutation } from '@tanstack/react-query'
 import { requestOtp, verifyOtp } from '@/lib/api/client/auth'
 import { verifyOtpSchema } from '@/lib/validations/auth'
-import { authErrorCode, DEFAULT_AUTH_ERROR } from '@/lib/authErrors'
+import { apiErrorCode, DEFAULT_API_ERROR } from '@/lib/apiErrors'
 import { OtpInput } from '@/components/auth/OtpInput'
 import { AuthSubmitButton } from '@/components/auth/AuthSubmitButton'
 
@@ -40,7 +40,7 @@ export function RegisterOtpStep({ email, onSuccess, onChangeEmail }: RegisterOtp
     mutationFn: (code: string) => verifyOtp(email, code),
     onSuccess: (res) => onSuccess(res.registrationToken),
     onError: (err) => {
-      const code = authErrorCode(err)
+      const code = apiErrorCode(err)
       if (code === 'OTP_INVALID') {
         const left = Math.max(0, attemptsLeft - 1)
         setAttemptsLeft(left)
@@ -53,7 +53,7 @@ export function RegisterOtpStep({ email, onSuccess, onChangeEmail }: RegisterOtp
         setAttemptsLeft(0)
         setError('試行回数の上限に達しました。コードを再送信してください。')
       } else {
-        setError(DEFAULT_AUTH_ERROR)
+        setError(DEFAULT_API_ERROR)
       }
     },
   })
