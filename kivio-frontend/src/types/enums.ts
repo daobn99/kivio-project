@@ -20,3 +20,14 @@ export const UserStatus = {
   INACTIVE: 'INACTIVE',
 } as const
 export type UserStatus = (typeof UserStatus)[keyof typeof UserStatus]
+
+export const SellerApplicationStatus = {
+  /** 審査中 */
+  PENDING: 'PENDING',
+  /** 承認済み */
+  APPROVED: 'APPROVED',
+  /** 却下。再申請は新しい申請として作成される */
+  REJECTED: 'REJECTED',
+} as const
+export type SellerApplicationStatus =
+  (typeof SellerApplicationStatus)[keyof typeof SellerApplicationStatus]

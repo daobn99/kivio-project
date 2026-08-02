@@ -571,3 +571,4 @@ import { ShoppingCart, Heart, Search, Store, User } from "lucide-react";
 - [`design-system/pages/layout.md`](pages/layout.md) — GlobalHeader / GlobalFooter / MobileBottomNav（ダークモード方針含む）
 - [`design-system/pages/auth.md`](pages/auth.md) — ログイン / 会員登録（`(auth)` 専用 chrome・フローティングラベル）
 - [`design-system/pages/user-profile.md`](pages/user-profile.md) — プロフィール設定 / 配送先住所管理（`/profile/*` アカウント領域 chrome・設定フォーム規約）
+- [`design-system/pages/seller-application.md`](pages/seller-application.md) — セラー申請フォーム / 審査状況表示（`/seller/applications/new`・1 URL 4 状態の出し分け）

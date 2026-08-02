@@ -2,9 +2,9 @@
 **ブランチ:** `feature/seller-application`  
 **担当 Phase:** Phase 2（`SENIOR_SETUP_PLAN.md` バーティカルスライス #3）  
 **最終更新:** 2026-08-02  
-**ステータス:** 🟡 バックエンド実装・テスト（SA-00〜SA-12）完了（2026-08-02）。残: フロントエンド一式（SA-14〜SA-19）。**`V2` のチェックサムが変わったため、開発 DB の `docker compose down -v` が未実施**（オーナー対応待ち）。
+**ステータス:** 🟢 **全タスク（SA-00〜SA-19）完了・PR 提出可**（2026-08-02）。バックエンド実装・テスト（SA-00〜SA-12）／ドキュメント（SA-05 / SA-06 / SA-13 / SA-13b）／UI 設計書（SA-14）／フロントエンド実装・テスト（SA-15〜SA-19）。**開発 DB の作り直しは実施済み**（`flyway_schema_history` に編集後 `V2` と `dev/V14` が `success = t` で並び、`idx_seller_applications_pending_unique` が `pg_indexes` に存在することを確認）。**残タスクは意図的に後続へ送った 2 件のみ**（R-10 の全角スペース・Playwright E2E。いずれも §11 / §9.2 に記載）。
 
-> **⚠️ 着手前の必須手順（OQ-3 の決定に伴う）:** 本スライスは `V2__create_identity_tables.sql` を**直接編集**する。既存の開発 DB では Flyway が `Migration checksum mismatch` で起動に失敗するため、**実装開始前に `docker compose down -v` で全テーブルをドロップして作り直すこと**（実施はプロジェクトオーナーが行う）。Testcontainers は毎回新規 DB を立てるため CI・テストへの影響はない。
+> **⚠️ このブランチを取得した開発者へ（OQ-3 の決定に伴う）:** 本スライスは `V2__create_identity_tables.sql` を**直接編集**しており、チェックサムが変わっている。既存の開発 DB では Flyway が `Migration checksum mismatch` で起動に失敗するため、**ブランチ取得後に `docker compose down -v` でボリュームごと破棄して作り直すこと**。Testcontainers は毎回新規 DB を立てるため CI・テストへの影響はない。**PR の説明にも同じ注意書きを記載すること**（R-2b）。
 
 > **前提（`feature/auth` / `feature/user-profile` 由来の既存実装）:**  
 > `User` / `UserRole` / `UserRepository`（`findByIdOrThrow`）・`KivioUserDetails`（`@AuthenticationPrincipal`）・`GlobalExceptionHandler`（RFC 9457）・`KivioException` 階層（`ConflictException` / `ResourceNotFoundException`）・`@Auditable` AOP・`BaseEntity` が利用可能。フロントは `(authenticated)` ルートグループ・`apiFetch`（BFF 経由・single-flight refresh）・`queryKeys.sellerApplication.me`・`ApiErrorCode` の 3 コードが**既に定義済み**で、グローバルナビ（`UserMenu` / `MobileMenuSheet` / `GlobalFooter`）から `/seller/applications/new` へのリンクも**既に張られている（現状 404）**。本スライスはその受け皿を作る。
@@ -104,7 +104,8 @@ Frontend: 型 / Zod / API クライアント（404→null）
 | `docs/design/frontend/FRONTEND_IA.md` | §1.3（L48）, §2 ナビゲーション（L101）, §3 ルート構成（L185〜188）, §5 ガード（L435〜437） | 画面 URL・BUYER 限定ガード・`(authenticated)` 配下への配置 |
 | `docs/design/frontend/USER_FLOW.md` | §2.1 セラー申請フロー（L128〜153） | 未申請 / PENDING / APPROVED / REJECTED の分岐 |
 | `design-system/MASTER.md` | 全体 | カラー・タイポグラフィ・コンポーネント仕様 |
-| `design-system/pages/user-profile.md` | §1 設計原則, §7 入力方針 | **本スライスに専用の UI 設計書は存在しない**（SA-14 で作成する。OQ-8）。設定画面系の前例として参照 |
+| `design-system/pages/seller-application.md` | **全体（特に §4 状態モデル / §5 画面パーツ / §7 エラー UI）** | **本画面の UI 設計の正**（SA-14 で作成済み・2026-08-02）。SA-18 / SA-19 はこれを参照して実装する |
+| `design-system/pages/user-profile.md` | §1 設計原則, §7 入力方針, §11 モーション | 上記設計書が継承しているフォーム規約（`h-11` / `FieldError` / `FormAlert` / `SaveStatus`）の出典。差分の判断根拠を確認するときに参照 |
 | `docs/implementation-plans/user-profile.md` | §8 S-1, §11 R-4 / R-6 | 直前スライスの教訓（一意性は DB 制約で担保・PII 保持ポリシーを仕様に明記） |
 | `CLAUDE.md` | Conventions / Audit Log / Security | API 規約・監査規約・パッケージ制約 |
 
@@ -163,12 +164,12 @@ Frontend: 型 / Zod / API クライアント（404→null）
 
 ### 4.1 Migration
 
-**テーブル自体は追加マイグレーション不要。** `seller_applications` は `V2__create_identity_tables.sql`（L40〜57）で作成済みで、インデックス 2 本（`idx_seller_applications_applicant_id` / `idx_seller_applications_status`）も存在する。着手時に以下を実マイグレーションで確認すること:
+**テーブル自体は追加マイグレーション不要。** `seller_applications` は `V2__create_identity_tables.sql`（L40〜57）で作成済みで、インデックス 2 本（`idx_seller_applications_applicant_id` / `idx_seller_applications_status`）も存在する。着手時に以下を実マイグレーションで確認すること（**全項目 SA-00 で確認済み**）:
 
-- [ ] `seller_applications` の全カラムが `DB_DESIGN.md §3.4` と一致する（`applicant_id` / `reason` / `status` / `reviewer_id` / `review_comment` / `reviewed_at` / `created_at` / `updated_at`）
-- [ ] `seller_applications_status_check`（`PENDING` / `APPROVED` / `REJECTED`）が存在する
-- [ ] `deleted_at` カラムが**無い**（論理削除を持たない → `BaseEntity` 継承）
-- [ ] `idx_seller_applications_applicant_id` / `idx_seller_applications_status` が存在する
+- [x] `seller_applications` の全カラムが `DB_DESIGN.md §3.4` と一致する（`applicant_id` / `reason` / `status` / `reviewer_id` / `review_comment` / `reviewed_at` / `created_at` / `updated_at`）（`V2__create_identity_tables.sql:40-53`）
+- [x] `seller_applications_status_check`（`PENDING` / `APPROVED` / `REJECTED`）が存在する（`V2__create_identity_tables.sql:51-52`）
+- [x] `deleted_at` カラムが**無い**（論理削除を持たない → `BaseEntity` 継承）（DDL に無し・`SellerApplication` は `BaseEntity` を継承）
+- [x] `idx_seller_applications_applicant_id` / `idx_seller_applications_status` が存在する（`V2__create_identity_tables.sql:63-64`。追加した `idx_seller_applications_pending_unique` と合わせ 3 本が実 DB の `pg_indexes` に存在することを確認済み）
 
 **追加が必要なもの（OQ-3・決定済み）:** 同一ユーザーの `PENDING` 申請を **DB 制約で 1 件に制限**する部分 UNIQUE インデックス。**新規マイグレーションは起こさず、`V2__create_identity_tables.sql` の末尾のインデックス定義群に直接追記する。**
 
@@ -347,15 +348,17 @@ public SellerApplicationResponse getMyLatest(UUID applicantId) {
 
 ### 6.1 前提条件（`feature/auth` / `feature/user-profile` 実装済み）
 
-- [ ] `useAuthStore` が `user`（`AuthUser`・`role` を含む）/ `isAuthenticated` を提供する
-- [ ] `useAuthHydrated()` で Zustand persist の復元完了を待てる（`src/hooks/useAuthHydrated.ts`・`useSyncExternalStore` ベースで SSR 時は `false`）
-- [ ] `ROUTES`（`src/lib/constants/index.ts`）に `ROUTES.seller.dashboard` が定義済み。**本スライスで 2 つ追加する**: `applicationNew: '/seller/applications/new'` と `applicationRedirect: '/'`（OQ-4・#11 完了時に `'/seller/dashboard'` へ差し替える 1 箇所）
-- [ ] `apiFetch`（`src/lib/api/client/base.ts`）が BFF 経由で 401 の single-flight refresh を処理する
-- [ ] `queryKeys.sellerApplication.me`（`['seller-application', 'me']`）が**定義済み**（`src/lib/queryKeys.ts:58`）
-- [ ] `ApiErrorCode` に `SELLER_APPLICATION_PENDING` / `..._ALREADY_APPROVED` / `..._NOT_REVIEWABLE` が**定義済み**（`src/types/api/error-codes.ts`）
-- [ ] `src/proxy.ts` の `PROTECTED_PATHS` に `/seller` が**含まれている**（未認証は `/auth/login?from=...` へ）
-- [ ] `(authenticated)/layout.tsx`（グローバル chrome + skip link）が存在する
-- [ ] グローバルナビから `/seller/applications/new` へのリンクが**既に存在する**（`UserMenu.tsx:94`（`isBuyer` 条件付き）/ `MobileMenuSheet.tsx:117` / `GlobalFooter/index.tsx:5`）→ 本スライスで画面を作れば 404 が解消する
+**全項目 SA-00 で確認済み**（2026-08-02）。
+
+- [x] `useAuthStore` が `user`（`AuthUser`・`role` を含む）/ `isAuthenticated` を提供する
+- [x] `useAuthHydrated()` で Zustand persist の復元完了を待てる（`src/hooks/useAuthHydrated.ts`・`useSyncExternalStore` ベースで SSR 時は `false`）
+- [x] `ROUTES`（`src/lib/constants/index.ts`）に `ROUTES.seller.dashboard` が定義済み。**本スライスで 2 つ追加する**: `applicationNew: '/seller/applications/new'` と `applicationRedirect: '/'`（OQ-4・#11 完了時に `'/seller/dashboard'` へ差し替える 1 箇所）→ SA-15 で追加済み（`lib/constants/index.ts:25` / `:31`。差し替え箇所であることを示すコメントも記載）
+- [x] `apiFetch`（`src/lib/api/client/base.ts`）が BFF 経由で 401 の single-flight refresh を処理する
+- [x] `queryKeys.sellerApplication.me`（`['seller-application', 'me']`）が**定義済み**（`src/lib/queryKeys.ts:58`）
+- [x] `ApiErrorCode` に `SELLER_APPLICATION_PENDING` / `..._ALREADY_APPROVED` / `..._NOT_REVIEWABLE` が**定義済み**（`src/types/api/error-codes.ts:28-30`）
+- [x] `src/proxy.ts` の `PROTECTED_PATHS` に `/seller` が**含まれている**（未認証は `/auth/login?from=...` へ）（`proxy.ts:11`）
+- [x] `(authenticated)/layout.tsx`（グローバル chrome + skip link）が存在する
+- [x] グローバルナビから `/seller/applications/new` へのリンクが**既に存在する**（`UserMenu.tsx:94`（`isBuyer` 条件付き）/ `MobileMenuSheet.tsx:117` / `GlobalFooter/index.tsx:5`）→ 本スライスで画面を作れば 404 が解消する（SA-18 完了により解消）
 
 ### 6.2 画面仕様: 1 URL・4 状態
 
@@ -476,9 +479,19 @@ src/
      | `VALIDATION_FAILED` | 「入力内容を確認してください。」 |
    - **409 は「他タブ・別デバイスで状態が進んだ」サイン**なので、文言表示に加えて必ず invalidate し、画面を実際の状態へ追随させる（`AddressFormSheet` が 404 でシートを閉じるのと同じ思想）
 
-6. **ナビゲーションの整合確認**: `UserMenu.tsx:93` の表示条件は現在 `isBuyer` のみ。`FRONTEND_IA.md §2`（L101-102）は「申請未済かつ PENDING 申請なしの場合のみ表示」と規定しているが、**ヘッダーで `GET /seller-applications/me` を常時フェッチするのは割に合わない**（全ページで 1 リクエスト増える）。**`isBuyer` のみの現行条件を維持し、PENDING 中にリンクを踏んだら審査中 UI が出る**挙動で許容する（IA 側に注記を追加）。判断は OQ-7。
+6. **ナビゲーションの整合確認**: `UserMenu.tsx:93` の表示条件は現在 `isBuyer` のみ。`FRONTEND_IA.md §2`（L101-102）は「申請未済かつ PENDING 申請なしの場合のみ表示」と規定しているが、**ヘッダーで `GET /seller-applications/me` を常時フェッチするのは割に合わない**（全ページで 1 リクエスト増える）。**`isBuyer` のみの現行条件を維持し、PENDING 中にリンクを踏んだら審査中 UI が出る**挙動で許容する（IA 側に注記を追加）。判断は OQ-7。✅ **実施済み（2026-08-02・SA-18）**: `UserMenu` / `MobileMenuSheet` / `GlobalFooter` はいずれも無変更（リンクは既存のまま画面に到達する）。`FRONTEND_IA.md §2` に表示条件の注記を追加した。
 
-7. **UI 設計書**: `design-system/pages/` に本画面の設計書が無い（`auth.md` / `layout.md` / `user-profile.md` のみ）。`user-profile.md` の前例に倣い `design-system/pages/seller-application.md` を起こすか、実装のみで進めるかは OQ-8。
+7. **UI 設計書**: ✅ `design-system/pages/seller-application.md` を作成済み（SA-14・2026-08-02。OQ-8 の決定）。**SA-18 / SA-19 の実装は本書ではなく設計書を正とする。** 本節（§6.2〜6.4）と設計書が食い違う場合は設計書が優先する（設計書は本節を具体化したものであり、意図的な差分は設計書の §15 Open Questions に明記してある）。設計書側で新たに確定した主な事項:
+
+   | 項目 | 決定 | 設計書 |
+   |---|---|---|
+   | レイアウト | 1 カラム `max-w-2xl`。`/profile/*` の 2 カラム罫線構成（`SettingsSection`）は使わない | §1 / §3 |
+   | 分岐 | §6.4 ステップ 5 の 8 段を「7 段 + リダイレクト通知」として詳細化。段の順序と理由を明記 | §4 |
+   | 送信ボタン | `isDirty` で非活性に**しない**（`user-profile.md §7.5` からの意図的な逸脱） | §5.3 / OQ-S5 |
+   | 409 の文言 | フォーム内ではなく**親（`SellerApplicationView`）の通知帯**に出す。invalidate でフォームがアンマウントされるため | §7 / OQ-S8 |
+   | `reviewComment` 省略時 | 却下理由ブロックごと出さない（「理由なし」等の否定文を置かない） | §5.4 / OQ-S7 |
+   | 文言 | 審査期間の日数・通知手段（メール等）を**書かない**（該当機能が未実装のため） | §5.2 / §6 |
+   | 新規共通コンポーネント | **追加しない。** `FieldError` / `FormAlert` / `SaveStatus` / `Textarea` / `Badge` を再利用 | §12 |
 
 ---
 
@@ -505,12 +518,12 @@ src/
 | SA-12 | Backend Controller/統合テスト（`ControllerTestBase` スライス + `IntegrationTestBase` で 409 / 404 / ロールガード / 部分 UNIQUE を DB 検証） | BE | SA-08, SA-09 | ✅ Done（2026-08-02・`SellerApplicationControllerTest` 21 件 + `SellerApplicationControllerIntegrationTest` 18 件） |
 | SA-13 | 保持ポリシーの明記（R-7）: `REQUIREMENTS.md §15.3` 表・§15.4 匿名化 SQL・§15.7 `RET-10` / `SEQUENCE_FLOW §9.1` の `UserAnonymizationJob` / `DATA_DICTIONARY §4` | DOC | なし `[並列可]` | ✅ Done（2026-08-02） |
 | SA-13b | 仕様不整合の訂正（R-5 / R-8）: `SEQUENCE_FLOW §3` の列名・リクエストボディ・HTTP メソッド・エラーコード名 / `API_DESIGN.md §4` の `non_null` 省略と `reason` のみ受け取る旨 | DOC | なし `[並列可]` | ✅ Done（2026-08-02） |
-| SA-14 | UI 設計書 `design-system/pages/seller-application.md`（OQ-8 未決着） | FE | なし `[並列可]` | ⚠️ 要判断 |
-| SA-15 | FE: 型定義（`types/api/seller-application.ts` + `enums.ts` + `index.ts` re-export）+ `ROUTES.seller` に `applicationNew` / `applicationRedirect` を追加 | FE | なし `[並列可]` | ⬜ Todo |
-| SA-16 | FE: Zod スキーマ（`validations/sellerApplication.ts`） | FE | SA-05, SA-15 | ⬜ Todo |
-| SA-17 | FE: API クライアント（`sellerApplications.ts`・**404→null**）+ query / mutation フック | FE | SA-15 | ⬜ Todo |
-| SA-18 | FE: 申請画面（`/seller/applications/new`・4 状態 + ロール分岐） | FE | SA-16, SA-17, SA-14 | ⬜ Todo |
-| SA-19 | FE: コンポーネントテスト（Vitest + RTL + MSW・4 状態 + 409 分岐） | FE | SA-18 | ⬜ Todo |
+| SA-14 | UI 設計書 `design-system/pages/seller-application.md`（OQ-8 の決定により作成） | FE | なし `[並列可]` | ✅ Done（2026-08-02・16 節。`MASTER.md §16` のページ別オーバーライド一覧にも追記済み） |
+| SA-15 | FE: 型定義（`types/api/seller-application.ts` + `enums.ts` + `index.ts` re-export）+ `ROUTES.seller` に `applicationNew` / `applicationRedirect` を追加 | FE | なし `[並列可]` | ✅ Done（2026-08-02・`SellerApplicationStatus` は `UserRole` と同居させ `enums.ts` に配置） |
+| SA-16 | FE: Zod スキーマ（`validations/sellerApplication.ts`） | FE | SA-05, SA-15 | ✅ Done（文言は `VALIDATION_RULES.md §6` と一字一句一致。`MAX_REASON_LENGTH` をカウンター用に公開） |
+| SA-17 | FE: API クライアント（`sellerApplications.ts`・**404→null**）+ query / mutation フック | FE | SA-15 | ✅ Done（404→null をクライアント関数で吸収。mutation は成功時と **409 のときだけ** invalidate する） |
+| SA-18 | FE: 申請画面（`/seller/applications/new`・4 状態 + ロール分岐） | FE | SA-16, SA-17, SA-14 | ✅ Done（`page.tsx` = SC + `components/seller/` 5 ファイル。設計書の 7 段分岐どおり） |
+| SA-19 | FE: コンポーネントテスト（Vitest + RTL + MSW・4 状態 + 409 分岐） | FE | SA-18 | ✅ Done（2026-08-02・`SellerApplicationView` 17 件 + API クライアント 3 件。`pnpm test` 全 71 件パス） |
 
 **依存グラフ（クリティカルパス）:**
 
@@ -524,8 +537,8 @@ SA-00 ─┬─► SA-01（SecurityConfig）─┐
 SA-04 ──────────────────────────────┘
 SA-15 ─► SA-16 ─► SA-18 ─► SA-19
       └─► SA-17 ─► SA-18
-SA-14（独立・OQ-8 待ち）
-（SA-05 / SA-06 / SA-13 / SA-13b は完了済み。SA-04 と SA-16 は SA-05 の内容を正として実装する）
+SA-14（完了・SA-18 / SA-19 はこの設計書を正として実装する）
+（SA-05 / SA-06 / SA-13 / SA-13b / SA-14 は完了済み。SA-04 と SA-16 は SA-05 の内容を正として実装する）
 ```
 
 ---
@@ -539,7 +552,7 @@ SA-14（独立・OQ-8 待ち）
 - [x] 両エンドポイントが認証必須である（`SecurityConfig.java:89-104` の `permitAll` 列挙に `/api/v1/seller-applications` は無く `anyRequest().authenticated()` が適用される）。未認証 → 401 をテストで裏付ける（スライス: `should_return_401_when_applying_unauthenticated` / `should_return_401_when_reading_status_unauthenticated`、統合: `should_return_401_when_applying_without_authentication` / `should_return_401_when_reading_status_without_authentication`）
 - [x] **申請者を常にトークンの `sub`（`@AuthenticationPrincipal`）から解決**している（`SellerApplicationController.java:44-58`）。パス・ボディに `applicantId` を取らず、ボディに他人の `applicantId` を混ぜても無視されることをテストで確認（`should_pass_only_token_subject_as_applicant_id` / 統合 `should_ignore_server_controlled_fields_in_the_request_body`）
 - [x] **`ROLE_BUYER` 以外の申請を拒否**している（`SellerApplicationService.java:49-51` が唯一の認可ポイント）。SELLER / ADMIN のトークンで `POST` して 409 `SELLER_APPLICATION_ALREADY_APPROVED` になること、および**申請レコードが作られないこと**を統合テストで裏付け済み（`should_return_409_and_create_no_row_when_applicant_is_not_a_buyer`）。スライス側の `should_return_409_not_403_when_non_buyer_applies` が **403 で弾かれていない**ことを追加で保証する
-- [x] `SecurityConfig` の変更が `POST /api/v1/seller-applications` の 1 行削除のみに留まっている（`git show 2d46609 -- SecurityConfig.java` が 1 行削除のみ。`/api/v1/admin/**` の `hasRole("ADMIN")`（L102）・`/api/v1/products` の `hasRole("SELLER")`（L103）は現存）
+- [x] `SecurityConfig` の変更が `POST /api/v1/seller-applications` の 1 行削除のみに留まっている（`git show fdf2476 -- kivio-backend/src/main/java/io/kivio/config/SecurityConfig.java` → `1 file changed, 1 deletion(-)`。`/api/v1/admin/**` の `hasRole("ADMIN")`・`/api/v1/products` の `hasRole("SELLER")` は現存）※ §5.3 ステップ 0 は「単独コミットに分ける」としていたが、実際にはバックエンド実装コミット `fdf2476` に同梱されている。同コミット内でも `SecurityConfig` の変更は上記 1 行のみで、レビュー時は上記コマンドで差分を切り出せる
 - [x] `GET /me` が**自分の申請しか返さない**（`should_return_only_own_application`。2 ユーザー分の申請を投入して検証）
 
 ### 入力・mass assignment
@@ -547,7 +560,7 @@ SA-14（独立・OQ-8 待ち）
 - [x] リクエスト DTO が **`reason` のみ**を持ち、`status` / `reviewerId` / `reviewComment` / `reviewedAt` を**受け付けない**（`CreateSellerApplicationRequest.java:20-23`）。実 DB での回帰テスト: `should_ignore_server_controlled_fields_in_the_request_body`（`status: "APPROVED"` / `reviewerId` / `reviewComment` / `reviewedAt` を全部混ぜても DB は `PENDING` / NULL のまま）
 - [x] 新規申請の `status` が**常に `PENDING`** で作られる（`SellerApplication.java:63-64` の `@Builder.Default`）。`should_persist_pending_status_and_applicant_id_from_token`（`ArgumentCaptor`）・`SellerApplicationTest#should_default_status_to_pending_when_not_specified`・統合 `should_persist_pending_application_for_token_subject`
 - [x] `reason` が `@NotBlank` + `@Size(max = 1000)` で検証されている（空白のみを弾く）（`should_return_422_when_reason_is_blank` ほか。**ただし全角スペース（U+3000）のみは通過する** — R-10 参照）
-- [ ] `reason` は自由入力テキストであり、**フロントで `dangerouslySetInnerHTML` を使わない**（React の既定エスケープに委ねる）。バックエンドで HTML サニタイズはしない（保存は原文・表示時にエスケープ）→ **FE 未着手（SA-18）。バックエンド側は保存を原文のまま行っており正しい**
+- [x] `reason` は自由入力テキストであり、**フロントで `dangerouslySetInnerHTML` を使わない**（React の既定エスケープに委ねる）。バックエンドで HTML サニタイズはしない（保存は原文・表示時にエスケープ）→ **FE 実装済み（SA-18）**。`SellerApplicationStatusCard` は `reason` / `reviewComment` を JSX の子として描画するのみ（`whitespace-pre-wrap` + `break-words` で改行と長語を扱い、`dangerouslySetInnerHTML` は不使用。`grep -r "dangerouslySetInnerHTML" src/` の結果ゼロ）
 
 ### 重複・整合性
 
@@ -574,7 +587,11 @@ SA-14（独立・OQ-8 待ち）
 > JaCoCo ゲート（INSTRUCTION 0.80）通過。本スライスのクラスは `SellerApplicationService` / `SellerApplication` / `SellerApplicationController` / 例外 2 本すべて **INSTRUCTION 100% / BRANCH 100%**。
 > Checkstyle（`checkstyleMain` / `checkstyleTest`）も通過。
 >
-> **Frontend:** 未実施（SA-15〜SA-19 が未着手のため）。
+> **実施結果（Frontend・2026-08-02）:** `pnpm test`（**全 71 件 / 失敗 0**・本スライス追加分 20 件: `SellerApplicationView` 17 / API クライアント 3）・`pnpm lint`・`pnpm typecheck`・`pnpm build` すべてグリーン。`/seller/applications/new` がビルド出力にルートとして現れることを確認済み。
+>
+> **PR 前の再検証（2026-08-02）:** クリーンな状態で再実行し、Backend **206 件 / 失敗 0**（`cleanTest test jacocoTestReport jacocoTestCoverageVerification checkstyleMain checkstyleTest` が BUILD SUCCESSFUL）・Frontend **71 件 / 失敗 0**・`lint` / `typecheck` / `build` グリーンを再確認した。
+>
+> ⚠️ **FE テスト実行時の注意:** `pnpm test` を Gradle ビルドと**同時に走らせると**、CPU 競合で `userEvent` 系のテストが Vitest 既定の 5 秒タイムアウトを超え、本スライス以外（`LoginForm` / `RegisterFlow` / `AddressFormSheet` / `PasswordSection` 等）も含めて 8〜12 件が散発的に落ちる（入力文字が取りこぼされ `'0022山田'` のような値になる症状も出る）。**実装上の回帰ではない。**単独実行なら全 71 件が 6 秒台で完走する。負荷下で確認したい場合は `pnpm test -- --testTimeout=30000` を使う。
 
 ### 9.1 Backend テスト（JUnit 5 + Mockito + Testcontainers）
 
@@ -636,23 +653,27 @@ DB の検証は `JdbcTemplate`（生 SQL）で行う。Repository に検証専�
 
 ### 9.2 Frontend テスト（Vitest + RTL + MSW）
 
-> MSW ハンドラーは `src/test/mocks/handlers/sellerApplications.ts` を新規作成し `server.ts` に登録する（`addresses.ts` が前例）。
+> MSW ハンドラーは `src/test/mocks/handlers/sellerApplications.ts` を新規作成し `server.ts` に登録する（`addresses.ts` が前例）。**既定は「未申請」（404）**とし、他の 3 状態は各テストが `server.use()` で上書きする。
 
-- [ ] `getMySellerApplication`: 404 レスポンスで **`null` を返す**（throw しない）／500 は throw する
-- [ ] `SellerApplicationView`: 未申請（null） → 制度説明 + 申請フォームが出る
-- [ ] `SellerApplicationView`: `PENDING` → 審査中表示・**フォームが出ない**
-- [ ] `SellerApplicationView`: `REJECTED` → 却下理由（`reviewComment`）が表示され、再申請フォームが出る
-- [ ] `SellerApplicationView`: `APPROVED` → リダイレクトが呼ばれる（`router.replace` をモックして検証）
-- [ ] `SellerApplicationView`: `ROLE_SELLER` / `ROLE_ADMIN` → 申請フォームを出さずリダイレクト
-- [ ] `SellerApplicationView`: ストア復元前（`useAuthHydrated` が false）は**リダイレクトを走らせない**（誤リダイレクト回帰）
-- [ ] `SellerApplicationView`: 取得失敗（500）→ エラー表示 + 再試行
-- [ ] `SellerApplicationForm`: 空送信 → zod のエラーメッセージ（`VALIDATION_RULES` と一致）
-- [ ] `SellerApplicationForm`: 1001 文字 → クライアント側で弾く／文字数カウンターが機能する
-- [ ] `SellerApplicationForm`: 正常送信 → `POST` が呼ばれ `queryKeys.sellerApplication.me` が invalidate され、審査中表示に切り替わる
-- [ ] `SellerApplicationForm`: 送信中はボタン非活性（二重送信防止）
-- [ ] `SellerApplicationForm`: 409 `SELLER_APPLICATION_PENDING` → 専用文言が出て invalidate される
-- [ ] `SellerApplicationForm`: 409 `SELLER_APPLICATION_ALREADY_APPROVED` → 専用文言が出て invalidate される
-- [ ] `pnpm test` / `pnpm lint` / `pnpm typecheck` / `pnpm build` がグリーン
+フォームは常に `SellerApplicationView` の子としてのみ存在する（親が 409 の文言と成功表示を持つ）ため、**フォーム関連のテストも View 越しに書く**。単体で render すると「409 の文言が親に残る」という設計上の要点を検証できない。
+
+- [x] `getMySellerApplication`: 404 レスポンスで **`null` を返す**（throw しない）／500 は throw する（`未申請（404）はエラーではなく null を返す` / `404 以外は握りつぶさず ApiError を投げる` / `申請があればそのまま返す`）
+- [x] `SellerApplicationView`: 未申請（null） → 制度説明 + 申請フォームが出る（`未申請なら制度説明と申請フォームを出す`。リダイレクトが呼ばれないことも検証）
+- [x] `SellerApplicationView`: `PENDING` → 審査中表示・**フォームが出ない**（`審査中なら状況だけを出し、フォームは出さない`。制度説明も出ないことを検証）
+- [x] `SellerApplicationView`: `REJECTED` → 却下理由（`reviewComment`）が表示され、再申請フォームが出る（`却下なら却下理由と再申請フォームを出す`）
+- [x] （追加）`reviewComment` 省略の却下 → **却下理由ブロックを出さず**、再申請の導線は残る（R-8 / 設計書 OQ-S7 の回帰）（`却下理由が無い却下では理由ブロックを出さず、再申請の導線は残す`）
+- [x] `SellerApplicationView`: `APPROVED` → リダイレクトが呼ばれる（`router.replace` をモックして検証）（`承認済みならリダイレクトする`）
+- [x] `SellerApplicationView`: `ROLE_SELLER` / `ROLE_ADMIN` → 申請フォームを出さずリダイレクト（`%s は取得すらせずリダイレクトする`・`it.each`。**`GET /me` が 1 度も呼ばれない**ことも検証）
+- [x] `SellerApplicationView`: ストア復元前（`useAuthHydrated` が false）は**リダイレクトを走らせない**（誤リダイレクト回帰）（`ストア復元前はロールを判定せず、リダイレクトしない`。`useAuthHydrated` を `vi.mock` で制御）
+- [x] `SellerApplicationView`: 取得失敗（500）→ エラー表示 + 再試行（`取得に失敗したときはエラーと再読み込みボタンを出す` / `再読み込みで取り直せる`）
+- [x] `SellerApplicationForm`: 空送信 → zod のエラーメッセージ（`VALIDATION_RULES` と一致）（`空のまま送信するとエラーを出し、送信しない`。`POST` が飛ばないことも検証）
+- [x] `SellerApplicationForm`: 1001 文字 → クライアント側で弾く／文字数カウンターが機能する（`1000文字を超えるとカウンターが超過を示し、送信されない`。`1001 / 1000` の表示と超過メッセージの両方を検証）
+- [x] `SellerApplicationForm`: 正常送信 → `POST` が呼ばれ `queryKeys.sellerApplication.me` が invalidate され、審査中表示に切り替わる（`送信すると POST し、画面が審査中に切り替わる`。リクエストボディが `{ reason }` のみであること・「申請を送信しました」の表示も検証）
+- [x] `SellerApplicationForm`: 送信中はボタン非活性（二重送信防止）（`送信中は二重送信できない`）
+- [x] `SellerApplicationForm`: 409 `SELLER_APPLICATION_PENDING` → 専用文言が出て invalidate される（`409（審査中）は専用の文言を出し、画面を審査中へ追随させる`。**フォームがアンマウントされた後も文言が残る**ことを検証＝設計書 OQ-S8 の回帰）
+- [x] `SellerApplicationForm`: 409 `SELLER_APPLICATION_ALREADY_APPROVED` → 専用文言が出て invalidate される（`409（承認済み）は専用の文言を出す`）
+- [x] （追加）409 以外の送信失敗（500）は**フォーム内**にエラーを出し、画面構造を変えない（`409 以外の送信失敗はフォーム内にエラーを出す`）
+- [x] `pnpm test` / `pnpm lint` / `pnpm typecheck` / `pnpm build` がグリーン（2026-08-02・**71 件 / 失敗 0**）
 - [ ] （任意・後続可）Playwright E2E。`user-profile.md §9.2` の最終項目と同じく、常設は後続スライスに委ねてよい
 
 ---
@@ -668,27 +689,27 @@ PR をマージするには以下を全て満たすこと。**各項目に根拠
 - [x] 既に SELLER / ADMIN のユーザーの申請が 409 `SELLER_APPLICATION_ALREADY_APPROVED` で拒否される（OQ-1）（`should_return_409_and_create_no_row_when_applicant_is_not_a_buyer`）
 - [x] 却下後の再申請が新規レコードとして作成され、過去の申請履歴が残る（SELLER-05）（`should_create_a_new_row_when_only_rejected_applications_exist`）
 - [x] `GET /seller-applications/me` が最新 1 件を返し、未申請なら 404 を返す（`should_return_the_latest_application_when_reapplied_after_rejection` / `should_return_404_when_applicant_has_never_applied`）
-- [ ] `/seller/applications/new` が 4 状態（未申請 / PENDING / REJECTED / APPROVED）を正しく出し分ける
-- [ ] グローバルナビ（`UserMenu` / `MobileMenuSheet` / `GlobalFooter`）の「セラー申請」リンクが**404 にならず**画面へ到達する
+- [x] `/seller/applications/new` が 4 状態（未申請 / PENDING / REJECTED / APPROVED）を正しく出し分ける（`SellerApplicationView` の 4 状態テスト。ロール分岐・ハイドレート前の抑止も含む）
+- [x] グローバルナビ（`UserMenu` / `MobileMenuSheet` / `GlobalFooter`）の「セラー申請」リンクが**404 にならず**画面へ到達する（`pnpm build` のルート一覧に `/seller/applications/new` が出力される。ブラウザでの実地確認は「動作確認」節に残る）
 
 ### セキュリティ要件
 
-- [x] §8 Security Checklist の全項目を確認済み（根拠を §8 に記載）※ `dangerouslySetInnerHTML` の項目のみ FE 未着手（SA-18 で確認する）
+- [x] §8 Security Checklist の全項目を確認済み（根拠を §8 に記載。保留だった `dangerouslySetInnerHTML` の項目も SA-18 完了時に確認済み — `grep -r "dangerouslySetInnerHTML" src/` の結果ゼロ）
 - [x] mass assignment（`status` / `reviewerId` 等の外部指定）が不可能であることをコードとテストで確認（`CreateSellerApplicationRequest` が `reason` のみ + `should_ignore_server_controlled_fields_in_the_request_body`）
 
 ### テスト要件
 
 - [x] Backend: `./gradlew cleanTest test jacocoTestReport jacocoTestCoverageVerification` がグリーン。JaCoCo ゲート（0.80）を維持（2026-08-02・**206 件 / 失敗 0**・`clean build` も BUILD SUCCESSFUL）
 - [x] Backend: `SellerApplicationService` の単体カバレッジ ≥ 80%（分岐が多いので分岐カバレッジも確認）（**INSTRUCTION 100% / BRANCH 100%**。`SellerApplication` Entity も 100% / 100%）
-- [ ] Frontend: `pnpm test` / `pnpm lint` / `pnpm typecheck` / `pnpm build` がグリーン
+- [x] Frontend: `pnpm test` / `pnpm lint` / `pnpm typecheck` / `pnpm build` がグリーン（2026-08-02・**71 件 / 失敗 0**。本スライス追加分 20 件）
 
 ### コード品質
 
 - [x] `BACKEND_CODING_STANDARDS.md` 準拠（DTO = record・Lombok パターン・レイヤー責務・`@Transactional(readOnly)` の適切な使用・例外は `KivioException` 階層）※ テストは §13.1 の種別どおり（Entity 単体 / `@ExtendWith(MockitoExtension)` / `@WebMvcTest` / `@SpringBootTest` + Testcontainers）。`checkstyleMain` / `checkstyleTest` 通過
-- [ ] `FRONTEND_CODING_STANDARDS.md` 準拠（`'use client'` は葉のみ・named export・TanStack Query の query/mutation 分離・Zustand セレクタ形式）
-- [ ] Controller がビジネスロジックを持たない（Service 委譲のみ）
-- [ ] **ドメイン間の直接 import がない**（`SellerApplication` は `identity` 内。`applicantId` / `reviewerId` は `UUID` 値参照で `@ManyToOne` を張らない）
-- [ ] Swagger UI に 2 エンドポイントが表示される（`@Tag` / `@Operation` 付与・`/v3/api-docs` で確認）
+- [x] `FRONTEND_CODING_STANDARDS.md` 準拠（`'use client'` は葉のみ・named export・TanStack Query の query/mutation 分離・Zustand セレクタ形式）※ `page.tsx` / `SellerApplicationIntro` / `SellerApplicationSkeleton` / `SellerApplicationStatusCard` は `'use client'` を持たず、CC は状態を持つ `SellerApplicationView` と `SellerApplicationForm` の 2 つだけ。query（`useSellerApplicationQuery`）と mutation（`useCreateSellerApplicationMutation`）は別ファイル。ストア参照は `useAuthStore((state) => state.user)` のセレクタ形式。全ファイル named export
+- [x] Controller がビジネスロジックを持たない（Service 委譲のみ）（`SellerApplicationController.java:42-59`。2 ハンドラーとも `principal.getUserId()` を渡して Service の戻り値を `ResponseEntity` に載せるだけで、分岐・計算・DTO 組み立てを持たない）
+- [x] **ドメイン間の直接 import がない**（`SellerApplication` は `identity` 内。`applicantId` / `reviewerId` は `UUID` 値参照で `@ManyToOne` を張らない）（本スライス 8 ファイルの `io.kivio` import は `domain.identity.*` / `common.*` と、AOP の横断アノテーション `domain.audit.annotation.Auditable` のみ。後者は `AUDIT.md §5` が定める規定の使い方で、`UserService` / `AuthService` も同じ形。`SellerApplication.java` に `@ManyToOne` は無く `applicantId` / `reviewerId` は `UUID` フィールド）
+- [x] Swagger UI に 2 エンドポイントが表示される（`@Tag` / `@Operation` 付与・`/v3/api-docs` で確認）（起動中のバックエンドの `/v3/api-docs` に `POST /api/v1/seller-applications`（summary「セラー申請送信」）と `GET /api/v1/seller-applications/me`（同「自分のセラー申請状況」）が tag `SellerApplication` で出力されることを確認済み）
 
 ### ドキュメント同期
 
@@ -696,22 +717,25 @@ PR をマージするには以下を全て満たすこと。**各項目に根拠
 - [x] `VALIDATION_RULES.md §6` に `reason` の節を追記済み（SA-05・2026-08-02）
 - [x] `REQUIREMENTS.md §15.3` / `§15.4` / `§15.7`（`RET-10`）・`SEQUENCE_FLOW §9.1`・`DATA_DICTIONARY §4` に保持ポリシーを追記済み（SA-13・2026-08-02）
 - [x] `SEQUENCE_FLOW §3` の列名・メソッド・リクエストボディ、`API_DESIGN §4` の `non_null` 注記を訂正済み（SA-13b・2026-08-02）
-- [ ] 実装した Bean Validation と zod のメッセージが `VALIDATION_RULES.md §6` と一字一句一致している（SA-04 / SA-16 の完了時に確認）
+- [x] 実装した Bean Validation と zod のメッセージが `VALIDATION_RULES.md §6` と一字一句一致している（SA-04 / SA-16 完了・2026-08-02。「申請理由を入力してください」/「申請理由は1000文字以内で入力してください」）
 - [x] OQ-1 の決定（`POST /seller-applications` の認可は Service 層で行い 409 を返す・403 は発生しない）を `SECURITY.md §3.1` に反映済み（2026-08-02）
-- [ ] `SecurityConfig.java` の実コードが `SECURITY.md §3` のサンプルと一致している（`seller-applications` の行が両方から消えていること）
+- [x] `design-system/pages/seller-application.md` を作成し、`MASTER.md §16`「既存のページ別オーバーライド」一覧に追記済み（SA-14・2026-08-02）
+- [x] 実装が `design-system/pages/seller-application.md` と乖離していない（2026-08-02 確認。実装で確定した 6 点は**設計書 §17「実装反映ログ」**に記録し、§5.2 / §5.4 / §12 の記述も併せて更新済み。分岐順序・塗り面の規律・OQ-S5〜S8 の決定はいずれも仕様どおり）
+- [x] `FRONTEND_IA.md §2` に「ヘッダーの『セラー申請』リンクは `isBuyer` のみを条件とする」注記を追加（OQ-7・SA-18 で実施・2026-08-02。ツリー内の「※ 申請未済かつ PENDING 申請なしの場合のみ表示」に注記への参照を付け、`GlobalFooter` のロール非依存リンクの扱いも明記）
+- [x] `SecurityConfig.java` の実コードが `SECURITY.md §3` のサンプルと一致している（`seller-applications` の行が両方から消えていること）（`SecurityConfig.java:88-104` のロール制限は `/api/v1/admin/**` → `ADMIN` と `POST /api/v1/products` → `SELLER` の 2 本のみで `seller-applications` の行は無い。`SECURITY.md §3` のサンプル（L198-199）も同じ 2 本で、削除の経緯と Service 層に置いた理由は `§3.1` に記載済み）
 
 ### 動作確認
 
-- [ ] `docker compose up` で全サービスが起動する
-- [ ] ドロップ後のクリーン DB で Flyway マイグレーション（編集した `V2` + dev の `V14`）が正常適用される（`flyway_schema_history` が全て `success = true`・`idx_seller_applications_pending_unique` が `pg_indexes` に存在する）
-- [ ] ブラウザで 4 状態すべてを確認する（Seed の未申請 / PENDING / REJECTED ユーザー + `seller1` でログインし直す）
-- [ ] 申請送信後に `audit_logs` へ `SELLER_APPLICATION_SUBMITTED` が記録されていることを DB で確認
+- [x] `docker compose up` で全サービスが起動する
+- [x] ドロップ後のクリーン DB で Flyway マイグレーション（編集した `V2` + dev の `V14`）が正常適用される（`flyway_schema_history` が全て `success = true`・`idx_seller_applications_pending_unique` が `pg_indexes` に存在する）
+- [x] ブラウザで 4 状態すべてを確認する（Seed の未申請 / PENDING / REJECTED ユーザー + `seller1` でログインし直す）
+- [x] 申請送信後に `audit_logs` へ `SELLER_APPLICATION_SUBMITTED` が記録されていることを DB で確認
 
 ---
 
 ## 11. Risks / Open Questions
 
-### Open Questions（OQ-8 を除き 2026-08-02 時点で全件クローズ）
+### Open Questions（2026-08-02 時点で**全件クローズ**）
 
 | # | 質問 | 影響タスク | 推奨 |
 |---|---|---|---|
@@ -719,10 +743,10 @@ PR をマージするには以下を全て満たすこと。**各項目に根拠
 | **OQ-2** ✅ | **レスポンス DTO を 1 本にするか 2 本に割るか。** `API_DESIGN.md` の `POST` 例と `GET /me` 例でフィールド構成が異なる | SA-04 | **決定: 単一 `SellerApplicationResponse`（superset）。** `spring.jackson.default-property-inclusion: non_null` により未審査時は `reviewComment` / `reviewedAt` が自動で省略され、両方の例を満たせる。DTO を割る積極的理由が無い |
 | ~~OQ-3~~ ✅ | **`PENDING` の一意性を DB 制約で担保するか。担保するなら `V2` 直接編集か新規 `V12` か** | SA-09, SA-12 | **決定（2026-08-02）: 担保する（`user-profile.md` R-4 の教訓）+ `V2__create_identity_tables.sql` を直接編集する。** 当初は「`V2` は `main` マージ済みなので新規 `V12`」を推したが、**プロジェクトオーナーの判断で「開発段階でありスキーマを綺麗に保ちたい。実装前に全テーブルをドロップする」**とした。移行コスト（`checksum mismatch`）は事前のドロップで解消されるため、マイグレーション履歴に増分インデックスを積まずに済む方を採る。`user-profile` の `V4` 直接編集と同じ流儀に揃う |
 | ~~OQ-4~~ ✅ | **APPROVED ユーザー / SELLER / ADMIN のリダイレクト先。** `FRONTEND_IA.md §5` は「`/seller/dashboard` または `/`」とするが、**`/seller/dashboard` は未実装**（タスク #11）でリダイレクトすると 404 に落ちる | SA-18, SA-19 | **決定（2026-08-02）: 本スライスでは SELLER / ADMIN / APPROVED いずれも `/` へリダイレクトする。** リダイレクト先を `ROUTES.seller.applicationRedirect`（値: `'/'`）として定数化し、`feature/seller-dashboard`（#11）着手時に**この 1 箇所を `ROUTES.seller.dashboard` に差し替えるだけ**で済む形にする（`user-profile.md` R-9 の反省から、**コメントだけの「TODO フック」にはせず、定数として実体を残す**） |
-| **OQ-5** ⬜ | **Seed データの割り当て。** `buyer1` は `/profile/*` の動作確認にも使われる主力ユーザー。ここに PENDING を入れると「未申請フォーム」を Seed だけで確認できなくなる | SA-10 | **推奨: `buyer1` は未申請のまま残し、検証用に `buyer2`（PENDING）/ `buyer3`（REJECTED）を `V14` で追加する。** `seller1` には APPROVED 申請を紐づけ、4 状態すべてを Seed だけで再現できるようにする |
+| ~~OQ-5~~ ✅ | **Seed データの割り当て。** `buyer1` は `/profile/*` の動作確認にも使われる主力ユーザー。ここに PENDING を入れると「未申請フォーム」を Seed だけで確認できなくなる | SA-10 | **決定（2026-08-02・推奨どおり）: `buyer1` は未申請のまま残し、検証用に `buyer2`（PENDING）/ `buyer3`（REJECTED）を `V14` で追加する。** `seller1` には APPROVED 申請を紐づけ、4 状態すべてを Seed だけで再現できるようにする。**実装済み**（SA-10） |
 | ~~OQ-6~~ ✅ | **`SELLER_APPLICATION_SUBMITTED` が `AUDIT.md §4` の記録対象イベント表に無い**（`SEQUENCE_FLOW §3` には記載あり）。監査対象として正式に採用するか | SA-06, SA-07 | **決定: 採用。`AUDIT.md §4` にカテゴリ「セラー申請」として追記済み（2026-08-02）。** ロール昇格につながる申請行為は追跡対象として妥当で、承認/却下（既に表にある）とペアで初めて監査証跡が完結する |
-| **OQ-7** ⬜ | **ヘッダーの「セラー申請」リンクの表示条件。** `FRONTEND_IA.md §2`（L101-102）は「申請未済かつ PENDING 申請なしの場合のみ表示」とするが、実装するとグローバルヘッダーが全ページで `GET /seller-applications/me` を叩くことになる | SA-18 | **推奨: 現行の `isBuyer` のみを維持し、IA 側に注記を追加する。** PENDING 中にリンクを踏んでも審査中 UI が出るだけで害はない。全ページ +1 リクエストのコストのほうが大きい |
-| **OQ-8** ⬜ | **UI 設計書（`design-system/pages/seller-application.md`）を起こすか。** `user-profile` では実装前に設計書を作り、実装計画から参照する運用にした | SA-14, SA-18 | **判断を仰ぐ。** 本画面は 1 URL に 4 状態が同居し「フォーム」と「ステータス表示」が切り替わる特殊な構造で、`user-profile.md` の「台帳」原則がそのままは当てはまらない。運用の一貫性を取るなら作成、スコープを絞るなら `MASTER.md` + `user-profile.md §7`（入力方針）に準拠して実装のみで進める |
+| ~~OQ-7~~ ✅ | **ヘッダーの「セラー申請」リンクの表示条件。** `FRONTEND_IA.md §2`（L101-102）は「申請未済かつ PENDING 申請なしの場合のみ表示」とするが、実装するとグローバルヘッダーが全ページで `GET /seller-applications/me` を叩くことになる | SA-18 | **決定（2026-08-02・推奨どおり）: 現行の `isBuyer` のみを維持し、IA 側に注記を追加する。** PENDING 中にリンクを踏んでも審査中 UI が出るだけで害はない。全ページ +1 リクエストのコストのほうが大きい。**帰結として本画面は「未申請者のためのフォーム」ではなく申請済み者の到達先でもある**ため、PENDING / REJECTED を正当な表示として設計する（設計書 §4）。`FRONTEND_IA.md §2` への注記追加は SA-18 で行う |
+| ~~OQ-8~~ ✅ | **UI 設計書（`design-system/pages/seller-application.md`）を起こすか。** `user-profile` では実装前に設計書を作り、実装計画から参照する運用にした | SA-14, SA-18 | **決定（2026-08-02）: 作成する。** 運用の一貫性（`auth.md` / `layout.md` / `user-profile.md` に続く 4 本目）を優先した。1 URL に 4 状態が同居する構造は口頭・計画書の箇条書きでは伝わりにくく、分岐順序・塗り面の規律・エラーの出し場所といった判断を設計書側に固定した。**SA-14 完了（16 節）**。`MASTER.md §16` の一覧にも追記済み |
 
 ### Risks（既知のリスク）
 
@@ -738,7 +762,7 @@ PR をマージするには以下を全て満たすこと。**各項目に根拠
 | R-6 | 承認処理が別スライスのため、本スライス単体では **APPROVED 状態を正規の経路で作れない**。E2E / 動作確認では Seed か手動 UPDATE で APPROVED を作る必要があり、「承認したのにロールが `ROLE_BUYER` のまま」という**本番では起こらない不整合状態**でテストすることになる | 低 | Seed（`V14`）で `seller1`（既に `ROLE_SELLER`）に APPROVED 申請を紐づけ、**ロールと申請の整合が取れた状態**を用意する。Service の判定を「ロール優先 + APPROVED 申請も見る」の 2 段にしてあるため（§3.2）、どちらの状態でも正しく弾ける |
 | R-7 | **`seller_applications` が `REQUIREMENTS.md §15.3`（エンティティ別保持ポリシー）に載っていなかった。** `reason` は自由記述で、申請者が氏名・屋号・連絡先・事業内容などの PII を書き込みうる。退会 90 日後に `users` は匿名化されるが `id` は保持されるため、`applicant_id` から個人を再特定できてしまい、**`user-profile.md` R-6 と同一構造の匿名化の実質無効化**が起きる | 中 | ✅ **仕様化まで完了（2026-08-02・SA-13）。実装は `feature/batch-jobs`（#15）に残る。** 方針は「90 日 / ユーザー匿名化と同一トランザクションで `reason` と `review_comment` を `(削除済み)` に置換」。**物理削除ではなく匿名化**にしたのは、`ROLE_SELLER` への権限昇格が「いつ・誰の承認で行われたか」が監査証跡として必要なため（`addresses` の RET-09 とはここが異なる）。仕様 5 か所に明記: ① `REQUIREMENTS §15.3` の表 ② `§15.4` の匿名化 SQL（冪等性条件付き）③ `§15.7` に `RET-10` 新設 ④ `SEQUENCE_FLOW §9.1` の `UserAnonymizationJob` に処理ステップ ⑤ `DATA_DICTIONARY §4` の概要とカラム備考。**仕様に書かなければ引き継がれない**というのが直前スライスの教訓（`user-profile.md` R-6） |
 | R-8 | `spring.jackson.default-property-inclusion: non_null` により、`API_DESIGN.md §4` の `GET /me` 例にある `"reviewComment": null` は**実際にはキーごと省略される**。フロントの型を `reviewComment: string \| null`（必須）で定義すると、実レスポンスとズレて `undefined` が流れ込む | 低 | ✅ **解決（2026-08-02・SA-13b）**。`API_DESIGN.md §4` のレスポンス例に「`null` フィールドは省略される・クライアント型は省略を許容する形で定義すること」を注記した（全エンドポイント共通の挙動である旨も明記）。実装側は FE 型を `reviewComment?: string \| null` にする（§6.4 ステップ 1） |
-| R-10 | **`@NotBlank` は全角スペース（U+3000）のみの `reason` を通す。** Hibernate Validator の `NotBlankValidator` は `charSequence.toString().trim().length() > 0` で判定し、Java の `String.trim()` は U+0020 以下しか除去しないため。一方フロントの zod は `.trim()`（JS の `String.trim()` は U+3000 も除去する）で弾く想定のため、**FE を通せば弾かれるが API を直接叩くと `reason = "　"` の申請が 201 で通る**。実害は「中身のない申請が 1 件でき、管理者が却下する」程度だが、`VALIDATION_RULES.md §6` の「空白のみ不可」とは食い違う | 低 | SA-11 / SA-12 の範囲外のため**未修正**。テストでは全角スペースのケースを意図的に除外し、`SellerApplicationControllerTest#should_return_422_when_reason_is_blank` の直上にコメントで理由を残した。修正する場合の選択肢は ① `CreateSellerApplicationRequest` に `@Pattern(regexp = "(?sU).*\\S.*")` を追加する（**`(?U)` が必須**。Java の `\s` は既定で US-ASCII のみのため `(?s).*\S.*` では U+3000 が「非空白」と判定されて素通りする。JDK 25 で実測: `"　".matches("(?s).*\\S.*")` → `true` / `"　".matches("(?sU).*\\S.*")` → `false`）② Service で `reason.strip()` した結果が空なら弾く（`String.strip()` は `Character.isWhitespace` 基準で U+3000 を除去する。実測: `"　".strip().length()` → `0`、`"　".trim().length()` → `1`）。**どちらを採るか、そもそも直すかはオーナー判断**。直す場合は `VALIDATION_RULES.md §6` と zod 側の整合も併せて見直すこと |
+| R-10 | **`@NotBlank` は全角スペース（U+3000）のみの `reason` を通す。** Hibernate Validator の `NotBlankValidator` は `charSequence.toString().trim().length() > 0` で判定し、Java の `String.trim()` は U+0020 以下しか除去しないため。一方フロントの zod は `.trim()`（JS の `String.trim()` は U+3000 も除去する）で弾く想定のため、**FE を通せば弾かれるが API を直接叩くと `reason = "　"` の申請が 201 で通る**。実害は「中身のない申請が 1 件でき、管理者が却下する」程度だが、`VALIDATION_RULES.md §6` の「空白のみ不可」とは食い違う | 低 | SA-11 / SA-12 の範囲外のため**未修正**。テストでは全角スペースのケースを意図的に除外し、`SellerApplicationControllerTest#should_return_422_when_reason_is_blank` の直上にコメントで理由を残した。修正する場合の選択肢は ① `CreateSellerApplicationRequest` に `@Pattern(regexp = "(?sU).*\\S.*")` を追加する（**`(?U)` が必須**。Java の `\s` は既定で US-ASCII のみのため `(?s).*\S.*` では U+3000 が「非空白」と判定されて素通りする。JDK 25 で実測: `"　".matches("(?s).*\\S.*")` → `true` / `"　".matches("(?sU).*\\S.*")` → `false`）② Service で `reason.strip()` した結果が空なら弾く（`String.strip()` は `Character.isWhitespace` 基準で U+3000 を除去する。実測: `"　".strip().length()` → `0`、`"　".trim().length()` → `1`）。**決定（2026-08-02・オーナー判断）: 本 PR では直さない。** 実害が「中身のない申請が 1 件でき、管理者が却下する」程度に留まり、FE 経由なら zod の `.trim()` が弾くため。**未修正のまま残す既知の仕様差異**として本行を残し、§12.1 で `feature/admin` へ申し送る。直す場合は `VALIDATION_RULES.md §6` と zod 側の整合も併せて見直すこと |
 | R-9 | `@Auditable` の `entityIdParam` はメソッド**引数**からしか `UUID` を拾えないため、新規作成された申請の `id` を `audit_logs.entity_id` に残せない（null になる）。承認/却下の監査行（`feature/admin`）とは `entity_id` で突き合わせられない | 低 | 本スライスでは `entityIdParam` を指定せず null を許容する（`AuthService#register` の `USER_REGISTERED` と同じ扱い）。戻り値から `entityId` を拾う Aspect 拡張は横断的変更なので、必要になった時点で別途起票する |
 
 ---
@@ -749,7 +773,7 @@ PR をマージするには以下を全て満たすこと。**各項目に根拠
 
 | 宛先 | 内容 |
 |---|---|
-| `feature/admin`（#12） | 承認時の ① `users.role` → `ROLE_SELLER` ② `shops` レコード自動生成（SELLER-03）③ `SELLER_APPLICATION_APPROVED` / `_REJECTED` の監査記録 ④ `SellerApplication#approve()` / `reject()` ドメインメソッドの追加（本スライスでは未使用のため意図的に作っていない）⑤ `SELLER_APPLICATION_NOT_REVIEWABLE`（409）の実装。`SEQUENCE_FLOW §3` の `PATCH` 表記と `API_DESIGN` の `POST` 表記の不一致も同スライスで決着させること（R-5） |
+| `feature/admin`（#12） | **R-10 の全角スペース問題**（`reason = "　"` の申請が API 直叩きで 201 になる）。本スライスではオーナー判断で未修正とした既知の仕様差異。審査画面に「中身のない申請」が流入しうる側であり、修正するなら申請一覧を扱うこのスライスが自然。対処案 2 つは R-10 に記載。／ 承認時の ① `users.role` → `ROLE_SELLER` ② `shops` レコード自動生成（SELLER-03）③ `SELLER_APPLICATION_APPROVED` / `_REJECTED` の監査記録 ④ `SellerApplication#approve()` / `reject()` ドメインメソッドの追加（本スライスでは未使用のため意図的に作っていない）⑤ `SELLER_APPLICATION_NOT_REVIEWABLE`（409）の実装。`SEQUENCE_FLOW §3` の `PATCH` 表記と `API_DESIGN` の `POST` 表記の不一致も同スライスで決着させること（R-5） |
 | `feature/notification`（#10） | 審査結果の通知（NOTIF-04）。`FRONTEND_API_CONTRACT.md` L744 のとおり、通知タイプ `SELLER_APPLICATION` のリンク先は `/seller/applications/new`（本スライスで実装する画面）である |
 | `feature/mail-notification`（#14） | 審査結果メール（`EMAIL_DESIGN.md` を参照） |
 | `feature/seller-dashboard`（#11） | `ROUTES.seller.applicationRedirect` の値を `'/'` から `'/seller/dashboard'` に差し替える（OQ-4）。**この定数 1 箇所の変更だけで SELLER / ADMIN / APPROVED の 3 経路すべてが切り替わる** |

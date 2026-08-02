@@ -9,3 +9,4 @@ export type {
   AuthUser,
 } from './auth'
 export type { Address, CreateAddressRequest, UpdateAddressRequest } from './address'
+export type { SellerApplication, CreateSellerApplicationRequest } from './seller-application'
