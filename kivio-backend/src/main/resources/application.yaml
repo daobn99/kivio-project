@@ -1,3 +1,170 @@
+# =============================================================================
+# Profile: default — 全環境共通のベース設定
+# =============================================================================
+
 spring:
   application:
     name: kivio-backend
+
+  # Java 21+ 仮想スレッドで I/O バウンドスレッドのスループットを向上させる
+  threads:
+    virtual:
+      enabled: true
+
+  # Jackson: null フィールド除外・未知プロパティ無視
+  # Jackson 3.x では WRITE_DATES_AS_TIMESTAMPS が廃止されデフォルトで ISO 8601 出力になる
+  jackson:
+    default-property-inclusion: non_null
+    deserialization:
+      fail-on-unknown-properties: false
+    time-zone: Asia/Tokyo
+
+  mvc:
+    problemdetails:
+      enabled: true
+
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://db:5432/kivio}
+    username: ${DB_USERNAME:kivio}
+    password: ${DB_PASSWORD:password}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      # プール枯渇防止: CPU コア数の 2〜4 倍が目安
+      maximum-pool-size: ${DB_POOL_SIZE:10}
+      minimum-idle: 2
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      # 長時間アイドル接続の切断を防ぐ keepalive
+      keepalive-time: 60000
+      pool-name: KivioHikariPool
+
+  # Redis: 登録 OTP・登録セッションの TTL 一時ストレージ
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      # マネージド Redis（本番）は TLS 必須が一般的。ローカルの Docker Redis は平文のため既定 false
+      ssl:
+        enabled: ${REDIS_SSL:false}
+      timeout: 2s
+      lettuce:
+        pool:
+          enabled: true
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+
+  jpa:
+    hibernate:
+      # スキーマ管理は Flyway に任せる。起動時に DDL は変更しない
+      ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: false
+        jdbc:
+          time_zone: UTC
+    show-sql: false
+    # OSIV はパフォーマンス問題の温床。STATELESS API では不要
+    open-in-view: false
+
+  flyway:
+    enabled: true
+    # 本番データ消失防止: prod プロファイルで明示的に true を設定
+    clean-disabled: true
+    locations: classpath:db/migration
+
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            # GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET を .env で設定すること
+            # 未設定時は dummy で起動を許可（OAuth2 ログイン機能は無効になる）
+            client-id: ${GOOGLE_CLIENT_ID:dummy}
+            client-secret: ${GOOGLE_CLIENT_SECRET:dummy}
+            scope: openid,email,profile
+
+server:
+  # リバースプロキシ配下でのクライアント IP 正確取得（RateLimitingFilter §5.5）
+  forward-headers-strategy: native
+  compression:
+    enabled: true
+    mime-types: application/json,application/problem+json
+    min-response-size: 2048
+
+app:
+  jwt:
+    # SECURITY: 本番では JWT_SECRET 環境変数に 256bit 以上の Base64 エンコード済み秘密鍵を設定すること
+    # デフォルト値はローカル開発専用。本番・ステージング環境での使用は厳禁
+    secret: ${JWT_SECRET}
+    access-token-expiration: ${JWT_ACCESS_TOKEN_EXPIRATION:900}
+    refresh-token-expiration: ${JWT_REFRESH_TOKEN_EXPIRATION:604800}
+  # 登録 OTP / 登録セッション設定。すべて Redis の TTL として適用される
+  auth:
+    otp:
+      length: ${AUTH_OTP_LENGTH:6}
+      ttl: ${AUTH_OTP_TTL:PT10M}                       # OTP 有効期限
+      max-attempts: ${AUTH_OTP_MAX_ATTEMPTS:5}         # 検証試行上限（超過で失効）
+      resend-cooldown: ${AUTH_OTP_RESEND_COOLDOWN:PT60S} # 再送信クールダウン
+      max-per-hour: ${AUTH_OTP_MAX_PER_HOUR:5}         # メール単位の 1 時間あたり送信上限
+    registration-session:
+      ttl: ${AUTH_REGISTRATION_SESSION_TTL:PT30M}      # registrationToken 有効期限
+  # 送信メールの差出人（EMAIL_DESIGN.md §1 送信設定）。dev/prod の EmailSender が共有する
+  email:
+    from-address: ${MAIL_FROM_ADDRESS:noreply@kivio.example.com}
+    from-name: ${MAIL_FROM_NAME:Kivio}
+    # Resend（prod の ResendEmailSender のみ使用）。dev/test は未設定のままでよい
+    resend:
+      api-key: ${RESEND_API_KEY:}
+      base-url: ${RESEND_BASE_URL:https://api.resend.com}
+  cors:
+    allowed-origins: ${ALLOWED_ORIGINS:http://localhost:3000}
+  rate-limit:
+    auth:
+      capacity: ${RATE_LIMIT_AUTH_CAPACITY:10}
+      refill-duration-seconds: ${RATE_LIMIT_AUTH_DURATION:60}
+    api:
+      capacity: ${RATE_LIMIT_API_CAPACITY:100}
+      refill-duration-seconds: ${RATE_LIMIT_API_DURATION:60}
+    public:
+      capacity: ${RATE_LIMIT_PUBLIC_CAPACITY:30}
+      refill-duration-seconds: ${RATE_LIMIT_PUBLIC_DURATION:60}
+  problem-base-url: ${PROBLEM_BASE_URL:https://kivio.example.com}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: alpha
+    tags-sorter: alpha
+    disable-swagger-default-url: true
+
+management:
+  endpoints:
+    web:
+      base-path: /actuator
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: when-authorized
+      # Kubernetes liveness/readiness probe サポート
+      probes:
+        enabled: true
+  # メール送信は副作用であり、SMTP/Mailpit の死活をアプリの readiness に連動させない
+  health:
+    mail:
+      enabled: false
+  info:
+    env:
+      enabled: false
+
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS Z} [%thread] [%X{correlationId}] %-5level %logger{36} - %msg%n"
+  level:
+    root: INFO
+    "[io.kivio]": INFO

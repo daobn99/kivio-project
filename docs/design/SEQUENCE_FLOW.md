@@ -23,65 +23,80 @@
 
 ## 1. Auth
 
-### 1.1 メール登録
+### 1.1 メール登録（OTP 方式）
 
-**エンドポイント:** `POST /auth/check-email` → `POST /auth/register` → `POST /auth/verify-email`
+**エンドポイント:** `POST /auth/check-email`（任意・インラインUX） → `POST /auth/register/request-otp` → `POST /auth/register/verify-otp` → `POST /auth/register/complete`
 
-> **設計方針 — メール認証後の自動ログイン:**  
-> メール内リンクはフロントエンド URL（`/auth/verify-email?token=uuid`）に誘導する。  
-> フロントエンドページがマウント時に `POST /api/v1/auth/verify-email {token}` を呼び出し、  
-> 成功時に Access Token + Refresh Token を受け取ってそのままログイン状態にする。  
-> トークンはリクエストボディで送信（クエリパラメータ不使用）し API サーバーログへの露出を防ぐ。  
-> `router.replace('/')` でブラウザ履歴からも即時除去する。
+> **設計方針 — メール認証先行・ユーザーは認証後に作成:**  
+> `users` レコードはメール認証（OTP 入力）完了後にのみ作成する。未認証の仮レコードを `users` に残さないため、OTP と登録セッション（`registrationToken`）は **Redis に TTL 付きで一時保存**し、DB テーブルは持たない。  
+> - OTP は 6 桁数値。Redis `reg:otp:{email}` に SHA-256 ハッシュ + 試行回数で保存（TTL 10 分）。  
+> - 検証成功で不透明な `registrationToken` を発行し `reg:session:{registrationToken}` → `{email}` に保存（TTL 30 分）。  
+> - 登録完了時に `users` を INSERT し、Access Token + Refresh Token を発行してそのまま自動ログイン。  
+> この設計により「未確認アカウントの滞留」「未確認状態での即ログイン」「期限切れリンクの再送信」を構造的に排除する。詳細は [ADR-006](../../adr/ADR-006-email-otp-redis.md)。
 
 ```mermaid
 sequenceDiagram
     participant C as Client (Next.js)
     participant S as Spring API
+    participant R as Redis
     participant DB as PostgreSQL
     participant M as Resend
 
-    Note over C,M: ── ① メールアドレス重複チェック ──
+    Note over C,M: ── ① メールアドレス重複チェック（任意・onBlur のインライン UX） ──
     C->>S: POST /api/v1/auth/check-email<br/>{email}
     S->>DB: SELECT id FROM users<br/>WHERE email = ? AND deleted_at IS NULL
     alt メール登録済み
-        DB-->>S: row found
         S-->>C: 409 EMAIL_ALREADY_REGISTERED
     else 利用可能
-        DB-->>S: not found
         S-->>C: 200 {available: true}
     end
 
-    Note over C,M: ── ② 新規登録 ──
-    C->>S: POST /api/v1/auth/register<br/>{email, password, name}
-    S->>S: BCrypt.hash(password, cost=12)
-    S->>DB: INSERT INTO users<br/>(email, password_hash, display_name, role=BUYER)
-    S->>DB: INSERT INTO email_verification_tokens<br/>(user_id, token_hash=SHA256(token), expires_at=+24h, used_at=NULL)<br/>※ 平文トークンは DB に保存しない
-    S->>M: Send verification email (token リンク)
-    M-->>S: 200 OK
-    S-->>C: 201 {message: "確認メールを送信しました"}
-
-    Note over C,M: ── ③ メール認証 + 自動ログイン ──
-    Note over C: フロント /auth/verify-email?token=uuid をレンダリング
-    Note over C: マウント時に token をボディに含めて API コール（URL 露出を防ぐ）
-    C->>S: POST /api/v1/auth/verify-email<br/>{token}
-    S->>S: SHA-256(token) でハッシュ化して DB 検索
-    S->>DB: SELECT * FROM email_verification_tokens<br/>WHERE token_hash = SHA256(?) AND used_at IS NULL
-    alt トークン有効かつ未使用
-        S->>S: expires_at > NOW() を確認
-        alt 期限切れ
-            S-->>C: 400 EMAIL_VERIFICATION_TOKEN_EXPIRED
-        end
-        S->>DB: UPDATE email_verification_tokens SET used_at = NOW()<br/>（再利用防止・記録保持のため DELETE せず used_at で管理）
-        S->>DB: UPDATE users SET email_verified_at = NOW()
-        S->>DB: INSERT INTO refresh_tokens<br/>(user_id, token, expires_at=+7d)
-        S->>DB: INSERT INTO audit_logs<br/>(action=USER_EMAIL_VERIFIED, actor_id=user_id)
-        S-->>C: 200 {<br/>  access_token (JWT, 15min),<br/>  refresh_token (7d),<br/>  user: {id, role, displayName}<br/>}
-    else トークン不正 / 使用済み
-        S-->>C: 400 EMAIL_VERIFICATION_TOKEN_INVALID
+    Note over C,M: ── ② 認証コード（OTP）送信 ──
+    C->>S: POST /api/v1/auth/register/request-otp<br/>{email}
+    S->>DB: SELECT id FROM users WHERE email = ? AND deleted_at IS NULL
+    alt 登録済み
+        S-->>C: 409 EMAIL_ALREADY_REGISTERED
+    else 利用可能
+        S->>S: 6 桁 OTP を生成
+        S->>R: SETEX reg:otp:{email} 600<br/>{otpHash=SHA256(otp), attempts=0}
+        S->>M: Send OTP email（6 桁コード）
+        M-->>S: 200 OK
+        S-->>C: 202 {message, expiresInSeconds: 600}
     end
-    Note over C: router.replace('/') でブラウザ履歴から token を除去
-    Note over C: Access Token + Refresh Token を保持 → ホーム / へリダイレクト
+
+    Note over C,M: ── ③ 認証コード（OTP）検証 ──
+    C->>S: POST /api/v1/auth/register/verify-otp<br/>{email, otp}
+    S->>R: GET reg:otp:{email}
+    alt キーなし
+        S-->>C: 400 OTP_EXPIRED
+    else 試行回数 >= 5
+        S->>R: DEL reg:otp:{email}
+        S-->>C: 429 OTP_MAX_ATTEMPTS_EXCEEDED
+    else OTP 不一致
+        S->>R: HINCRBY reg:otp:{email} attempts 1
+        S-->>C: 400 OTP_INVALID
+    else OTP 一致
+        S->>R: DEL reg:otp:{email}
+        S->>S: registrationToken = UUID v4
+        S->>R: SETEX reg:session:{registrationToken} 1800 {email}
+        S-->>C: 200 {registrationToken, expiresInSeconds: 1800}
+    end
+
+    Note over C,M: ── ④ パスワード設定・登録完了 + 自動ログイン ──
+    C->>S: POST /api/v1/auth/register/complete<br/>{registrationToken, password, passwordConfirm, displayName}
+    S->>R: GET reg:session:{registrationToken}
+    alt セッションなし / 期限切れ
+        S-->>C: 400 REGISTRATION_SESSION_INVALID
+    else 有効
+        S->>S: BCrypt.hash(password, cost=12)
+        S->>DB: INSERT INTO users<br/>(email, password_hash, display_name, role=BUYER)
+        Note right of DB: 競合で UNIQUE 違反時は 409 EMAIL_ALREADY_REGISTERED
+        S->>R: DEL reg:session:{registrationToken}
+        S->>DB: INSERT INTO refresh_tokens<br/>(user_id, token_hash, expires_at=+7d)
+        S->>DB: INSERT INTO audit_logs<br/>(action=USER_REGISTERED, actor_id=user_id)
+        S-->>C: 201 {<br/>  access_token (JWT, 15min),<br/>  refresh_token (7d),<br/>  tokenType, expiresIn<br/>}
+    end
+    Note over C: Access Token + Refresh Token を保持 → ホーム / へ自動ログイン
 ```
 
 ---
@@ -102,11 +117,11 @@ sequenceDiagram
     DB-->>S: user record (or not found)
     S->>S: BCrypt.verify(inputPassword, passwordHash)
 
-    alt 認証成功 & メール認証済み
+    alt 認証成功
         S->>DB: INSERT INTO refresh_tokens<br/>(user_id, token, expires_at=+7d)
         S-->>C: 200 {<br/>  access_token (JWT, 15min),<br/>  refresh_token (7d),<br/>  user: {id, role, displayName}<br/>}
-    else メール未認証
-        S-->>C: 403 EMAIL_NOT_VERIFIED
+    else アカウント無効化済み
+        S-->>C: 403 USER_DEACTIVATED
     else パスワード不一致 / ユーザ不存在
         S-->>C: 401 INVALID_CREDENTIALS
     end
@@ -163,7 +178,7 @@ sequenceDiagram
         alt 既存ユーザー (google_id 未連携)
             S->>DB: UPDATE users SET google_id = ?
         else 新規ユーザー
-            S->>DB: INSERT INTO users<br/>(google_id, email, display_name,<br/>role=BUYER, email_verified_at=NOW())
+            S->>DB: INSERT INTO users<br/>(google_id, email, display_name, role=BUYER)<br/>※Google 検証済みのため確認フラグは持たない
         end
         S->>DB: INSERT INTO refresh_tokens
         S-->>N: 200 {access_token (15min), refresh_token, user}
@@ -298,7 +313,9 @@ sequenceDiagram
 
 ## 3. Seller Application
 
-**エンドポイント:** `POST /seller-applications` | `PATCH /admin/seller-applications/{id}/approve` | `PATCH /admin/seller-applications/{id}/reject`
+**エンドポイント:** `POST /seller-applications` | `POST /admin/seller-applications/{id}/approve` | `POST /admin/seller-applications/{id}/reject`
+
+> **列名・HTTP メソッドの正:** 本図の SQL は `DB_DESIGN.md §3.4` の実スキーマに準拠する（申請者は `applicant_id`、申請日時は `created_at`。`user_id` / `submitted_at` という列は存在しない）。審査 API のメソッドは `API_DESIGN.md §15 管理者` / `REQUIREMENTS.md §API 一覧` と揃えて `POST`（状態遷移を起こす非冪等な操作のため）。
 
 ```mermaid
 sequenceDiagram
@@ -310,32 +327,35 @@ sequenceDiagram
     participant M as Resend
 
     Note over B,M: ── ① 出品者申請 ──
-    B->>S: POST /api/v1/seller-applications<br/>(Bearer: access_token)<br/>{shopName, description, ...}
-    S->>DB: SELECT * FROM seller_applications<br/>WHERE user_id = ? AND status IN (PENDING, APPROVED)
+    B->>S: POST /api/v1/seller-applications<br/>(Bearer: access_token)<br/>{reason}
+    S->>DB: SELECT role FROM users WHERE id = ?
+    S->>DB: SELECT * FROM seller_applications<br/>WHERE applicant_id = ? AND status IN (PENDING, APPROVED)
 
-    alt 審査中の申請あり
+    alt role が ROLE_BUYER でない / APPROVED 申請あり
+        S-->>B: 409 SELLER_APPLICATION_ALREADY_APPROVED
+    else 審査中の申請あり
         S-->>B: 409 SELLER_APPLICATION_PENDING
-    else 承認済み (すでに SELLER)
-        S-->>B: 409 ALREADY_APPROVED
-    else 申請可能
-        S->>DB: INSERT INTO seller_applications<br/>(user_id, status=PENDING, submitted_at=NOW())
+    else 申請可能 (未申請 または REJECTED のみ)
+        S->>DB: INSERT INTO seller_applications<br/>(applicant_id, reason, status=PENDING)
+        Note right of DB: created_at は DEFAULT NOW()。<br/>却下後の再申請は既存行を更新せず新規行を作る (SELLER-05)
         S->>DB: INSERT INTO audit_logs<br/>(action=SELLER_APPLICATION_SUBMITTED)
-        S-->>B: 201 {application_id, status: PENDING}
+        S-->>B: 201 {id, applicantId, reason, status: PENDING, createdAt}
     end
 
     Note over A,M: ── ② 管理者: 申請一覧確認 ──
     A->>S: GET /api/v1/admin/seller-applications<br/>?status=PENDING&page=0&size=20
-    S->>DB: SELECT * FROM seller_applications<br/>WHERE status=PENDING ORDER BY submitted_at
+    S->>DB: SELECT * FROM seller_applications<br/>WHERE status=PENDING ORDER BY created_at
     S-->>A: 200 PageResponse<SellerApplicationSummary>
 
     Note over A,M: ── ③a 承認 ──
-    A->>S: PATCH /api/v1/admin/seller-applications/{id}/approve<br/>(Bearer: admin_token)
+    A->>S: POST /api/v1/admin/seller-applications/{id}/approve<br/>(Bearer: admin_token)
     S->>DB: SELECT * FROM seller_applications<br/>WHERE id = ?
     opt status が PENDING でない
-        S-->>A: 409 NOT_REVIEWABLE
+        S-->>A: 409 SELLER_APPLICATION_NOT_REVIEWABLE
     end
-    S->>DB: UPDATE seller_applications<br/>SET status=APPROVED, reviewed_by=admin_id, reviewed_at=NOW()
-    S->>DB: UPDATE users SET role=SELLER WHERE id=applicant_user_id
+    S->>DB: UPDATE seller_applications<br/>SET status=APPROVED, reviewer_id=admin_id, reviewed_at=NOW()
+    S->>DB: UPDATE users SET role='ROLE_SELLER' WHERE id=applicant_id
+    S->>DB: INSERT INTO shops (owner_id, name, status)<br/>ショップレコード自動生成 (SELLER-03)
     S->>DB: INSERT INTO audit_logs (action=SELLER_APPLICATION_APPROVED)
     S->>DB: INSERT INTO notifications<br/>(user_id=applicant, type=SELLER_APPROVED)
     S->>WS: /topic/notifications/{applicant_user_id}<br/>{type: SELLER_APPROVED}
@@ -343,17 +363,17 @@ sequenceDiagram
     S-->>A: 200 {status: APPROVED}
 
     Note over A,M: ── ③b 拒否 ──
-    A->>S: PATCH /api/v1/admin/seller-applications/{id}/reject<br/>{reason}
+    A->>S: POST /api/v1/admin/seller-applications/{id}/reject<br/>{comment}
     S->>DB: SELECT * FROM seller_applications WHERE id = ?
     opt status が PENDING でない
-        S-->>A: 409 NOT_REVIEWABLE
+        S-->>A: 409 SELLER_APPLICATION_NOT_REVIEWABLE
     end
-    S->>DB: UPDATE seller_applications<br/>SET status=REJECTED, rejection_reason=?, reviewed_at=NOW()
+    S->>DB: UPDATE seller_applications<br/>SET status=REJECTED, review_comment=?,<br/>reviewer_id=admin_id, reviewed_at=NOW()
     Note right of DB: users.role は BUYER のまま変更なし
     S->>DB: INSERT INTO audit_logs (action=SELLER_APPLICATION_REJECTED)
     S->>DB: INSERT INTO notifications<br/>(user_id=applicant, type=SELLER_REJECTED)
-    S->>WS: /topic/notifications/{applicant_user_id}<br/>{type: SELLER_REJECTED, reason}
-    S->>M: Send rejection email (reason 含む)
+    S->>WS: /topic/notifications/{applicant_user_id}<br/>{type: SELLER_REJECTED, comment}
+    S->>M: Send rejection email (review_comment 含む)
     S-->>A: 200 {status: REJECTED}
 ```
 
@@ -687,7 +707,7 @@ sequenceDiagram
 
 ## 9. Batch Jobs
 
-**要件:** RET-01〜RET-08（REQUIREMENTS § 15）  
+**要件:** RET-01〜RET-09（REQUIREMENTS § 15）  
 実行エンジン: Spring `@Scheduled`（Spring Batch は現スコープでは過剰）  
 全ジョブの実行結果は `audit_logs`（`actor_id = NULL`）に記録する。
 
@@ -703,6 +723,8 @@ sequenceDiagram
     loop 対象ユーザーごと
         J->>DB: UPDATE users SET<br/>  email = 'deleted_' || id || '@kivio.invalid',<br/>  display_name = '退会済みユーザー',<br/>  password_hash = NULL,<br/>  avatar_url = NULL,<br/>  google_id = NULL<br/>WHERE id = ?
         J->>DB: UPDATE shops SET<br/>  name = 'クローズドショップ',<br/>  description = NULL,<br/>  logo_url = NULL<br/>WHERE seller_id = ?<br/>  AND deleted_at IS NOT NULL
+        J->>DB: DELETE FROM addresses<br/>WHERE user_id = ?<br/>(全項目PII・物理削除 RET-09)
+        J->>DB: UPDATE seller_applications SET<br/>  reason = '(削除済み)',<br/>  review_comment = '(削除済み)'<br/>WHERE applicant_id = ?<br/>(自由記述にPII・レコードは監査証跡として保持 RET-10)
         J->>DB: INSERT INTO audit_logs<br/>(actor_id=NULL, action=USER_ANONYMIZED,<br/>entity_type=USER, entity_id=?, outcome=SUCCESS)
     end
     J->>DB: INSERT INTO audit_logs<br/>(action=BATCH_USER_ANONYMIZATION_COMPLETED,<br/>new_value={processedCount})

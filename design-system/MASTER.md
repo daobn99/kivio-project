@@ -9,6 +9,7 @@
 **プロジェクト:** Kivio — マルチベンダーマーケットプレイス
 **スタック:** Next.js 15 (App Router) + TypeScript + shadcn/ui + Tailwind CSS 4.x
 **作成日:** 2026-05-31
+**カラー改訂:** 2026-06-09（バイオレット → ロゴ準拠 Navy × Teal へ移行）
 **カテゴリ:** マーケットプレイス (P2P) / EC
 
 ---
@@ -17,11 +18,12 @@
 
 | 決定事項 | 選択 | 理由 |
 |---|---|---|
-| **メインカラー** | バイオレット `#7C3AED` | 信頼感 + 創造性を表現。赤・オレンジ系が多い EC サイトとの差別化。 |
-| **アクセント/CTA** | グリーン `#16A34A` | 「購入・確定」の普遍的な色覚シグナル。バイオレット背景に対して高コントラスト。 |
+| **メインカラー** | ディープネイビー `#1E3A5F` | ロゴ本体（バッグ左面）から直接継承。信頼感・プロフェッショナル感。Amazon/Mercari/Alibaba はオレンジ/赤系 CTA が多いため、ネイビーは競合との差別化になる。 |
+| **アクセント/CTA** | ティール `#1A9E87` | ロゴの上昇矢印（最も目立つ要素）から継承。「成長・取引成立」を直感的に表現。グリーン系の意味（購入確定）を保ちつつ個性を付与。 |
+| **背景** | 純白 `#FFFFFF` | Mercari・Amazon・Alibaba 3社に共通する設計思想 — 商品画像が「色」になる。紫みがかった背景は商品写真の色温度を歪めるため廃止。 |
 | **フォント** | Noto Serif JP（見出し）+ Noto Sans JP（本文） | 日本語対応必須。Serif は高級感を演出し、Sans はスキャン読みに最適。可変フォントで読み込み最小化。 |
-| **スタイル** | Vibrant & Block-based | ポートフォリオとして視覚的インパクトを重視。若年層向けマーケット感を表現。 |
-| **ダークモード** | 完全対応 | shadcn/ui のデフォルト機能。採用審査でのアクセシビリティ評価を意識。 |
+| **スタイル** | Simple & Modern（Navy × Teal） | シンプル・ミニマルでありながらモダン感を維持。UI chrome を極限まで抑えて商品を主役にする。 |
+| **ダークモード** | 公開画面はライト固定 / Seller・Admin はセグメントスコープダーク対応 | 大手 EC（Amazon・Mercari・Alibaba）もライト専用。商品画像の色温度を歪めないため公開面はライト固定。Seller/Admin ダッシュボードは**Phase 3+ での拡張を考慮してセグメントスコープダーク対応可能な構造にする**が、Phase 2 では実装不要。詳細は `design-system/pages/layout.md §1`。 |
 
 ---
 
@@ -36,46 +38,51 @@ shadcn/ui + Tailwind CSS 4.x では、CSS変数に `hsl()` 等の**完全な色�
 ```css
 :root {
   /* ベース */
-  --background:        hsl(270, 100%, 98%);  /* #FAF5FF */
-  --foreground:        hsl(263,  67%, 35%);  /* #4C1D95 */
+  --background:        hsl(0, 0%, 100%);         /* #FFFFFF — 純白（商品画像を汚染しない） */
+  --foreground:        hsl(222, 47%, 11%);        /* #0F172A — ネイビー黒 */
 
   /* カード / ポップオーバー */
   --card:              hsl(0, 0%, 100%);
-  --card-foreground:   hsl(263, 67%, 35%);   /* #4C1D95 */
+  --card-foreground:   hsl(222, 47%, 11%);        /* #0F172A */
   --popover:           hsl(0, 0%, 100%);
-  --popover-foreground: hsl(263, 67%, 35%);  /* #4C1D95 */
+  --popover-foreground: hsl(222, 47%, 11%);       /* #0F172A */
 
-  /* ブランド */
-  --primary:           hsl(262, 83%, 58%);   /* #7C3AED */
+  /* ブランドプライマリ（ロゴネイビー） */
+  --primary:           hsl(213, 52%, 24%);        /* #1E3A5F */
   --primary-foreground: hsl(0, 0%, 100%);
-  --secondary:         hsl(258, 100%, 76%);  /* #A78BFA */
-  --secondary-foreground: hsl(222, 47%, 11%); /* #0F172A — secondary ボタン上の文字色 */
 
-  /* アクセント（CTA / 成功） */
-  --accent:            hsl(142, 72%, 36%);   /* #16A34A */
+  /* セカンダリ（ネイビーの淡色面） */
+  --secondary:         hsl(213, 44%, 93%);        /* #EEF3F9 */
+  --secondary-foreground: hsl(213, 52%, 24%);     /* #1E3A5F */
+
+  /* アクセント/CTA（ロゴ矢印ティール） */
+  --accent:            hsl(172, 70%, 36%);        /* #1A9E87 */
   --accent-foreground: hsl(0, 0%, 100%);
 
   /* ニュートラル */
-  --muted:             hsl(267, 71%, 94%);   /* #ECEEF9 */
-  --muted-foreground:  hsl(258, 30%, 55%);
-  --border:            hsl(259, 100%, 87%);  /* #DDD6FE */
-  --input:             hsl(259, 100%, 90%);
-  --ring:              hsl(262, 83%, 58%);   /* #7C3AED */
+  --muted:             hsl(214, 32%, 95%);        /* #F1F5F9 */
+  --muted-foreground:  hsl(215, 16%, 47%);        /* #64748B */
+  --border:            hsl(214, 32%, 91%);        /* #E2E8F0 */
+  --input:             hsl(214, 32%, 91%);        /* #E2E8F0 */
+  --ring:              hsl(172, 70%, 36%);        /* #1A9E87 — フォーカスリング */
 
   /* フィードバック */
-  --destructive:       hsl(0, 72%, 51%);     /* #DC2626 */
+  --destructive:       hsl(0, 72%, 51%);          /* #DC2626 */
   --destructive-foreground: hsl(0, 0%, 100%);
-  --warning:           hsl(38, 92%, 50%);    /* #F59E0B */
+  --warning:           hsl(32, 95%, 44%);         /* #D97706 */
   --warning-foreground: hsl(0, 0%, 100%);
-  --success:           hsl(142, 72%, 36%);   /* #16A34A */
+  --success:           hsl(172, 70%, 36%);        /* #1A9E87 — アクセントと統一 */
   --success-foreground: hsl(0, 0%, 100%);
 
+  /* モーダル背後*/
+  --overlay: rgb(0 0 0 / 0.6);
+
   /* チャート */
-  --chart-1: hsl(262, 83%, 58%);
-  --chart-2: hsl(142, 72%, 36%);
-  --chart-3: hsl(199, 89%, 48%);
-  --chart-4: hsl(38,  92%, 50%);
-  --chart-5: hsl(355, 78%, 60%);
+  --chart-1: hsl(213, 52%, 24%);   /* ネイビー */
+  --chart-2: hsl(172, 70%, 36%);   /* ティール */
+  --chart-3: hsl(210, 64%, 54%);   /* スチールブルー */
+  --chart-4: hsl(32,  95%, 44%);   /* アンバー */
+  --chart-5: hsl(355, 78%, 60%);   /* レッド */
 
   /* 角丸 */
   --radius: 0.5rem;
@@ -86,33 +93,34 @@ shadcn/ui + Tailwind CSS 4.x では、CSS変数に `hsl()` 等の**完全な色�
 
 ```css
 .dark {
-  --background:        hsl(263, 80%,  6%);   /* #0C0520 */
-  --foreground:        hsl(258, 100%, 93%);  /* #EDE9FE */
+  --background:        hsl(215, 55%, 10%);        /* #0A1828 — ロゴの最暗部を延長 */
+  --foreground:        hsl(213, 44%, 92%);        /* #E0EAF5 */
 
-  --card:              hsl(263, 60%, 10%);
-  --card-foreground:   hsl(258, 100%, 93%);
-  --popover:           hsl(263, 60%, 10%);
-  --popover-foreground: hsl(258, 100%, 93%);
+  --card:              hsl(215, 52%, 14%);        /* #112039 */
+  --card-foreground:   hsl(213, 44%, 92%);
+  --popover:           hsl(215, 52%, 14%);
+  --popover-foreground: hsl(213, 44%, 92%);
 
-  --primary:           hsl(258, 100%, 76%);  /* #A78BFA — ダーク背景で視認性を確保 */
-  --primary-foreground: hsl(263, 100%, 10%);
-  --secondary:         hsl(262, 50%,  30%);
-  --secondary-foreground: hsl(258, 100%, 93%);
+  --primary:           hsl(210, 64%, 60%);        /* #5B9BD5 — スチールブルー（ダーク背景で視認性確保） */
+  --primary-foreground: hsl(215, 55%, 10%);       /* #0A1828 */
 
-  --accent:            hsl(142, 60%, 45%);   /* #22C55E — ダーク背景で少し明るく */
+  --secondary:         hsl(215, 45%, 20%);
+  --secondary-foreground: hsl(213, 44%, 75%);     /* #A8C2DC */
+
+  --accent:            hsl(172, 65%, 44%);        /* #26BBA1 — ダーク背景でわずかに明るく */
   --accent-foreground: hsl(0, 0%, 100%);
 
-  --muted:             hsl(263, 50%, 16%);
-  --muted-foreground:  hsl(258, 30%, 65%);
-  --border:            hsl(263, 40%, 20%);
-  --input:             hsl(263, 40%, 20%);
-  --ring:              hsl(258, 100%, 76%);
+  --muted:             hsl(215, 40%, 18%);
+  --muted-foreground:  hsl(213, 25%, 58%);        /* #7A9BBC */
+  --border:            hsl(215, 45%, 22%);
+  --input:             hsl(215, 45%, 22%);
+  --ring:              hsl(172, 65%, 44%);        /* #26BBA1 */
 
-  --destructive:       hsl(0, 62%, 50%);
+  --destructive:       hsl(0, 72%, 60%);          /* #EF4444 */
   --destructive-foreground: hsl(0, 0%, 100%);
-  --warning:           hsl(38, 80%, 55%);
-  --warning-foreground: hsl(0, 0%, 100%);
-  --success:           hsl(142, 60%, 45%);
+  --warning:           hsl(38, 92%, 50%);         /* #F59E0B */
+  --warning-foreground: hsl(222, 47%, 11%);
+  --success:           hsl(172, 65%, 44%);        /* #26BBA1 */
   --success-foreground: hsl(0, 0%, 100%);
 }
 ```
@@ -153,6 +161,7 @@ Tailwind CSS v4 では `@theme inline` を使い、CSS変数をそのまま `var
   --color-warning-foreground:   var(--warning-foreground);
   --color-success:              var(--success);
   --color-success-foreground:   var(--success-foreground);
+  --color-overlay:              var(--overlay);
 
   /* 角丸 */
   --radius-sm:   calc(var(--radius) - 4px);  /* 4px */
@@ -167,14 +176,29 @@ Tailwind CSS v4 では `@theme inline` を使い、CSS変数をそのまま `var
 
 | 役割 | ライト | ダーク | 用途 |
 |---|---|---|---|
-| プライマリ | `#7C3AED` | `#A78BFA` | ブランドカラー、フォーカスリング |
-| アクセント/CTA | `#16A34A` | `#22C55E` | 購入ボタン、成功ステート |
-| 背景 | `#FAF5FF` | `#0C0520` | ページ背景 |
-| 前景 | `#4C1D95` | `#EDE9FE` | 本文テキスト |
-| ミュート | `#ECEEF9` | — | バッジ、タグ、サブ背景 |
-| ボーダー | `#DDD6FE` | — | 区切り線、入力枠 |
+| プライマリ（ロゴネイビー） | `#1E3A5F` | `#5B9BD5` | ブランドカラー、ナビ、ヘッダー |
+| アクセント/CTA（ロゴティール） | `#1A9E87` | `#26BBA1` | 購入ボタン、成功ステート、フォーカスリング |
+| 背景 | `#FFFFFF` | `#0A1828` | ページ背景（商品を主役にする） |
+| 前景 | `#0F172A` | `#E0EAF5` | 本文テキスト |
+| セカンダリ面 | `#EEF3F9` | — | セカンダリボタン背景 |
+| ミュート | `#F1F5F9` | — | バッジ、タグ、サブ背景 |
+| セカンダリテキスト | `#64748B` | `#7A9BBC` | キャプション、メタ情報 |
+| ボーダー | `#E2E8F0` | — | 区切り線、入力枠 |
 | 破壊的操作 | `#DC2626` | `#EF4444` | 削除・エラー |
-| 警告 | `#F59E0B` | `#FBBF24` | 在庫少・注意 |
+| 警告 | `#D97706` | `#F59E0B` | 在庫少・注意 |
+| オーバーレイ | ブラック 40% | `#000000` 60% | モーダル・シート・ダイアログ背後のスクリム |
+
+### 2.4 オーバーレイ（スクリム）
+
+モーダル・Sheet・AlertDialog の背後は **減光のみ**で覆い、`backdrop-filter: blur()` は使わない。
+
+減光が弱いままぼかすと、背後の文字がコントラストを保ったまま輪郭だけ崩れ、「読めそうで読めない」状態になる。目が焦点を合わせ続けようとするため、短時間でも疲労を強く感じる。背後を確実に「操作できない」と伝える役割は、ぼかしではなく**輝度差**が担う。
+
+- 不透明度は 40%。背後のレイアウトは判別できるが、読む対象ではないことが一目でわかる水準に置く
+- 色は黒ではなくブランドネイビー。純黒のスクリムは白背景の上で灰色に濁って見える
+- 値は `--overlay` に集約し、`bg-overlay` で参照する。個別コンポーネントで `bg-black/xx` を直書きしない
+
+> shadcn/ui のデフォルト（`bg-black/10` + `backdrop-blur-xs`）はこの方針に反するため、`dialog` / `alert-dialog` / `sheet` の Backdrop を上書き済み。新しいオーバーレイ系コンポーネントを追加したときも同様に置き換える。
 
 ---
 
@@ -254,7 +278,7 @@ Noto Sans JP  → h3–h6, 本文, ラベル, ボタン, 入力フィールド, 
 --shadow-md:   0 4px 6px rgba(0,0,0,0.07), 0 2px 4px rgba(0,0,0,0.04);
 --shadow-lg:   0 10px 15px rgba(0,0,0,0.08), 0 4px 6px rgba(0,0,0,0.04);
 --shadow-xl:   0 20px 25px rgba(0,0,0,0.10), 0 10px 10px rgba(0,0,0,0.04);
---shadow-card: 0 2px 8px rgba(124,58,237,0.08); /* プライマリカラー薄め */
+--shadow-card: 0 2px 8px rgba(30,58,95,0.08);   /* ネイビー薄め */
 ```
 
 ---
@@ -348,13 +372,13 @@ Tailwind CSS v4 ではブレークポイントを TypeScript config ではなく
 
 ```tsx
 // shadcn Button バリアント対応表
-// primary     → bg-primary text-primary-foreground
-// secondary   → bg-secondary text-secondary-foreground
-// outline     → border-primary text-primary
+// primary     → bg-primary text-primary-foreground        （ネイビー）
+// secondary   → bg-secondary text-secondary-foreground    （薄ネイビー面）
+// outline     → border-primary text-primary               （ネイビーアウトライン）
 // destructive → bg-destructive text-destructive-foreground
 // ghost       → hover:bg-muted
 
-// CTA（購入・確定）はアクセントカラーを使用
+// CTA（購入・確定）はティールアクセントを使用
 <Button className="bg-accent hover:bg-accent/90 text-accent-foreground">
   購入する
 </Button>
@@ -392,9 +416,9 @@ Tailwind CSS v4 ではブレークポイントを TypeScript config ではなく
 ### バッジ / タグ
 
 ```tsx
-// カテゴリタグ: bg-primary/10 text-primary rounded-full text-xs px-2 py-0.5
+// カテゴリタグ:  bg-primary/10 text-primary rounded-full text-xs px-2 py-0.5  （ネイビー薄め）
 // ステータスバッジ: bg-success/10 text-success / bg-warning/10 text-warning
-// "新着" / "セール": bg-accent text-accent-foreground rounded-sm text-xs font-bold
+// "新着" / "セール": bg-accent text-accent-foreground rounded-sm text-xs font-bold  （ティール）
 ```
 
 ### トースト
@@ -426,7 +450,7 @@ export default function ProductsPage() {
 }
 
 // スケルトンは実際のコンポーネントと同じサイズ・レイアウトで定義（CLS 防止）
-// shadcn Skeleton: <Skeleton className="h-[200px] w-full rounded-lg" />
+// shadcn Skeleton: <Skeleton className="h-50 w-full rounded-lg" />
 ```
 
 ### エンプティステート
@@ -543,4 +567,8 @@ import { ShoppingCart, Heart, Search, Store, User } from "lucide-react";
  存在する場合はそのルールを優先してください。"
 ```
 
-**既存のページ別オーバーライド:** _(未作成 — ページ実装時に順次追加)_
+**既存のページ別オーバーライド:**
+- [`design-system/pages/layout.md`](pages/layout.md) — GlobalHeader / GlobalFooter / MobileBottomNav（ダークモード方針含む）
+- [`design-system/pages/auth.md`](pages/auth.md) — ログイン / 会員登録（`(auth)` 専用 chrome・フローティングラベル）
+- [`design-system/pages/user-profile.md`](pages/user-profile.md) — プロフィール設定 / 配送先住所管理（`/profile/*` アカウント領域 chrome・設定フォーム規約）
+- [`design-system/pages/seller-application.md`](pages/seller-application.md) — セラー申請フォーム / 審査状況表示（`/seller/applications/new`・1 URL 4 状態の出し分け）

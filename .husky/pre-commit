@@ -1,0 +1,1 @@
+cd kivio-frontend && ./node_modules/.bin/lint-staged

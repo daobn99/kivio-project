@@ -82,7 +82,7 @@
 ```bash
 # Vitest + RTL
 # @testing-library/dom は RTL の peer dependency として Next.js 公式が明示要求
-pnpm add -D vitest @vitejs/plugin-react jsdom vite-tsconfig-paths \
+pnpm add -D vitest @vitejs/plugin-react jsdom \
   @testing-library/react @testing-library/dom \
   @testing-library/user-event @testing-library/jest-dom
 
@@ -96,19 +96,21 @@ npx playwright install chromium
 
 ### `vitest.config.mts`
 
-> Next.js 公式は `.mts` 拡張子推奨。パスエイリアスは `vite-tsconfig-paths` で `tsconfig.json` から自動解決する（手動 `alias` は不要）。
+> Next.js 公式は `.mts` 拡張子推奨。パスエイリアス（`@/*`）は Vite が `tsconfig.json` から **native に解決**する（`resolve.tsconfigPaths: true`）。Vitest 4 / Vite 7 以降は `vite-tsconfig-paths` プラグインは不要（非推奨）になったため使わない。
 
 ```ts
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
-import tsconfigPaths from 'vite-tsconfig-paths'
 
 export default defineConfig({
-  plugins: [tsconfigPaths(), react()],
+  plugins: [react()],
+  resolve: { tsconfigPaths: true },
   test: {
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
+    // E2E（Playwright）は別ランナーのため Vitest から除外する
+    exclude: ['e2e/**', 'node_modules/**'],
   },
 })
 ```
@@ -166,8 +168,19 @@ export const authHandlers = [
     })
   ),
 
-  http.post('/api/v1/auth/register', () =>
-    HttpResponse.json({ id: 'user-1', email: 'test@example.com' }, { status: 201 })
+  http.post('/api/v1/auth/register/request-otp', () =>
+    HttpResponse.json({ message: '認証コードを送信しました', expiresInSeconds: 600 }, { status: 202 })
+  ),
+
+  http.post('/api/v1/auth/register/verify-otp', () =>
+    HttpResponse.json({ registrationToken: 'test-registration-token', expiresInSeconds: 1800 })
+  ),
+
+  http.post('/api/v1/auth/register/complete', () =>
+    HttpResponse.json(
+      { accessToken: 'test-access-token', refreshToken: 'test-refresh-token', tokenType: 'Bearer', expiresIn: 900 },
+      { status: 201 }
+    )
   ),
 ]
 ```
@@ -177,10 +190,9 @@ export const authHandlers = [
 ```ts
 import { setupServer } from 'msw/node'
 import { authHandlers } from './handlers/auth'
-import { productHandlers } from './handlers/products'
-import { cartHandlers } from './handlers/cart'
+// 機能の実装に合わせてハンドラを追加する（products / cart 等は当該フェーズで追加）
 
-export const server = setupServer(...authHandlers, ...productHandlers, ...cartHandlers)
+export const server = setupServer(...authHandlers)
 ```
 
 ### テストでのハンドラー上書き（エラーケース）
@@ -192,12 +204,19 @@ import { server } from '@/test/mocks/server'
 it('ログイン失敗時に 401 エラーを表示する', async () => {
   server.use(
     http.post('/api/v1/auth/login', () =>
-      HttpResponse.json({ title: '認証失敗', status: 401 }, { status: 401 })
+      HttpResponse.json(
+        { title: '認証失敗', status: 401, code: 'INVALID_CREDENTIALS', detail: '' },
+        { status: 401 }
+      )
     )
   )
   // ... テスト本体
 })
 ```
+
+> **⚠️ エラーモックには必ず `code` を含める:** フロントの `ApiError` / `resolveAuthError`（`src/lib/authErrors.ts`）は `ProblemDetail.code`（`UPPER_SNAKE_CASE`）で表示文言を出し分ける。`code` が無いと未知コード扱いで `DEFAULT_AUTH_ERROR`（汎用文言）にフォールバックし、`INVALID_CREDENTIALS` / `OTP_INVALID` 等の個別 UI を検証できない。
+
+> **ℹ️ API は BFF Route Handler 経由:** クライアントは `/api/v1/...`（相対パス）へ fetch し、Next.js の BFF Route Handler（`src/app/api/v1`）がトークンの Cookie 化・`access_token` の Bearer 詰め替えを行いつつバックエンドへ中継する。Vitest（jsdom）では BFF・バックエンドとも起動しないため、MSW がこの相対パスを直接インターセプトする（ハンドラも相対パス `/api/v1/auth/login` で定義する）。
 
 ---
 
@@ -207,9 +226,13 @@ it('ログイン失敗時に 401 エラーを表示する', async () => {
 
 バリデーションルールを直接検証する。最も書きやすく費用対効果が高い。
 
+> **⚠️ パスワードの最小文字数はスキーマごとに異なる:** `loginSchema` の `password` は**入力必須（`min(1)`）のみ**で 8 文字制限を持たない（列挙攻撃を避けるためログイン時にパスワードポリシーを露出させない）。8 文字以上の制約は**登録（`completeRegistrationSchema`）にのみ**存在する。文言の正は `docs/design/VALIDATION_RULES.md`。
+>
+> zod は **v4**。`safeParse` 失敗時の `result.error` は確定して存在するため `result.error.issues`（`?.` 不要）で参照する。
+
 ```ts
 // src/lib/validations/__tests__/auth.test.ts
-import { loginSchema } from '@/lib/validations/auth'
+import { loginSchema, completeRegistrationSchema } from '@/lib/validations/auth'
 
 describe('loginSchema', () => {
   it('有効な入力はパスする', () => {
@@ -220,13 +243,36 @@ describe('loginSchema', () => {
   it('メールアドレス形式が不正な場合はエラーになる', () => {
     const result = loginSchema.safeParse({ email: 'not-email', password: 'password123' })
     expect(result.success).toBe(false)
-    expect(result.error?.issues[0].path).toContain('email')
+    expect(result.error!.issues[0].path).toContain('email')
+    expect(result.error!.issues[0].message).toBe('メールアドレスの形式が正しくありません')
   })
 
-  it('パスワードが 8 文字未満の場合はエラーになる', () => {
-    const result = loginSchema.safeParse({ email: 'user@example.com', password: '1234567' })
+  it('パスワード未入力の場合はエラーになる', () => {
+    const result = loginSchema.safeParse({ email: 'user@example.com', password: '' })
     expect(result.success).toBe(false)
-    expect(result.error?.issues[0].path).toContain('password')
+    expect(result.error!.issues[0].message).toBe('パスワードを入力してください')
+  })
+})
+
+describe('completeRegistrationSchema', () => {
+  it('パスワードが 8 文字未満の場合はエラーになる', () => {
+    const result = completeRegistrationSchema.safeParse({
+      password: '1234567',
+      passwordConfirm: '1234567',
+      displayName: 'テスト太郎',
+    })
+    expect(result.success).toBe(false)
+    expect(result.error!.issues[0].path).toContain('password')
+  })
+
+  it('パスワードと確認用が一致しない場合はエラーになる', () => {
+    const result = completeRegistrationSchema.safeParse({
+      password: 'password123',
+      passwordConfirm: 'password999',
+      displayName: 'テスト太郎',
+    })
+    expect(result.success).toBe(false)
+    expect(result.error!.issues[0].path).toContain('passwordConfirm')
   })
 })
 ```
@@ -235,31 +281,45 @@ describe('loginSchema', () => {
 
 アクションの状態遷移を検証する。テスト間でストアをリセットすることを忘れない。
 
+> **⚠️ ストアの実 API に合わせる:** アクションは `setAuth` / `setAccessToken` / `setUser` / `clearAuth` の 4 つ（`logout` という名前は存在しない）。`role` はバックエンド enum 名そのまま（`'ROLE_BUYER'`・`src/types/enums.ts`）で `AuthUser` の全フィールドを満たす。`useAuthStore` は `persist` ミドルウェアで `localStorage`（`kivio-auth`）に永続化されるため、テスト間のリセットでは `accessToken` も含めて初期化する。
+
 ```ts
 // src/stores/__tests__/useAuthStore.test.ts
-import { renderHook, act } from '@testing-library/react'
+import { act } from '@testing-library/react'
 import { useAuthStore } from '@/stores/useAuthStore'
+import type { AuthUser } from '@/types/api'
 
-const mockUser = { id: '1', email: 'user@example.com', role: 'BUYER' as const }
+const mockUser: AuthUser = {
+  id: '1',
+  email: 'user@example.com',
+  displayName: 'テスト太郎',
+  avatarUrl: null,
+  role: 'ROLE_BUYER',
+  status: 'ACTIVE',
+  createdAt: '2026-01-01T00:00:00Z',
+}
 
 beforeEach(() => {
-  useAuthStore.setState({ user: null, isAuthenticated: false })
+  // persist 永続化分も含めて完全初期化する
+  useAuthStore.setState({ accessToken: null, user: null, isAuthenticated: false })
 })
 
 describe('useAuthStore', () => {
-  it('setUser を呼ぶと isAuthenticated が true になる', () => {
-    const { result } = renderHook(() => useAuthStore())
-    act(() => result.current.setUser(mockUser))
-    expect(result.current.isAuthenticated).toBe(true)
-    expect(result.current.user).toEqual(mockUser)
+  it('setAuth を呼ぶと isAuthenticated が true になり accessToken と user が入る', () => {
+    act(() => useAuthStore.getState().setAuth({ accessToken: 'token-1', user: mockUser }))
+    const state = useAuthStore.getState()
+    expect(state.isAuthenticated).toBe(true)
+    expect(state.accessToken).toBe('token-1')
+    expect(state.user).toEqual(mockUser)
   })
 
-  it('logout を呼ぶとユーザー情報がクリアされる', () => {
-    useAuthStore.setState({ user: mockUser, isAuthenticated: true })
-    const { result } = renderHook(() => useAuthStore())
-    act(() => result.current.logout())
-    expect(result.current.isAuthenticated).toBe(false)
-    expect(result.current.user).toBeNull()
+  it('clearAuth を呼ぶと認証状態が全消去される', () => {
+    useAuthStore.setState({ accessToken: 'token-1', user: mockUser, isAuthenticated: true })
+    act(() => useAuthStore.getState().clearAuth())
+    const state = useAuthStore.getState()
+    expect(state.isAuthenticated).toBe(false)
+    expect(state.accessToken).toBeNull()
+    expect(state.user).toBeNull()
   })
 })
 ```
@@ -268,13 +328,20 @@ describe('useAuthStore', () => {
 
 バリデーションエラーの表示とフォーム送信を検証する。
 
+> **⚠️ 送信中の UI:** `AuthSubmitButton` は送信中もラベル（「ログイン」）を変えず、`disabled` + spinner で表現する（「ログイン中...」という文字列は**存在しない**）。ローディングは「同じボタンが `disabled` になる」ことで検証する。
+>
+> **⚠️ Next.js のモック:** `LoginForm` は成功時に `useRouter().replace()` を呼ぶため `next/navigation` を、`GoogleSignInButton` を内包するため `next-auth/react` をモックする。`{ name: 'ログイン' }` はフォーム下部の `<Link>会員登録</Link>` ではなく `<button>` にマッチする（role 指定で区別される）。
+
 ```tsx
 // src/components/auth/__tests__/LoginForm.test.tsx
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { createTestQueryClient } from '@/test/utils'
-import LoginForm from '@/components/auth/LoginForm'
+import { LoginForm } from '@/components/auth/LoginForm'
+
+vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn() }) }))
+vi.mock('next-auth/react', () => ({ signIn: vi.fn() }))
 
 function renderLoginForm() {
   return render(
@@ -291,11 +358,11 @@ describe('LoginForm', () => {
 
     await user.click(screen.getByRole('button', { name: 'ログイン' }))
 
-    expect(await screen.findByText(/有効なメールアドレス/)).toBeInTheDocument()
-    expect(await screen.findByText(/8文字以上/)).toBeInTheDocument()
+    expect(await screen.findByText('メールアドレスの形式が正しくありません')).toBeInTheDocument()
+    expect(await screen.findByText('パスワードを入力してください')).toBeInTheDocument()
   })
 
-  it('有効な入力で送信するとボタンがローディング状態になる', async () => {
+  it('有効な入力で送信するとボタンが disabled になる', async () => {
     const user = userEvent.setup()
     renderLoginForm()
 
@@ -304,7 +371,7 @@ describe('LoginForm', () => {
     await user.click(screen.getByRole('button', { name: 'ログイン' }))
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'ログイン中...' })).toBeDisabled()
+      expect(screen.getByRole('button', { name: 'ログイン' })).toBeDisabled()
     })
   })
 })

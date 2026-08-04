@@ -1,0 +1,167 @@
+name: CD — Production
+
+# CI ワークフローが main ブランチで成功した後にのみ実行する。
+#
+# 環境戦略（DEPLOYMENT.md §2 参照）:
+#   個人開発プロジェクトのため、デプロイ先は production のみとする。
+#   staging / dev 環境は構築せず、開発環境の役割は devcontainer が担う。
+#
+#   develop  — 結合ブランチ。CI は通すがイメージはビルドしない（デプロイ対象ではない）
+#   main     — production。ここにマージされたものだけがイメージ化される
+#
+# → リリース手順: feature/* → develop（結合） → main（リリース） → 本 CD がイメージを生成
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: write       # ghcr.io へのイメージプッシュ
+  security-events: write # Trivy SARIF を Security タブへアップロード
+
+jobs:
+  # ── Docker Build & Push ────────────────────────────────────────────────────
+  build-and-push:
+    name: Build & Push — ${{ matrix.service }}
+    # CI が成功した場合のみ実行（テスト失敗時はイメージをプッシュしない）
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: backend
+            context: ./kivio-backend
+          - service: frontend
+            context: ./kivio-frontend
+
+    steps:
+      - name: Checkout at CI commit SHA
+        uses: actions/checkout@v4
+        with:
+          # CI を通過したコミットを正確にチェックアウトする
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Extract short SHA
+        id: vars
+        run: |
+          SHORT_SHA="${SHA::7}"
+          # ghcr.io はイメージ名を小文字強制するため、リポジトリ名を必ず小文字に変換する
+          REPO=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/${REPO}/${{ matrix.service }}" >> "$GITHUB_OUTPUT"
+        env:
+          SHA: ${{ github.event.workflow_run.head_sha }}
+
+      # ── Docker Setup ──────────────────────────────────────────────────────
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── Image Metadata ─────────────────────────────────────────────────────
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.vars.outputs.image }}
+          tags: |
+            # 不変タグ: デプロイ時は必ずこの SHA タグを指定する（追跡・ロールバック可能）
+            type=raw,value=sha-${{ steps.vars.outputs.short_sha }}
+            # 可変タグ: 最新の main ビルドを指す。中身が変わるためデプロイには使わない
+            type=raw,value=latest
+          labels: |
+            org.opencontainers.image.revision=${{ github.event.workflow_run.head_sha }}
+
+      # ── Build & Push ──────────────────────────────────────────────────────
+      - name: Build and push Docker image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: true
+          sbom: true
+          # サービスごとにキャッシュスコープを分けてキャッシュ競合を防ぐ
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,scope=${{ matrix.service }},mode=max
+
+      # ── Security Scan ─────────────────────────────────────────────────────
+      - name: Scan image with Trivy
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          # digest 参照により再プルなしでローカルイメージをスキャンする
+          image-ref: ${{ steps.vars.outputs.image }}@${{ steps.build.outputs.digest }}
+          format: sarif
+          output: trivy-${{ matrix.service }}.sarif
+          severity: HIGH,CRITICAL
+          # 脆弱性が見つかってもジョブを失敗させない（まず可視化を優先）
+          # 運用が安定したら exit-code: '1' に変更してブロッキングにする
+          exit-code: "0"
+          ignore-unfixed: true
+
+      - name: Upload Trivy results to Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-${{ matrix.service }}.sarif
+          category: trivy-${{ matrix.service }}
+
+      # ── Build Summary ──────────────────────────────────────────────────────
+      - name: Write job summary
+        run: |
+          echo "## Docker Image: \`${{ matrix.service }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Key | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-----|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Image | \`${{ steps.vars.outputs.image }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| SHA tag | \`sha-${{ steps.vars.outputs.short_sha }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Digest | \`${{ steps.build.outputs.digest }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Commit | \`${{ github.event.workflow_run.head_sha }}\` |" >> "$GITHUB_STEP_SUMMARY"
+
+  # ── Deploy ─────────────────────────────────────────────────────────────────
+  # 現状: デプロイは手動で行う（手順は docs/infra/DEPLOYMENT.md §6）。
+  #
+  # 本ワークフローの責務はイメージの生成までとし、Render / Vercel への反映は
+  # 手動で実施する。手順を人手で確立してから自動化するという方針による
+  # （DEPLOYMENT.md §1「なぜ手動デプロイなのか」）。
+  #
+  # 自動化する際は以下を実装する。Secrets: RENDER_DEPLOY_HOOK_URL
+  #
+  # deploy-backend:
+  #   name: Deploy Backend to Render
+  #   needs: build-and-push
+  #   runs-on: ubuntu-latest
+  #   environment: production   # GitHub Environment で承認フローを設定できる
+  #
+  #   steps:
+  #     - name: Extract short SHA
+  #       id: vars
+  #       run: echo "short_sha=${SHA::7}" >> "$GITHUB_OUTPUT"
+  #       env:
+  #         SHA: ${{ github.event.workflow_run.head_sha }}
+  #
+  #     # Render のデプロイフックを叩く。imgURL パラメーターで
+  #     # デプロイ対象のイメージタグ（不変な SHA タグ）を明示的に指定する
+  #     - name: Trigger Render deploy
+  #       run: |
+  #         REPO=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+  #         IMAGE="ghcr.io/${REPO}/backend:sha-${{ steps.vars.outputs.short_sha }}"
+  #         curl -fsS "${{ secrets.RENDER_DEPLOY_HOOK_URL }}&imgURL=${IMAGE}"
+  #
+  # 【要検討】Flyway マイグレーションの扱い
+  #   現在は手動運用（デプロイ前に手元から flywayMigrate を実行）。
+  #   自動化する場合、アプリ起動前に完了している必要があるため、
+  #   デプロイジョブの前段に独立したマイグレーションステップを設ける。
+  #
+  # 注: Frontend は Vercel の Git 連携により main への push で自動デプロイされるため、
+  #     本ワークフローでの対応は不要（イメージは将来の移行用に保持している）。

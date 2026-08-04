@@ -1,0 +1,33 @@
+# =============================================================================
+# Profile: dev — ローカル開発追加設定
+# =============================================================================
+
+spring:
+  # メール送信は devcontainer の Mailpit（SMTP）へ。Web UI: http://localhost:8025
+  # 認証・TLS は不要（ローカル開発用ダミー SMTP）
+  mail:
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:1025}
+    properties:
+      mail:
+        smtp:
+          auth: false
+          starttls:
+            enable: false
+  jpa:
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+  flyway:
+    clean-disabled: false
+    # 開発用シードは db/migration の外（db/seed）に置く。Flyway は locations を
+    # 再帰的に走査するため、db/migration 配下に置くと prod でも適用されてしまう。
+    # db/seed を指定すると相対パスが dev/Vxx__....sql となり、既存 DB の
+    # flyway_schema_history.script と一致する（履歴の作り直しが不要）
+    locations: classpath:db/migration,classpath:db/seed
+
+logging:
+  level:
+    "[io.kivio]": DEBUG
+    "[org.hibernate.SQL]": DEBUG

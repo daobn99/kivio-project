@@ -111,6 +111,8 @@ CREATE EXTENSION IF NOT EXISTS pg_trgm;
 | 20 | `platform_configs` | プラットフォーム設定 | platform | - |
 | 21 | `audit_logs` | 監査ログ | audit | 削除禁止（期限後DROP） |
 
+> メール認証コード（OTP）・登録セッションは Redis に一時保存し、DB テーブルを持たない（§ 3.3）。
+
 ---
 
 ## 3. テーブル詳細定義
@@ -125,13 +127,12 @@ CREATE TABLE users (
   email            VARCHAR(255) NOT NULL,
   password_hash    VARCHAR(255),                          -- NULL: Google OAuth ユーザー
   google_id        VARCHAR(255),                          -- NULL: メール登録ユーザー
-  display_name     VARCHAR(100) NOT NULL DEFAULT '',
+  display_name     VARCHAR(100) NOT NULL,                 -- 登録時必須（空文字許容しない）
   avatar_url       TEXT,
   role             VARCHAR(20)  NOT NULL DEFAULT 'ROLE_BUYER',
                                                           -- ROLE_BUYER | ROLE_SELLER | ROLE_ADMIN
   status           VARCHAR(20)  NOT NULL DEFAULT 'ACTIVE',
                                                           -- ACTIVE | INACTIVE
-  email_verified   BOOLEAN      NOT NULL DEFAULT FALSE,
   created_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
   updated_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
   deleted_at       TIMESTAMPTZ,                           -- NULL: 有効, NOT NULL: soft delete済み
@@ -149,6 +150,7 @@ COMMENT ON COLUMN users.deleted_at IS 'Soft delete タイムスタンプ。NULL=
 ```
 
 **業務ルール：**
+- `users` レコードは**メール認証（OTP）完了後にのみ作成**する。未認証ユーザーが `users` に存在しないため `email_verified` 列は持たない（メール登録ユーザーは OTP 検証済み、Google OAuth ユーザーは Google 側で検証済み）。OTP・登録セッションは Redis に一時保存する（[ADR-006](../../adr/ADR-006-email-otp-redis.md)）
 - `email` と `google_id` の両方がある場合はアカウント統合済みユーザー
 - `password_hash` と `google_id` が両方 NULL になることはない（アプリ側で保証）
 - `deleted_at IS NOT NULL` のユーザーは `@SQLRestriction` で通常クエリから自動除外
@@ -178,7 +180,18 @@ COMMENT ON COLUMN refresh_tokens.token_hash IS 'トークンのSHA-256ハッシ�
 
 ---
 
-### 3.3 seller_applications（セラー申請）
+### 3.3 メール認証コード（OTP）— Redis 一時ストレージ（DB テーブルなし）
+
+メールアドレス確認用の認証コード（OTP）と登録セッションは **DB に永続化せず Redis に TTL 付きで一時保存**する。未認証ユーザーの仮レコードを `users` に残さないための設計（[ADR-006](../../adr/ADR-006-email-otp-redis.md)）。TTL により期限切れデータは自動消滅するため、クリーンアップバッチは不要。
+
+| キー | 値 | TTL | 用途 |
+|---|---|---|---|
+| `reg:otp:{email}` | `{otpHash: SHA-256(otp), attempts: int}` | 10 分 | OTP 検証。試行 5 回超過で失効 |
+| `reg:session:{registrationToken}` | `{email}` | 30 分 | OTP 検証済みメールの登録セッション |
+
+> OTP 平文・パスワードは Redis に保存しない（OTP は SHA-256 ハッシュのみ）。`registrationToken` は不透明な UUID v4。
+
+### 3.4 seller_applications（セラー申請）
 
 ```sql
 CREATE TABLE seller_applications (
@@ -207,7 +220,7 @@ COMMENT ON COLUMN seller_applications.reviewer_id IS '審査した管理者の�
 
 ---
 
-### 3.4 shops（ショップ）
+### 3.5 shops（ショップ）
 
 ```sql
 CREATE TABLE shops (
@@ -237,7 +250,7 @@ COMMENT ON COLUMN shops.deleted_at IS 'users.deleted_at設定時に連動して�
 
 ---
 
-### 3.5 shop_shipping_policies（ショップ配送ポリシー）
+### 3.6 shop_shipping_policies（ショップ配送ポリシー）
 
 ```sql
 CREATE TABLE shop_shipping_policies (
@@ -267,7 +280,7 @@ COMMENT ON COLUMN shop_shipping_policies.free_threshold  IS '送料無料にな�
 
 ---
 
-### 3.6 categories（カテゴリー）
+### 3.7 categories（カテゴリー）
 
 ```sql
 CREATE TABLE categories (
@@ -291,7 +304,7 @@ COMMENT ON COLUMN categories.slug      IS 'URL用スラッグ（英数字・ハ�
 
 ---
 
-### 3.7 products（商品）
+### 3.8 products（商品）
 
 ```sql
 CREATE TABLE products (
@@ -322,7 +335,7 @@ COMMENT ON COLUMN products.status        IS 'DRAFT=下書き, ACTIVE=公開, INA
 
 ---
 
-### 3.8 product_images（商品画像）
+### 3.9 product_images（商品画像）
 
 ```sql
 CREATE TABLE product_images (
@@ -341,7 +354,7 @@ COMMENT ON COLUMN product_images.display_order IS '表示順序。0が先頭（�
 
 ---
 
-### 3.9 addresses（配送先住所）
+### 3.10 addresses（配送先住所）
 
 ```sql
 CREATE TABLE addresses (
@@ -361,11 +374,13 @@ CREATE TABLE addresses (
 COMMENT ON TABLE  addresses IS 'ユーザーの配送先住所。複数登録可。注文時にはordersテーブルへスナップショット保存。';
 ```
 
-**業務ルール：** `is_default = TRUE` はユーザーにつき1件のみ（アプリ側で `UPDATE addresses SET is_default = FALSE WHERE user_id = ? AND id != ?` を実行）
+**業務ルール：** `is_default = TRUE` はユーザーにつき1件のみ。アプリ側で付け替え（`UPDATE addresses SET is_default = FALSE WHERE user_id = ? AND id != ?` を実行してから対象を `TRUE` に）を行い、**DB 側は部分 UNIQUE インデックス `idx_addresses_user_default_unique` で担保する**。アプリ側の手順だけでは READ COMMITTED 下の並行リクエストで複数デフォルトが残り得るため（`V4__create_order_tables.sql`）。競合時は `409 DUPLICATE_ENTRY` を返し、クライアントの再試行で解消する。
+
+> **付け替え時の注意:** 一括 `UPDATE` から**対象住所自身を除外する**こと（`AND id != ?`）。除外しないと、既にデフォルトの住所へ `isDefault = true` を再指定した際に自身も `FALSE` に落ち、JPA の dirty checking で復元されずデフォルトが消失する。
 
 ---
 
-### 3.10 carts（カート）
+### 3.11 carts（カート）
 
 ```sql
 CREATE TABLE carts (
@@ -382,7 +397,7 @@ COMMENT ON TABLE carts IS 'ユーザーごとに1つのカート（user_id UNIQU
 
 ---
 
-### 3.11 cart_items（カート明細）
+### 3.12 cart_items（カート明細）
 
 ```sql
 CREATE TABLE cart_items (
@@ -401,7 +416,7 @@ CREATE TABLE cart_items (
 
 ---
 
-### 3.12 orders（注文）
+### 3.13 orders（注文）
 
 ```sql
 CREATE TABLE orders (
@@ -459,7 +474,7 @@ COMMENT ON COLUMN orders.stripe_payment_intent_id IS 'Stripe PaymentIntentのID�
 
 ---
 
-### 3.13 order_items（注文明細）
+### 3.14 order_items（注文明細）
 
 ```sql
 CREATE TABLE order_items (
@@ -487,7 +502,7 @@ COMMENT ON COLUMN order_items.is_reviewed       IS 'レビュー投稿済みフ�
 
 ---
 
-### 3.14 payments（決済）
+### 3.15 payments（決済）
 
 ```sql
 CREATE TABLE payments (
@@ -514,7 +529,7 @@ COMMENT ON COLUMN payments.stripe_refund_id IS 'Stripe Refunds APIのrefund ID�
 
 ---
 
-### 3.15 reviews（レビュー）
+### 3.16 reviews（レビュー）
 
 ```sql
 CREATE TABLE reviews (
@@ -539,7 +554,7 @@ COMMENT ON COLUMN reviews.reviewer_id IS 'ユーザー匿名化後はNULL。コ�
 
 ---
 
-### 3.16 chat_rooms（チャットルーム）
+### 3.17 chat_rooms（チャットルーム）
 
 ```sql
 CREATE TABLE chat_rooms (
@@ -557,7 +572,7 @@ COMMENT ON TABLE chat_rooms IS 'バイヤーとショップの1対1チャット�
 
 ---
 
-### 3.17 chat_messages（チャットメッセージ）
+### 3.18 chat_messages（チャットメッセージ）
 
 ```sql
 CREATE TABLE chat_messages (
@@ -577,7 +592,7 @@ COMMENT ON COLUMN chat_messages.read_at IS 'NULL=未読。相手が開封した�
 
 ---
 
-### 3.18 notifications（通知）
+### 3.19 notifications（通知）
 
 ```sql
 CREATE TABLE notifications (
@@ -604,7 +619,7 @@ COMMENT ON COLUMN notifications.related_entity_type IS '通知に関連するエ
 
 ---
 
-### 3.19 wishlists（お気に入り）
+### 3.20 wishlists（お気に入り）
 
 ```sql
 CREATE TABLE wishlists (
@@ -621,7 +636,7 @@ COMMENT ON TABLE wishlists IS 'お気に入り商品。商品削除時はCASCADE
 
 ---
 
-### 3.20 platform_configs（プラットフォーム設定）
+### 3.21 platform_configs（プラットフォーム設定）
 
 ```sql
 CREATE TABLE platform_configs (
@@ -649,7 +664,7 @@ COMMENT ON COLUMN platform_configs.config_key IS '設定キー（UPPER_SNAKE_CAS
 
 ---
 
-### 3.21 audit_logs（監査ログ）
+### 3.22 audit_logs（監査ログ）
 
 パーティショニングを適用するため、主キーに `created_at` を含める。
 
@@ -748,6 +763,8 @@ CREATE INDEX idx_product_images_product_order ON product_images (product_id, dis
 -- ── addresses ────────────────────────────────────────────────────────────
 CREATE INDEX idx_addresses_user_id         ON addresses (user_id);
 CREATE INDEX idx_addresses_user_default    ON addresses (user_id, is_default);
+-- デフォルト住所はユーザーにつき1件（部分UNIQUE）。並行リクエストによる複数デフォルトを防ぐ。
+CREATE UNIQUE INDEX idx_addresses_user_default_unique ON addresses (user_id) WHERE is_default;
 
 -- ── cart_items ───────────────────────────────────────────────────────────
 CREATE INDEX idx_cart_items_cart_id ON cart_items (cart_id);

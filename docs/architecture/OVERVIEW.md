@@ -45,13 +45,15 @@
 │  │           infra/（外部サービスクライアント）       │  │
 │  │         Stripe / Cloudinary / Resend / Google  │  │
 │  └────────────────────────────────────────────────┘  │
-└──────────┬─────────────────────┬──────────────────────┘
-           │ JPA / JDBC          │ STOMP
-  ┌────────▼──────┐    ┌─────────▼───────┐
-  │  PostgreSQL   │    │  In-Memory STOMP │
-  │  (Neon/Supa.) │    │  Broker         │
-  └───────────────┘    └─────────────────┘
+└────────┬──────────────┬───────────────┬───────────────────┘
+         │ JPA / JDBC   │ Redis (Lettuce)│ STOMP
+  ┌──────▼──────┐ ┌─────▼──────┐ ┌───────▼─────────┐
+  │ PostgreSQL  │ │   Redis    │ │ In-Memory STOMP │
+  │ (Neon/Supa.)│ │ OTP/一時TTL│ │ Broker          │
+  └─────────────┘ └────────────┘ └─────────────────┘
 ```
+
+> **Redis の用途（Phase 2〜）:** 登録時の OTP・登録セッション（`registrationToken`）の TTL 付き一時ストレージ（[ADR-006](../../adr/ADR-006-email-otp-redis.md)）。将来はレート制限カウンタや WebSocket Pub/Sub にも利用可能。
 
 **将来の拡張設計:**
 - WebSocket スケーリング: In-Memory STOMP Broker → Redis Pub/Sub（interface 差し替えで対応）
@@ -223,7 +225,7 @@ public void onSellerApproved(SellerApprovedEvent event) {
 |---|---|---|
 | Stripe | 決済・返金（PaymentIntent / Refund API） | `infra.stripe` |
 | Cloudinary | 画像アップロード・自動リサイズ・WebP 変換 | `infra.cloudinary` |
-| Resend | メール送信（確認メール・注文通知） | `infra.resend` |
+| Resend | メール送信（認証コード（OTP）・注文通知） | `infra.resend` |
 | Google OAuth | ID Token 検証（Google ログイン） | `infra.google` |
 
 ---
@@ -237,6 +239,7 @@ public void onSellerApproved(SellerApprovedEvent event) {
 | セキュリティ | Spring Security + OAuth2 Resource Server |
 | ORM | Spring Data JPA / Hibernate |
 | DB マイグレーション | Flyway |
+| インメモリストア | Redis（Spring Data Redis / Lettuce）— OTP・登録セッションの TTL 一時保存 |
 | リアルタイム | Spring WebSocket / STOMP |
 | バリデーション | Jakarta Bean Validation |
 | API ドキュメント | springdoc-openapi（OpenAPI 3.0 / Swagger UI） |

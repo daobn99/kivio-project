@@ -18,8 +18,7 @@
 | `/shops/[id]` | ショップ詳細 | 全ユーザー | 不要 | Phase 2 |
 | `/search` | 商品検索 | 全ユーザー | 不要 | Phase 3 |
 | `/auth/login` | ログイン | 未認証のみ | 不要 | Phase 2 |
-| `/auth/register` | 新規登録（2ステップ） | 未認証のみ | 不要 | Phase 2 |
-| `/auth/verify-email` | メール認証・自動ログイン処理 | 未認証のみ | 不要 | Phase 2 |
+| `/auth/register` | 新規登録（3ステップ・OTP / メール→コード→パスワード） | 未認証のみ | 不要 | Phase 2 |
 
 ### 1.2 バイヤー画面（BUYER 以上）
 
@@ -100,7 +99,7 @@
 │       ├── プロフィール設定 → /profile/settings
 │       ├── 注文履歴 → /orders
 │       ├── セラー申請 → /seller/applications/new
-│       │   ※ 申請未済かつ PENDING 申請なしの場合のみ表示
+│       │   ※ 申請未済かつ PENDING 申請なしの場合のみ表示（※下記の注記を参照）
 │       └── ログアウト
 │
 ├── SELLER
@@ -129,6 +128,14 @@
     │   └── プラットフォーム設定 → /admin/platform-configs
     └── アバターメニュー → ログアウト
 ```
+
+> **「セラー申請」リンクの表示条件（2026-08-02 決定・`seller-application.md` OQ-7）:** 実装は
+> **`isBuyer` のみ**を条件とし、申請状況（未申請 / PENDING）は条件に含めない。条件を厳密化すると
+> グローバルヘッダーが全ページで `GET /seller-applications/me` を叩くことになり、コストが便益に
+> 見合わないため。**PENDING 中にリンクを踏んだ場合は `/seller/applications/new` が審査中の状態を
+> 表示する**（同 URL が 4 状態を出し分ける。`design-system/pages/seller-application.md §4`）。
+> 該当箇所: `UserMenu` / `MobileMenuSheet`。`GlobalFooter` の「セラー登録」はロール非依存で、
+> 未認証は `proxy.ts` がログインへ、SELLER / ADMIN は画面側がリダイレクトする。
 
 ### 2.2 セラーサイドナビ（/seller/* 共通）
 
@@ -173,11 +180,11 @@ src/app/
 │   ├── (auth-group)/                  # AuthLayout 適用グループ（URLに影響しない）
 │   │   ├── layout.tsx                 # AuthLayout（Navbar なし・ロゴ + カード）
 │   │   ├── login/page.tsx             # ログイン /auth/login
-│   │   ├── register/page.tsx          # 新規登録 /auth/register
-│   │   └── verify-email/page.tsx      # メール認証 + 自動ログイン /auth/verify-email
-│   │       #   token を URL から取得 → Body に詰め替えて API コール
-│   │       #   成功: JWT 受け取り → router.replace('/') → ホームへ
-│   │       #   失敗: エラー表示 + 再送信ボタン
+│   │   └── register/page.tsx          # 新規登録 /auth/register（3ステップ・OTP）
+│   │       #   Step1: メール入力 → POST /auth/register/request-otp（OTPメール送信）
+│   │       #   Step2: 6桁OTP入力 → POST /auth/register/verify-otp → registrationToken
+│   │       #   Step3: パスワード設定 → POST /auth/register/complete
+│   │       #   成功: JWT 受け取り → router.replace('/') → ホームへ（自動ログイン）
 │
 ├── (authenticated)/                   # ルートグループ（URLに影響しない）                   # 全認証ユーザー共通グループ（BUYER・SELLER・ADMIN）
 │   ├── profile/

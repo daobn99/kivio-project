@@ -26,7 +26,6 @@ Table users {
   avatar_url       text
   role             varchar(20)  [not null, default: 'ROLE_BUYER', note: 'ROLE_BUYER | ROLE_SELLER | ROLE_ADMIN']
   status           varchar(20)  [not null, default: 'ACTIVE',    note: 'ACTIVE | INACTIVE']
-  email_verified   boolean      [not null, default: false]
   created_at       timestamptz  [not null]
   updated_at       timestamptz  [not null]
   deleted_at       timestamptz  [note: 'Soft delete。NULL=有効。90日後に匿名化バッチ']

@@ -3,6 +3,9 @@ set -e
 
 echo "Setting up Kivio development environment..."
 
+# Fix ownership of anonymous Docker volumes (Docker initializes them as root)
+sudo chown -R "$(whoami):$(whoami)" /workspace/kivio-frontend/node_modules
+
 # Install Claude Code
 curl -fsSL https://claude.ai/install.sh | bash
 echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc

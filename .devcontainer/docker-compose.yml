@@ -3,25 +3,41 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+      - "8080:8080"
     env_file:
-      - path: .env
+      - path: ../kivio-backend/.env
         required: false
     environment:
       # Container-internal service URLs (override .env)
       DB_URL: jdbc:postgresql://db:5432/kivio
       DB_USERNAME: kivio
       DB_PASSWORD: password
-      REDIS_URL: redis://redis:6379
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
       MAIL_HOST: mailpit
       MAIL_PORT: "1025"
       CORS_ALLOWED_ORIGINS: http://localhost:3000
       SPRING_PROFILES_ACTIVE: dev
+      # Docker-outside-of-Docker (Testcontainers): containers started by Testcontainers
+      # are siblings on the host Docker Desktop, reachable via host.docker.internal
+      # (their published ports map to the Docker host, not to this container's localhost).
+      TESTCONTAINERS_HOST_OVERRIDE: host.docker.internal
+    extra_hosts:
+      # Required so host.docker.internal resolves on the custom bridge network
+      - "host.docker.internal:host-gateway"
     volumes:
       - ..:/workspace:cached
       # Named volume for Gradle cache — survives container rebuilds
       - gradle-cache:/home/vscode/.gradle
+      # Named volume for pnpm store — survives container rebuilds, outside workspace
+      - pnpm-store:/home/vscode/.pnpm-store
       # Anonymous volume prevents macOS-mounted node_modules (frontend)
       - /workspace/kivio-frontend/node_modules
+      # Docker-outside-of-Docker: share the host Docker daemon socket so
+      # Testcontainers can start sibling containers (real Redis/Postgres).
+      - /var/run/docker.sock:/var/run/docker.sock
     command: sleep infinity
     depends_on:
       db:
@@ -66,8 +82,8 @@ services:
     image: axllent/mailpit:latest
     restart: unless-stopped
     ports:
-      - "1025:1025"   # SMTP (Spring Boot → Mailpit)
-      - "8025:8025"   # Web UI for viewing sent emails
+      - "1025:1025" # SMTP (Spring Boot → Mailpit)
+      - "8025:8025" # Web UI for viewing sent emails
     networks:
       - kivio-network
 
@@ -75,6 +91,7 @@ volumes:
   postgres-data:
   redis-data:
   gradle-cache:
+  pnpm-store:
 
 networks:
   kivio-network:

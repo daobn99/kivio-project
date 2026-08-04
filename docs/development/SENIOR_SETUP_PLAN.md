@@ -194,10 +194,13 @@ scaffolding が動いた後に書く。詳細は既存 docs に委ねるため�
 - **Backend:** Checkstyle → `./gradlew test`（Testcontainers で PostgreSQL 起動） → ビルド確認
 - **Frontend:** `pnpm lint` → `pnpm build` → 型チェック
 
-#### CD（`cd-dev.yml`）— `develop` へのマージ時にトリガー
+#### CD（`cd.yml`）— `main` へのマージ（リリース）時にトリガー
 - Backend / Frontend の Dockerfile をビルド
 - Docker Image をレジストリへプッシュ（認証情報は GitHub Secrets でプレースホルダー化）
-- デプロイコマンドはコメントアウトで記述（環境依存のため）
+- デプロイコマンドはコメントアウトで記述（手動デプロイ手順の確立を優先。`docs/infra/DEPLOYMENT.md` 参照）
+
+> デプロイ先は production のみとする（個人開発のため staging / dev 環境は構築しない）。
+> 開発環境の役割は devcontainer が担う。
 
 ---
 
@@ -207,20 +210,23 @@ scaffolding が動いた後に書く。詳細は既存 docs に委ねるため�
 
 | # | タスク名 | ブランチ名 | Phase | 主要 API |
 |---|---|---|---|---|
-| 1 | 認証（登録・ログイン・OAuth） | `feature/auth` | 2 | `POST /auth/register`, `/auth/login`, `/auth/google` |
-| 2 | ユーザープロフィール・住所 | `feature/user-profile` | 2 | `GET/PATCH /users/me`, `/users/me/addresses` |
+| 1 | 認証（登録・ログイン・OAuth） | `feature/auth` | 2 | `POST /auth/check-email`, `/auth/register/request-otp`, `/auth/register/verify-otp`, `/auth/register/complete`, `/auth/login`, `/auth/google`, `/auth/refresh`, `/auth/logout`（OTP/登録セッションは Redis） |
+| 2 | ユーザープロフィール・住所 | `feature/user-profile` | 2 | `GET/PATCH /users/me`, `PATCH /users/me/password`, `DELETE /users/me`（退会申請）, `GET/POST/PATCH/DELETE /users/me/addresses` |
 | 3 | 出品者申請 | `feature/seller-application` | 2 | `POST /seller-applications`, `GET /seller-applications/me` |
-| 4 | ショップ・商品 CRUD | `feature/catalog` | 2 | `POST /products`, `GET /products`, `/shops/:id` |
-| 5 | 商品検索・一覧表示 | `feature/product-search` | 3 | `GET /products?q=&category=` |
-| 6 | カート操作 | `feature/cart` | 3 | `GET/POST/PATCH/DELETE /cart` |
-| 7 | チェックアウト・注文 | `feature/checkout` | 3 | `POST /orders/checkout`, Stripe Webhook |
-| 8 | 注文履歴・ステータス | `feature/orders` | 3 | `GET /orders`, `GET /orders/:id` |
-| 9 | チャット（WebSocket） | `feature/chat` | 4 | STOMP `/app/chat.*`, `/topic/chat.*` |
-| 10 | 通知 | `feature/notification` | 4 | `GET /notifications`, WebSocket |
-| 11 | 管理者機能 | `feature/admin` | 4 | `/admin/*` |
-| 12 | レビュー・ウィッシュリスト | `feature/review-wishlist` | 5 | `GET/POST /reviews`, `/wishlist` |
+| 4 | ショップ・商品 CRUD | `feature/catalog` | 2 | `GET/PATCH /shops/me`, `PATCH /shops/me/shipping-policy`, `GET /shops/{id}`, `POST/PATCH/DELETE /products`, `POST/DELETE /products/{id}/images`, `GET /categories` |
+| 5 | 商品検索・一覧表示 | `feature/product-search` | 3 | `GET /products?q=&category=&minPrice=&maxPrice=&inStock=&sort=` |
+| 6 | カート操作 | `feature/cart` | 3 | `GET /cart`, `POST /cart/items`, `PATCH /cart/items/{itemId}`, `DELETE /cart/items/{itemId}`, `DELETE /cart` |
+| 7 | チェックアウト・注文 | `feature/checkout` | 3 | `POST /orders/checkout`, `POST /webhooks/stripe` |
+| 8 | 注文履歴・ステータス | `feature/orders` | 3 | `GET /orders`, `GET /orders/{id}`, `PATCH /orders/{id}/status`, `POST /orders/{id}/cancel` |
+| 9 | チャット（WebSocket） | `feature/chat` | 4 | `GET/POST /chat-rooms`, `GET /chat-rooms/{id}`, STOMP `/app/chat.send`, `/topic/chat/{chatRoomId}` |
+| 10 | 通知 | `feature/notification` | 4 | `GET /notifications`, `PATCH /notifications/{id}/read`, `PATCH /notifications/read-all`, WebSocket `/topic/notifications/{userId}` |
+| 11 | セラーダッシュボード | `feature/seller-dashboard` | 4 | `GET /seller/dashboard`（売上サマリー・日別グラフ・人気商品・最近の注文） |
+| 12 | 管理者機能 | `feature/admin` | 4 | `GET/POST /admin/seller-applications`, `/admin/seller-applications/{id}/approve|reject`, `GET/PATCH /admin/users/{id}/status`, `GET/PATCH /admin/products/{id}/status`, `GET/POST/PATCH/DELETE /admin/categories`, `GET/PATCH /admin/platform-configs`, `GET /admin/dashboard` |
+| 13 | レビュー・ウィッシュリスト | `feature/review-wishlist` | 5 | `GET /products/{id}/reviews`, `POST /order-items/{id}/review`, `GET/POST /wishlist`, `DELETE /wishlist/{productId}` |
+| 14 | メール通知 | `feature/mail-notification` | 5 | Resend 統合（MAIL-01〜04: 会員登録確認・注文確定・注文受付・ステータス変更メール） |
+| 15 | バッチジョブ | `feature/batch-jobs` | 2〜4 | `@Scheduled` 実装（`UserAnonymizationJob`, `ProductPurgeJob`, `ChatMessagePurgeJob`, `NotificationPurgeJob`, `RefreshTokenPurgeJob`）+ `audit_logs` 記録 |
 
-> **優先順位:** タスク 1〜4 を Phase 2 の MVP として先行する。
+> **優先順位:** タスク 1〜4 を Phase 2 の MVP として先行する。タスク 15（バッチジョブ）は各ドメイン実装完了後に着手する（依存するエンティティが揃ってから）。
 
 ---
 

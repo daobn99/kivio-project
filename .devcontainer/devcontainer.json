@@ -7,6 +7,10 @@
   "shutdownAction": "stopCompose",
 
   "postCreateCommand": "bash /workspace/.devcontainer/scripts/post-create.sh",
+  // Grant the mounted host Docker socket world RW so any container user (vscode /
+  // ubuntu) can reach the daemon for Testcontainers. Runs on every start because
+  // the socket is a bind mount recreated each time the container starts.
+  "postStartCommand": "sudo chmod 666 /var/run/docker.sock || true",
 
   "forwardPorts": [8080, 3000, 5432, 6379, 8025],
   "portsAttributes": {
@@ -49,7 +53,7 @@
         "dbaeumer.vscode-eslint",
         "bradlc.vscode-tailwindcss",
         // Database
-        "ms-ossdata.vscode-pgsql",
+        "cweijan.vscode-mysql-client2",
         // General dev tools
         "mhutchie.git-graph",
         "redhat.vscode-xml",
