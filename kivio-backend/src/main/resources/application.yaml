@@ -45,6 +45,9 @@ spring:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:}
+      # マネージド Redis（本番）は TLS 必須が一般的。ローカルの Docker Redis は平文のため既定 false
+      ssl:
+        enabled: ${REDIS_SSL:false}
       timeout: 2s
       lettuce:
         pool:
@@ -112,6 +115,10 @@ app:
   email:
     from-address: ${MAIL_FROM_ADDRESS:noreply@kivio.example.com}
     from-name: ${MAIL_FROM_NAME:Kivio}
+    # Resend（prod の ResendEmailSender のみ使用）。dev/test は未設定のままでよい
+    resend:
+      api-key: ${RESEND_API_KEY:}
+      base-url: ${RESEND_BASE_URL:https://api.resend.com}
   cors:
     allowed-origins: ${ALLOWED_ORIGINS:http://localhost:3000}
   rate-limit:

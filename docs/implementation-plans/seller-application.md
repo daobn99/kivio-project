@@ -200,7 +200,9 @@ COMMENT ON INDEX idx_seller_applications_pending_unique
 | REJECTED 申請を持つ BUYER | 必要 | 「却下理由 + 再申請フォーム」UI を確認するため |
 | APPROVED 申請 | 任意 | 既存 Seed の `seller1`（`ROLE_SELLER`）に紐づく APPROVED 申請を入れておくと、承認済みユーザーの画面挙動（`/seller/dashboard` へのリダイレクト）を確認できる |
 
-`dev/V14__seed_seller_applications.sql` を追加する（dev プロファイル専用・`application-dev.yaml` の `spring.flyway.locations` に `classpath:db/migration/dev` が含まれる。本番では読み込まれない）。
+`dev/V14__seed_seller_applications.sql` を追加する（dev プロファイル専用・`application-dev.yaml` の `spring.flyway.locations` に含まれる。本番では読み込まれない）。
+
+> 配置場所は `src/main/resources/db/seed/dev/`（`db/migration` の**外**）。Flyway は locations を再帰的に走査するため、`db/migration/dev/` に置くと prod プロファイルでも適用されてしまう。詳細は [DEPLOYMENT.md §6 STEP 1](../infra/DEPLOYMENT.md#step-1-postgresqlneon)。
 
 - 既存 Seed ユーザー（`V10__seed_development_data.sql`）を参照する:
   - `00000000-0000-0000-0000-000000000002` = `seller1`（`ROLE_SELLER`）→ APPROVED 申請
@@ -243,10 +245,11 @@ io.kivio/
         └── response/
             └── SellerApplicationResponse.java            # ★ from(SellerApplication)
 
-src/main/resources/db/migration/
-├── V2__create_identity_tables.sql                        # 🔄 部分 UNIQUE インデックスを直接追記（OQ-3）
-└── dev/
-    └── V14__seed_seller_applications.sql                 # ★ 開発用シード
+src/main/resources/db/
+├── migration/
+│   └── V2__create_identity_tables.sql                    # 🔄 部分 UNIQUE インデックスを直接追記（OQ-3）
+└── seed/dev/
+    └── V14__seed_seller_applications.sql                 # ★ 開発用シード（dev プロファイルのみ）
 
 io.kivio.config/
 └── SecurityConfig.java                                   # 🔄 seller-applications の hasRole("BUYER") を削除（OQ-1）

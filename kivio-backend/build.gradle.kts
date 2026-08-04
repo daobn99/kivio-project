@@ -1,7 +1,26 @@
+// Flyway Gradle タスクはアプリの runtimeClasspath を参照しないため、
+// JDBC ドライバと PostgreSQL 対応モジュールをビルドスクリプト側に与える。
+// バージョンは Spring Boot BOM が解決する値と一致させること
+// （確認: ./gradlew dependencies --configuration runtimeClasspath）
+buildscript {
+	repositories {
+		mavenCentral()
+	}
+	dependencies {
+		classpath("org.postgresql:postgresql:42.7.10")
+		classpath("org.flywaydb:flyway-database-postgresql:11.14.1")
+	}
+}
+
 plugins {
 	java
 	id("org.springframework.boot") version "4.0.6"
 	id("io.spring.dependency-management") version "1.1.7"
+	// Flyway CLI タスク（flywayMigrate / flywayInfo / flywayValidate）。
+	// アプリ起動とは独立にマイグレーションを適用するために使う。本番デプロイでは
+	// Backend 起動前にスキーマを確定させる（DEPLOYMENT.md §6 STEP 1）。
+	// バージョンは Spring Boot BOM が解決する flyway-core と一致させること
+	id("org.flywaydb.flyway") version "11.14.1"
 	jacoco
 	checkstyle
 }
@@ -38,7 +57,7 @@ dependencies {
 	implementation("org.springframework.boot:spring-boot-starter-security-oauth2-client")
 	implementation("org.springframework.boot:spring-boot-starter-oauth2-resource-server")
 	implementation("org.springframework.boot:spring-boot-starter-validation")
-	// メール送信（dev: SMTP→Mailpit。prod は Resend HTTP 実装に差し替え予定）
+	// メール送信（dev: SMTP→Mailpit。prod は RestClient による Resend HTTP API 実装）
 	implementation("org.springframework.boot:spring-boot-starter-mail")
 	implementation("org.springframework.boot:spring-boot-starter-webmvc")
 	implementation("org.springframework.boot:spring-boot-starter-websocket")
@@ -83,6 +102,23 @@ dependencies {
 	testCompileOnly("org.projectlombok:lombok")
 	testAnnotationProcessor("org.projectlombok:lombok")
 	testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+}
+
+// Flyway Gradle タスクの設定。
+// これらのタスクは Spring のコンテキストを起動しないため application.yaml を読まない。
+// 接続情報は環境変数から明示的に渡す。
+//
+// 注意: devcontainer は DB_URL / DB_USERNAME / DB_PASSWORD をローカル DB 向けに設定済み。
+// 本番 DB へ適用する際は、必ずコマンドの前で明示的に上書きすること（DEPLOYMENT.md §6 STEP 1）。
+flyway {
+	url = System.getenv("DB_URL")
+	user = System.getenv("DB_USERNAME")
+	password = System.getenv("DB_PASSWORD")
+	// 開発用シード（db/migration/dev）を含めない。prod プロファイルの
+	// spring.flyway.locations（classpath:db/migration）と対応させる
+	locations = arrayOf("filesystem:src/main/resources/db/migration")
+	// 本番 DB を対象にするタスクのため、clean は常に禁止する
+	cleanDisabled = true
 }
 
 tasks.withType<Test> {

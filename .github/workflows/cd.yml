@@ -1,12 +1,20 @@
-name: CD — Develop
+name: CD — Production
 
-# CI ワークフローが develop ブランチで成功した後にのみ実行
-# → PR マージ時: CI は PR で通過済み → push to develop で CI 再実行 → 成功後 CD
+# CI ワークフローが main ブランチで成功した後にのみ実行する。
+#
+# 環境戦略（DEPLOYMENT.md §2 参照）:
+#   個人開発プロジェクトのため、デプロイ先は production のみとする。
+#   staging / dev 環境は構築せず、開発環境の役割は devcontainer が担う。
+#
+#   develop  — 結合ブランチ。CI は通すがイメージはビルドしない（デプロイ対象ではない）
+#   main     — production。ここにマージされたものだけがイメージ化される
+#
+# → リリース手順: feature/* → develop（結合） → main（リリース） → 本 CD がイメージを生成
 on:
   workflow_run:
     workflows: [CI]
     types: [completed]
-    branches: [develop]
+    branches: [main]
 
 permissions:
   contents: read
@@ -66,10 +74,10 @@ jobs:
         with:
           images: ${{ steps.vars.outputs.image }}
           tags: |
-            # 不変タグ: デプロイ時はこの SHA タグを使用する
+            # 不変タグ: デプロイ時は必ずこの SHA タグを指定する（追跡・ロールバック可能）
             type=raw,value=sha-${{ steps.vars.outputs.short_sha }}
-            # ブランチタグ: 最新の develop ビルドを指す可変タグ
-            type=raw,value=develop
+            # 可変タグ: 最新の main ビルドを指す。中身が変わるためデプロイには使わない
+            type=raw,value=latest
           labels: |
             org.opencontainers.image.revision=${{ github.event.workflow_run.head_sha }}
 
@@ -121,14 +129,19 @@ jobs:
           echo "| Commit | \`${{ github.event.workflow_run.head_sha }}\` |" >> "$GITHUB_STEP_SUMMARY"
 
   # ── Deploy ─────────────────────────────────────────────────────────────────
-  # デプロイ手順は環境依存のためコメントアウトで提供する。
-  # 使用するインフラに合わせて以下のいずれかを参考に実装してください。
+  # 現状: デプロイは手動で行う（手順は docs/infra/DEPLOYMENT.md §6）。
   #
-  # deploy:
-  #   name: Deploy to Dev
+  # 本ワークフローの責務はイメージの生成までとし、Render / Vercel への反映は
+  # 手動で実施する。手順を人手で確立してから自動化するという方針による
+  # （DEPLOYMENT.md §1「なぜ手動デプロイなのか」）。
+  #
+  # 自動化する際は以下を実装する。Secrets: RENDER_DEPLOY_HOOK_URL
+  #
+  # deploy-backend:
+  #   name: Deploy Backend to Render
   #   needs: build-and-push
   #   runs-on: ubuntu-latest
-  #   environment: development   # GitHub Environment で承認フローを設定可能
+  #   environment: production   # GitHub Environment で承認フローを設定できる
   #
   #   steps:
   #     - name: Extract short SHA
@@ -137,42 +150,18 @@ jobs:
   #       env:
   #         SHA: ${{ github.event.workflow_run.head_sha }}
   #
-  #     # ── パターン A: SSH + Docker Compose ──────────────────────────────────
-  #     # Secrets: DEV_HOST, DEV_USER, DEV_SSH_KEY
-  #     #
-  #     # - name: Deploy via SSH
-  #     #   uses: appleboy/ssh-action@v1
-  #     #   with:
-  #     #     host: ${{ secrets.DEV_HOST }}
-  #     #     username: ${{ secrets.DEV_USER }}
-  #     #     key: ${{ secrets.DEV_SSH_KEY }}
-  #     #     script: |
-  #     #       cd /opt/kivio
-  #     #       echo "${{ secrets.GITHUB_TOKEN }}" | \
-  #     #         docker login ghcr.io -u ${{ github.actor }} --password-stdin
-  #     #       BACKEND_TAG=sha-${{ steps.vars.outputs.short_sha }} \
-  #     #       FRONTEND_TAG=sha-${{ steps.vars.outputs.short_sha }} \
-  #     #       docker compose pull
-  #     #       docker compose up -d --no-build
-  #     #       docker image prune -f
+  #     # Render のデプロイフックを叩く。imgURL パラメーターで
+  #     # デプロイ対象のイメージタグ（不変な SHA タグ）を明示的に指定する
+  #     - name: Trigger Render deploy
+  #       run: |
+  #         REPO=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+  #         IMAGE="ghcr.io/${REPO}/backend:sha-${{ steps.vars.outputs.short_sha }}"
+  #         curl -fsS "${{ secrets.RENDER_DEPLOY_HOOK_URL }}&imgURL=${IMAGE}"
   #
-  #     # ── パターン B: Kubernetes ────────────────────────────────────────────
-  #     # Secrets: KUBECONFIG
-  #     #
-  #     # - name: Set up kubectl
-  #     #   uses: azure/setup-kubectl@v4
-  #     #
-  #     # - name: Update image tags
-  #     #   env:
-  #     #     KUBECONFIG_DATA: ${{ secrets.KUBECONFIG }}
-  #     #   run: |
-  #     #     echo "$KUBECONFIG_DATA" > /tmp/kubeconfig
-  #     #     export KUBECONFIG=/tmp/kubeconfig
-  #     #     TAG="sha-${{ steps.vars.outputs.short_sha }}"
-  #     #     REPO="ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
-  #     #     kubectl set image deployment/backend \
-  #     #       backend="${REPO}/backend:${TAG}" -n kivio-dev
-  #     #     kubectl set image deployment/frontend \
-  #     #       frontend="${REPO}/frontend:${TAG}" -n kivio-dev
-  #     #     kubectl rollout status deployment/backend -n kivio-dev
-  #     #     kubectl rollout status deployment/frontend -n kivio-dev
+  # 【要検討】Flyway マイグレーションの扱い
+  #   現在は手動運用（デプロイ前に手元から flywayMigrate を実行）。
+  #   自動化する場合、アプリ起動前に完了している必要があるため、
+  #   デプロイジョブの前段に独立したマイグレーションステップを設ける。
+  #
+  # 注: Frontend は Vercel の Git 連携により main への push で自動デプロイされるため、
+  #     本ワークフローでの対応は不要（イメージは将来の移行用に保持している）。
