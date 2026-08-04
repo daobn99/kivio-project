@@ -98,7 +98,8 @@ jobs:
 
       # ── Security Scan ─────────────────────────────────────────────────────
       - name: Scan image with Trivy
-        uses: aquasecurity/trivy-action@0.28.0
+        # タグは v プレフィックス付き（`0.28.0` は存在せず、アクションの解決に失敗する）
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           # digest 参照により再プルなしでローカルイメージをスキャンする
           image-ref: ${{ steps.vars.outputs.image }}@${{ steps.build.outputs.digest }}
