@@ -52,16 +52,20 @@ docker compose up
 | `JWT_REFRESH_TOKEN_EXPIRATION` | Refresh Token 有効期限（秒） | `604800`（7 日） |
 | `GOOGLE_CLIENT_ID` | Google OAuth クライアント ID | `dummy`（OAuth 不使用時） |
 | `GOOGLE_CLIENT_SECRET` | Google OAuth クライアントシークレット | `dummy`（OAuth 不使用時） |
-| `REDIS_URL` | Redis 接続 URL（レート制限） | `redis://localhost:6379` |
-| `MAIL_HOST` | メール送信ホスト（ローカル: Mailpit） | `localhost` |
+| `REDIS_HOST` | Redis ホスト（登録 OTP・登録セッションの TTL ストレージ） | `localhost` |
+| `REDIS_PORT` | Redis ポート | `6379` |
+| `REDIS_PASSWORD` | Redis パスワード（本番のマネージド Redis で使用） | 空 |
+| `REDIS_SSL` | Redis の TLS 接続（本番は `true`） | `false` |
+| `MAIL_HOST` | メール送信ホスト（dev: Mailpit） | `localhost` |
 | `MAIL_PORT` | メール送信ポート | `1025` |
+| `MAIL_FROM_ADDRESS` | 送信元メールアドレス（dev / prod 共通） | `noreply@kivio.example.com` |
+| `MAIL_FROM_NAME` | 送信元表示名 | `Kivio` |
 | `STRIPE_SECRET_KEY` | Stripe シークレットキー（`sk_test_...`） | - |
 | `STRIPE_WEBHOOK_SECRET` | Stripe Webhook 署名シークレット（`whsec_...`） | - |
 | `CLOUDINARY_CLOUD_NAME` | Cloudinary クラウド名 | - |
 | `CLOUDINARY_API_KEY` | Cloudinary API キー | - |
 | `CLOUDINARY_API_SECRET` | Cloudinary API シークレット | - |
-| `RESEND_API_KEY` | Resend API キー（`re_...`） | - |
-| `RESEND_FROM_EMAIL` | 送信元メールアドレス | - |
+| `RESEND_API_KEY` | Resend API キー（`re_...`）。**prod では必須**（未設定だと起動失敗） | - |
 | `ALLOWED_ORIGINS` | CORS 許可オリジン（カンマ区切り） | `http://localhost:3000` |
 | `PROBLEM_BASE_URL` | RFC 9457 エラー type URI のベース URL | `https://kivio.example.com` |
 | `SPRING_PROFILES_ACTIVE` | Spring プロファイル | `dev` |
@@ -88,14 +92,17 @@ DB_URL=jdbc:postgresql://db:5432/kivio
 DB_USERNAME=kivio
 DB_PASSWORD=password
 
-# Redis (レート制限に使用)
-# devcontainer 使用時は redis://redis:6379 のまま
-REDIS_URL=redis://localhost:6379
+# Redis (登録 OTP・登録セッションの TTL ストレージ)
+# devcontainer 使用時は REDIS_HOST=redis に上書きされる
+REDIS_HOST=localhost
+REDIS_PORT=6379
 
 # Mail (ローカル: Mailpit、本番: Resend)
 # devcontainer 使用時は MAIL_HOST=mailpit に変更する
 MAIL_HOST=localhost
 MAIL_PORT=1025
+MAIL_FROM_ADDRESS=noreply@example.com
+MAIL_FROM_NAME=Kivio
 
 # JWT
 # JWT_SECRET は必須。未設定だとアプリが起動しません。
@@ -117,9 +124,8 @@ CLOUDINARY_CLOUD_NAME=
 CLOUDINARY_API_KEY=
 CLOUDINARY_API_SECRET=
 
-# Resend
+# Resend (prod のみ実送信。dev は Mailpit へ送る)
 RESEND_API_KEY=re_
-RESEND_FROM_EMAIL=noreply@example.com
 
 # App
 ALLOWED_ORIGINS=http://localhost:3000

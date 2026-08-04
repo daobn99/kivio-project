@@ -21,7 +21,11 @@ spring:
         format_sql: true
   flyway:
     clean-disabled: false
-    locations: classpath:db/migration,classpath:db/migration/dev
+    # 開発用シードは db/migration の外（db/seed）に置く。Flyway は locations を
+    # 再帰的に走査するため、db/migration 配下に置くと prod でも適用されてしまう。
+    # db/seed を指定すると相対パスが dev/Vxx__....sql となり、既存 DB の
+    # flyway_schema_history.script と一致する（履歴の作り直しが不要）
+    locations: classpath:db/migration,classpath:db/seed
 
 logging:
   level:

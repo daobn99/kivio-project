@@ -194,10 +194,13 @@ scaffolding が動いた後に書く。詳細は既存 docs に委ねるため�
 - **Backend:** Checkstyle → `./gradlew test`（Testcontainers で PostgreSQL 起動） → ビルド確認
 - **Frontend:** `pnpm lint` → `pnpm build` → 型チェック
 
-#### CD（`cd-dev.yml`）— `develop` へのマージ時にトリガー
+#### CD（`cd.yml`）— `main` へのマージ（リリース）時にトリガー
 - Backend / Frontend の Dockerfile をビルド
 - Docker Image をレジストリへプッシュ（認証情報は GitHub Secrets でプレースホルダー化）
-- デプロイコマンドはコメントアウトで記述（環境依存のため）
+- デプロイコマンドはコメントアウトで記述（手動デプロイ手順の確立を優先。`docs/infra/DEPLOYMENT.md` 参照）
+
+> デプロイ先は production のみとする（個人開発のため staging / dev 環境は構築しない）。
+> 開発環境の役割は devcontainer が担う。
 
 ---
 
